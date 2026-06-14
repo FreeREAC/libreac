@@ -20,6 +20,29 @@ C tools all need, so they aren't duplicated or allowed to drift.
 The wire-format reference these come from is
 [reac-protocol](https://github.com/FreeREAC/reac-protocol).
 
+## Scope: RX/measure today, TX is future work
+
+libreac is **receive- and measure-oriented** right now: validate a frame, read its
+counter, detect/snap the rate from cadence. Everything it models is the master's
+**downstream broadcast** — the fixed 40-channel program frame (1492 B = 50 + 1440 + 2),
+rate-invariant audio with the sample rate carried by the packet rate. That frame is
+well-characterised, so RX/measure is solid ground (mostly verified on the wire).
+
+A stagebox's **upstream return** (box → master) is a different, narrower frame and is
+**out of scope for the current modes**:
+
+- It carries the box's own input count, not 40 — a **variable, box-dependent channel
+  count** and therefore a smaller frame.
+- Audio is **plain little-endian sample-major** there (not the even/odd braid some
+  generations use downstream).
+- Its **channel map is permuted** — input N does not land on wire channel N, and
+  the permutation isn't carried on the wire (inferred; not yet resolved from captures).
+
+So the helpers here decode and measure the downstream program; they don't emit anything.
+A future **TX layer** would close that gap — a frame builder, the `data[31]` checksum
+apply (FILLER frames exempt), a sample-major interleaver, and a free-running counter
+stamper — letting the FreeREAC tools *emit* REAC, not just decode it.
+
 ## Build
 
 Native (static lib + tests):
