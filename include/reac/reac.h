@@ -28,13 +28,18 @@ extern "C" {
 #define REAC_END_MARKER_0     0xC2    /* last two bytes of a full frame */
 #define REAC_END_MARKER_1     0xEA
 
-/* A sample-rate descriptor. The frame is rate-invariant (always 40 ch x 12
- * samples x 3 B = 1440 B audio); the sample rate is carried by the PACKET RATE:
- * pps = sample_rate / samples_per_pkt (3675 / 4000 / 8000 at 44.1 / 48 / 96 kHz). */
+/* A sample-rate descriptor for the master's DOWNSTREAM broadcast (the program the
+ * console sends out). That frame is rate-invariant: always 40 ch x 12 samples x 3 B
+ * = 1440 B audio, with the sample rate carried by the PACKET RATE (pps =
+ * sample_rate / samples_per_pkt: 3675 / 4000 / 8000 at 44.1 / 48 / 96 kHz).
+ *
+ * A stagebox's UPSTREAM return is different: it carries the box's own input count
+ * (variable per box, a smaller frame) and its channel map is FPGA-scrambled. These
+ * descriptors model the downstream broadcast, not the upstream return. */
 struct reac_mode {
 	int sample_rate;     /* 44100 / 48000 / 96000 */
-	int n_channels;      /* 40 at every rate */
-	int samples_per_pkt; /* 12 at every rate */
+	int n_channels;      /* 40 — the downstream broadcast width */
+	int samples_per_pkt; /* 12 per downstream frame at every rate */
 };
 
 extern const struct reac_mode REAC_MODE_44K1; /* {44100, 40, 12} — 3675 pps */
