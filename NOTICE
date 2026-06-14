@@ -1,0 +1,9 @@
+libreac
+Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+
+Licensed under GPL-3.0-or-later (see LICENSE).
+
+Shared REAC protocol constants and helpers for the FreeREAC C tools. An original
+implementation of public, reverse-engineered protocol facts (see the reac-protocol
+reference); no third-party code is embedded. REAC is a Roland trademark; FreeREAC is
+not affiliated with or endorsed by Roland.
