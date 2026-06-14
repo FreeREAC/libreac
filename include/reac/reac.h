@@ -19,9 +19,11 @@ extern "C" {
 #define REAC_ETHERTYPE        0x8819  /* non-IP EtherType */
 #define REAC_FRAME_BYTES      1492    /* fixed downstream frame: 50 hdr + 1440 audio + 2 end */
 #define REAC_AUDIO_BYTES      1440    /* 40 ch x 12 samples x 3 B (rate-invariant) */
-#define REAC_AUDIO_OFFSET     50      /* audio block starts here */
+#define REAC_AUDIO_OFFSET     50      /* audio block starts here (= L2 header length) */
+#define REAC_L2_HEADER_LEN    50      /* 14 eth + 2 counter + 2 type + 32 control */
 #define REAC_MAX_CHANNELS     40
 #define REAC_SAMPLES_PER_PKT  12      /* downstream: 12 samples/frame at every rate */
+#define REAC_RESOLUTION       3       /* bytes per sample per channel (24-bit) */
 #define REAC_HDR_COUNTER_OFF  14      /* u16 little-endian sequence counter */
 #define REAC_END_MARKER_0     0xC2    /* last two bytes of a full frame */
 #define REAC_END_MARKER_1     0xEA
