@@ -10,7 +10,7 @@
 #include <string.h>
 
 #ifndef LIBREAC_VERSION
-#define LIBREAC_VERSION "0.1.0"
+#define LIBREAC_VERSION "0.3.0"
 #endif
 
 const struct reac_mode REAC_MODE_44K1 = { 44100, 40, 12 };
