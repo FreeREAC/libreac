@@ -1,0 +1,114 @@
+# What belongs in libreac, and what does not
+
+libreac is the one home for REAC **wire knowledge**. This note records where the
+boundary runs, why the control plane is not simply "more of the same", and the
+concrete conditions under which the remaining piece — the establishment FSM —
+becomes safe to move here.
+
+It exists because the boundary is not obvious. "It's REAC, so it goes in libreac"
+is the wrong rule, and following it would turn a clean extraction into a rewrite
+of the establishment path.
+
+## Three layers
+
+| layer | owns | today |
+| --- | --- | --- |
+| **wire format** | byte layouts, codecs, frame geometry, builders + parsers | **libreac** |
+| **control plane** | the REAC conversation: establishment, head-amp records, chanmap | reac-pw |
+| **transport** | sockets, the SCHED_FIFO pacer, RT threads, PipeWire nodes | **reac-pw**, permanently |
+
+The transport layer never moves. Sockets and scheduling are the consumer's
+business; libreac stays IO-free and clock-free so a decoder, a bridge and an
+analysis tool can all link it without dragging in a runtime.
+
+## The control plane is two things, not one
+
+This is the distinction the note exists to record. The control plane splits into
+**vocabulary** and **conversation**, and they have opposite readiness.
+
+### Vocabulary — pure, and ready
+
+How to encode or parse *one* control record:
+
+- the cold-connect frames (`0013` / `0016` / `001a`), config-announce, flood-filler;
+- the head-amp **DT1 SysEx container** — TAG-dispatched, with **two nested
+  checksums whose order is mandatory** (the inner record checksum is stamped
+  first, then the outer block sum); tag `0101` is the 3-parameter head-amp page
+  (phantom / pad / SENS), tag `0500` the model identity;
+- the channel map.
+
+These are pure functions over bytes. No state, no clock, no IO — **identical in
+character to the audio frame builders**. They belong here for the same reason the
+braid oracle does: the DT1 checksum ordering is exactly the kind of fact that must
+have one home, and a second consumer already exists (reac-aes67 has to establish
+too, and would otherwise re-derive it).
+
+### Conversation — stateful, and not ready
+
+The FSM: *when* to send what. The ~1.508 s ungranted hold, the ~0.494 s
+grant→commit delay, the grant-sweep ordering, retry policy, the establishment
+state graph.
+
+Not a matter of effort. Two reasons it waits:
+
+1. **It is the least-settled knowledge in the project.** An API drawn around
+   facts still being revised gets churned. See the readiness gates below.
+2. **It is timing-coupled, and the timings may not belong to the protocol.** The
+   1.5 s hold is protocol; the SCHED_FIFO pacer is transport. Separating them
+   cleanly requires the FSM to *declare* its timings as policy data rather than
+   embedding them as sleeps in state handlers — a design step that must happen
+   **before** extraction, not during it.
+
+## The asymmetry that decides the order
+
+**The vocabulary has goldens. The conversation does not.**
+
+Every control frame that would move has real M-200 / M-300 / M-5000 bytes in
+`reac-captures` to `memcmp` against, so the extraction is provable offline, byte
+for byte — the same gate the audio builders passed. An FSM extraction has no
+equivalent oracle: you would be proving "it still establishes", which only the rig
+can answer, on a `reac-pw main` that **auto-deploys to the live rig**.
+
+Extract what can be proven offline first. That is the whole sequencing argument.
+
+## Readiness gates for moving the FSM
+
+Do not start until **all** of these hold. They are written to be checkable, not
+felt:
+
+1. **The RE questions that would change the state graph are closed.** Principally
+   the fabric-slot placement law (is the carrier width, a config selector, or
+   config byte[9]?) and the head-amp commit/enrol semantics — both currently
+   rig-gated. A state machine built over a contested transition encodes the
+   contest.
+2. **Timings are declared policy, not embedded sleeps.** The FSM should read its
+   hold and commit intervals from a struct a caller supplies. Doing this *inside*
+   reac-pw first is independently valuable and is the real precondition — it is
+   what separates protocol from transport.
+3. **An offline oracle exists.** A replayable establishment fixture: feed a
+   captured master/box exchange to the FSM and assert the emitted sequence is
+   byte-identical and the intervals fall within tolerance. Without this the move
+   cannot be verified anywhere but the rig.
+4. **No open defect in the establishment path.** Moving code and fixing it in the
+   same step makes a regression indistinguishable from a port error.
+
+Gate 3 is the expensive one and the most valuable regardless — it is a
+regression test the project wants whether or not the FSM ever moves.
+
+## Where it would live
+
+A `reac_ctrl.h` module **inside libreac**, alongside `reac_braid.h` — not a new
+repository. Split it out only if the session layer acquires dependencies libreac
+must not have (a clock, a scheduler), which is precisely what the conversation
+layer would bring and the vocabulary will not.
+
+Do not mint a repo before there is a reason. The wrap that reac-pw already uses
+covers a new header at no cost.
+
+## Sequencing
+
+1. **Audio frame builders** → libreac. *(the first move; byte-identity gated)*
+2. **Control vocabulary + the DT1 record codec** → libreac, same gate, proven
+   against the capture goldens.
+3. **The FSM** → only once the four gates above hold, and only after step 2, so
+   the FSM is already building its frames through libreac when it moves.
