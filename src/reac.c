@@ -10,7 +10,7 @@
 #include <string.h>
 
 #ifndef LIBREAC_VERSION
-#define LIBREAC_VERSION "0.1.0"
+#define LIBREAC_VERSION "0.3.0"
 #endif
 
 const struct reac_mode REAC_MODE_44K1 = { 44100, 40, 12 };
@@ -48,6 +48,16 @@ uint16_t reac_frame_counter(const uint8_t *frame)
 uint16_t reac_counter_gap(uint16_t last, uint16_t cur)
 {
 	return (uint16_t)((cur - last - 1) & 0xFFFF);
+}
+
+size_t reac_frame_clean_len(size_t len)
+{
+	/* clean frame = 52 + n*36; OHRCA appends 2 after the end marker, so a
+	 * trailered length is congruent to 2 mod 36 past the overhead. */
+	if (len >= REAC_UPSTREAM_OVERHEAD + 2 &&
+	    (len - REAC_UPSTREAM_OVERHEAD) % REAC_UPSTREAM_BYTES_PER_CH == 2)
+		return len - 2;
+	return len;
 }
 
 const char *reac_version(void)

@@ -28,6 +28,20 @@ extern "C" {
 #define REAC_END_MARKER_0     0xC2    /* last two bytes of a full frame */
 #define REAC_END_MARKER_1     0xEA
 
+/* OHRCA-generation consoles (M-5000/M-480; also the S-4000S merge units) append
+ * a 2-byte per-frame CRC-16 trailer AFTER the C2 EA end marker, in BOTH
+ * directions (measured on live M-5000 downstream captures 2026-07-11 and on the
+ * S-4000 32-ch upstream, matrix-m200-s4000 2026-07-24). The trailer is not part
+ * of the frame the decoders read — strip it with reac_frame_clean_len(). */
+#define REAC_FRAME_BYTES_OHRCA (REAC_FRAME_BYTES + 2)  /* 1494: OHRCA downstream */
+
+/* UPSTREAM (stagebox -> master) frame geometry — box-width sized:
+ *     frame_len = REAC_UPSTREAM_OVERHEAD + n_channels * REAC_UPSTREAM_BYTES_PER_CH
+ *     S-1608 -> 16 ch -> 628 B;  S-0808 -> 8 ch -> 340 B;  S-4000 -> 32 ch -> 1204 B
+ * (the downstream 1492 B broadcast is the 40-ch solution of the same formula). */
+#define REAC_UPSTREAM_OVERHEAD     52  /* 50 B header + 2 B end marker */
+#define REAC_UPSTREAM_BYTES_PER_CH 36  /* 12 samples x 3 B */
+
 /* A sample-rate descriptor for the master's DOWNSTREAM broadcast (the program the
  * console sends out). That frame is rate-invariant: always 40 ch x 12 samples x 3 B
  * = 1440 B audio, with the sample rate carried by the PACKET RATE (pps =
@@ -58,6 +72,15 @@ int reac_rate_snap(double pps);
 /* Does a raw L2 frame look like REAC? Checks length and the EtherType at
  * bytes 12..13. Returns 1 if REAC, 0 otherwise. */
 int reac_frame_is_reac(const uint8_t *frame, size_t len);
+
+/* Strip the OHRCA +2 CRC trailer from a frame length, if present. One rule
+ * covers both directions: a clean REAC frame is 52 + n*36 bytes (n = channel
+ * width, 40 downstream / the box width upstream), so a length that is 52 + n*36
+ * + 2 carries the trailer and comes back reduced by 2 (1494 -> 1492,
+ * 1206 -> 1204, ...). Any other length (including every clean length) is
+ * returned unchanged — the caller still validates the result as a frame; this
+ * only normalizes the OHRCA variant. */
+size_t reac_frame_clean_len(size_t len);
 
 /* The 16-bit little-endian sequence counter at bytes 14..15. The counter
  * increments once per frame and advances even across a lost frame, which makes

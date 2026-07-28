@@ -1,5 +1,8 @@
-/reac.o
+*.o
 /libreac.a
 /test_reac
+/test_capture
+/test_braid
+/test_upstream
 
 libreac-*.tar.gz
