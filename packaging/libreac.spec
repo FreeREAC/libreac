@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.3.0
+Version:        0.4.0
 Release:        1%{?dist}
-Summary:        Roland REAC RX core (validate, counter, 24-bit decode, capture)
+Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
 License:        GPL-3.0-or-later
 URL:            https://github.com/FreeREAC/libreac
@@ -16,9 +16,11 @@ libreac is the shared byte-layout core of the REAC tools: recognise a REAC frame
 (EtherType 0x8819), read its sequence counter, detect the sample rate, decode the
 24-bit audio — the braided box upstream (reac_upstream) over the braid/sample
 oracles (reac_braid.h / reac_sample.h) plus the legacy plain-LE downstream path —
-strip the OHRCA +2 CRC trailer, and read frames from a live AF_PACKET capture or
-an offline pcap. It is consumed by reac-aes67 (the REAC->AES67 bridge) and
-reac-pw (the PipeWire-native endpoint), which link it dynamically.
+ENCODE it back (reac_encode: the braided audio region in both directions and the
+40-channel downstream broadcast frame), strip the OHRCA +2 CRC trailer, and read
+frames from a live AF_PACKET capture or an offline pcap. It is consumed by
+reac-aes67 (the REAC->AES67 bridge) and reac-pw (the PipeWire-native endpoint),
+which link it dynamically.
 
 %package devel
 Summary:        Development files for libreac
@@ -31,19 +33,20 @@ Headers and pkg-config for building against libreac.
 %autosetup -n %{name}-%{version}
 
 %build
-for f in reac reac_decode reac_upstream reac_capture pcap_source; do
+for f in reac reac_decode reac_upstream reac_encode reac_capture pcap_source; do
   cc %{optflags} -fPIC -Iinclude -c src/$f.c -o $f.o
 done
 # %%build_ldflags carries the Fedora link flags incl. --build-id, which the
 # debuginfo extraction requires (%%optflags already gave the objects -g).
+# -lm: reac_encode's float->s24 rounds with lrintf.
 cc %{build_ldflags} -shared -Wl,-soname,libreac.so.0 -o libreac.so.%{version} \
-  reac.o reac_decode.o reac_upstream.o reac_capture.o pcap_source.o
+  reac.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o -lm
 
 %install
 install -Dm0755 libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{version}
 ln -s libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.0
 ln -s libreac.so.0          %{buildroot}%{_libdir}/libreac.so
-for h in reac reac_decode reac_braid reac_sample reac_upstream reac_capture pcap_source; do
+for h in reac reac_decode reac_braid reac_sample reac_upstream reac_encode reac_capture pcap_source; do
   install -Dm0644 include/reac/$h.h %{buildroot}%{_includedir}/reac/$h.h
 done
 mkdir -p %{buildroot}%{_libdir}/pkgconfig
@@ -53,7 +56,7 @@ libdir=%{_libdir}
 includedir=%{_includedir}
 
 Name: libreac
-Description: Roland REAC RX core
+Description: Roland REAC wire-format core
 Version: %{version}
 Libs: -L\${libdir} -lreac
 Cflags: -I\${includedir}
@@ -70,12 +73,23 @@ PC
 %{_includedir}/reac/reac_braid.h
 %{_includedir}/reac/reac_sample.h
 %{_includedir}/reac/reac_upstream.h
+%{_includedir}/reac/reac_encode.h
 %{_includedir}/reac/reac_capture.h
 %{_includedir}/reac/pcap_source.h
 %{_libdir}/libreac.so
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Wed Jul 29 2026 Pau Aliagas <linuxnow@gmail.com> - 0.4.0-1
+- Encode side lands here: reac_encode.{h,c} — reac_braid_encode() (the braided
+  audio region, the exact inverse of reac_upstream_decode, used in BOTH
+  directions) and reac_downstream_build() (the whole 1492 B master broadcast).
+  Moved from reac-pw (reac_tx_build + reac_ctrl.c's static place_braided_audio,
+  which were the same loop written twice) so the wire format has one home in
+  both directions. Proven byte-identical to the pre-move encoder over a
+  deterministic corpus; the digest is pinned in tests/test_encode.c and in
+  reac-pw's suite. AF_PACKET emission, the pacer and the control-block/checksum
+  handshake deliberately stay in reac-pw.
 * Tue Jul 28 2026 Pau Aliagas <linuxnow@gmail.com> - 0.3.0-1
 - Braid codec consolidated here as the single layout oracle: reac_braid.h
   (variable-width channel-pair byte map), reac_sample.h (f32<->s24le pair),
