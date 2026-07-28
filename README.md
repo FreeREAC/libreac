@@ -28,20 +28,24 @@ counter, detect/snap the rate from cadence. Everything it models is the master's
 rate-invariant audio with the sample rate carried by the packet rate. That frame is
 well-characterised, so RX/measure is solid ground (mostly verified on the wire).
 
-A stagebox's **upstream return** (box → master) is a different, narrower frame and is
-**out of scope for the current modes**:
+A stagebox's **upstream return** (box → master) is a different, narrower frame,
+now **decoded here too** (`<reac/reac_upstream.h>`, resolved on the rig — reac-pw
+task #108 + the S-4000 OHRCA captures):
 
-- It carries the box's own input count, not 40 — a **variable, box-dependent channel
-  count** and therefore a smaller frame.
-- Audio is **plain little-endian sample-major** there (not the even/odd braid some
-  generations use downstream).
-- Its **channel map is permuted** — input N does not land on wire channel N, and
-  the permutation isn't carried on the wire (inferred; not yet resolved from captures).
+- It carries the box's own input count, not 40 — a **variable, even, box-dependent
+  channel count** (S-0808 → 8 ch/340 B, S-1608 → 16 ch/628 B, S-4000 → 32 ch/1204 B).
+- Audio is the **channel-pair byte braid** (`<reac/reac_braid.h>` — the single
+  layout oracle, with the full evidence trail; the braid is the wire format in
+  both directions). The plain-LE `reac_decode()` path is retained unchanged as
+  the diagnostic/legacy downstream decode — see the contested note in its header.
+- The channel map is **plain ascending** (input N = wire channel N−1) — the once-
+  suspected FPGA permutation was disproved by the captures.
+- OHRCA-generation gear appends a **+2 CRC trailer** after the end marker in both
+  directions; `reac_frame_clean_len()` is the one home for stripping it.
 
-So the helpers here decode and measure the downstream program; they don't emit anything.
-A future **TX layer** would close that gap — a frame builder, the `data[31]` checksum
-apply (FILLER frames exempt), a sample-major interleaver, and a free-running counter
-stamper — letting the FreeREAC tools *emit* REAC, not just decode it.
+Frame *emission* (builders, control-plane checksums, counter stamping) still lives
+in reac-pw; its encoders take the byte layout from this library's braid/sample
+oracles, so the layout knowledge has exactly one home.
 
 ## Build
 
