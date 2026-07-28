@@ -33,14 +33,19 @@ struct reac_frame reac_frame_inspect(const uint8_t *raw, size_t len,
  * channel ch / time-sample s starts at (s*n_channels + ch)*RESOLUTION and the
  * de-interleave is a straight copy.
  *
- * NOTE: this is DELIBERATELY not obs-h8819-source's convert_to_pcm24lep, which
- * braids each even/odd channel pair across its 6-byte group (even = bytes
- * 3,0,1; odd = 4,5,2). That braid is faithful to the device obs-h8819 targets,
- * but it scrambles the M-5000's payload into noise — verified on-rig 2026-06-06
- * by decoding a live M-5000 stream both ways (plain LE: coherent, coherence
- * 0.999; obs-h8819 braid: noise). REAC's wire endianness is common across
- * devices, but the in-payload channel-pair byte layout is NOT identical across
- * Roland generations; this decoder targets the M-5000's plain sequential layout.
+ * NOTE — the plain-LE layout this decodes is CONTESTED, kept as the
+ * diagnostic/legacy downstream path only. The 2026-06-06 on-rig comparison that
+ * concluded "plain LE: coherent 0.999; obs-h8819 braid: noise" was later
+ * overturned: the zoneA/zoneB goldens (the SAME M-5000's two REAC ports,
+ * program audio) decode BRAIDED at coherence 0.99 / spectral flatness 0.002,
+ * and the plain "coherence 0.999" was a mid-byte lane shift amplifying quiet
+ * braided audio 256x into a coherent-looking image (reac-pw
+ * docs/VALIDATION-PLAN.md Stage B coherence table; three independent sources —
+ * reacdriver, obs-h8819, the FreeREAC rig #108 — back the braid as the wire
+ * format in both directions). The braid oracle lives in <reac/reac_braid.h>
+ * (box upstream decode: <reac/reac_upstream.h>). This plain path is retained
+ * unchanged so existing consumers (reac-aes67) keep byte-identical behavior
+ * until re-verified on the rig; do NOT extend new code from this layout.
  */
 int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
                 uint8_t *out)
