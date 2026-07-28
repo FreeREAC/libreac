@@ -83,6 +83,13 @@ task #108 + the S-4000 OHRCA captures):
 - OHRCA-generation gear appends a **+2 CRC trailer** after the end marker in both
   directions; `reac_frame_clean_len()` is the one home for stripping it.
 
+Frame **emission** (sockets, the SCHED_FIFO pacer, the control-block stamping and
+the establishment handshake) stays in reac-pw — it takes the frame bytes from the
+encoders here, so the wire format has exactly one home.
+
+Where the boundary runs — and why the establishment FSM has **not** followed the
+wire format here yet — is recorded in [`docs/layering.md`](docs/layering.md),
+together with the concrete gates for moving it.
 ## Build
 
 Native (static lib + tests):
