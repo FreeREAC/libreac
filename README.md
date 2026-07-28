@@ -69,6 +69,10 @@ Frame *emission* (builders, control-plane checksums, counter stamping) still liv
 in reac-pw; its encoders take the byte layout from this library's braid/sample
 oracles, so the layout knowledge has exactly one home.
 
+Where the boundary runs — and why the establishment FSM has **not** followed the
+wire format here yet — is recorded in [`docs/layering.md`](docs/layering.md),
+together with the concrete gates for moving it.
+
 ## Build
 
 Native (static lib + tests):
