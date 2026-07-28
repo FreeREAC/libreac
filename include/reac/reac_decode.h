@@ -5,7 +5,13 @@
 /* Pure REAC frame decode: raw 1492-byte frame -> interleaved 24-bit PCM.
  * No I/O. The de-interleave math is lifted from norihiro/obs-h8819-source
  * (convert_to_pcm24lep), generalized to the reac_mode descriptor.
- */
+ *
+ * NOTE: reac_decode() reads the audio region as PLAIN LE sample-major — a
+ * layout now CONTESTED for the wire (the braid in <reac/reac_braid.h> is the
+ * evidence-backed wire format in both directions; see the note in
+ * reac_decode.c). Kept unchanged as the diagnostic/legacy downstream path for
+ * existing consumers until a rig re-verify flips the default. New code decodes
+ * via <reac/reac_upstream.h> / the braid oracle. */
 #ifndef REAC_DECODE_H
 #define REAC_DECODE_H
 
