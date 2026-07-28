@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
-%global debug_package %{nil}
 Name:           libreac
 Version:        0.2.0
 Release:        1%{?dist}
@@ -33,7 +32,9 @@ Headers and pkg-config for building against libreac.
 for f in reac reac_decode reac_capture pcap_source; do
   cc %{optflags} -fPIC -Iinclude -c src/$f.c -o $f.o
 done
-cc -shared -Wl,-soname,libreac.so.0 -o libreac.so.%{version} \
+# %%build_ldflags carries the Fedora link flags incl. --build-id, which the
+# debuginfo extraction requires (%%optflags already gave the objects -g).
+cc %{build_ldflags} -shared -Wl,-soname,libreac.so.0 -o libreac.so.%{version} \
   reac.o reac_decode.o reac_capture.o pcap_source.o
 
 %install
