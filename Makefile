@@ -23,11 +23,13 @@ all: libreac.a
 libreac.a: $(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
-test: tests/test_reac.c libreac.a
+test: tests/test_reac.c tests/test_capture.c libreac.a
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -o test_reac
 	./test_reac
+	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -o test_capture
+	./test_capture
 
 clean:
-	rm -f $(OBJS) libreac.a test_reac
+	rm -f $(OBJS) libreac.a test_reac test_capture
 
 .PHONY: all test clean
