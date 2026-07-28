@@ -13,7 +13,7 @@ of the establishment path.
 
 | layer | owns | today |
 | --- | --- | --- |
-| **wire format** | byte layouts, codecs, frame geometry, builders + parsers | **libreac** |
+| **wire format** | byte layouts, codecs, frame geometry, builders + parsers | **libreac** (builders since 0.4.0 — see Sequencing) |
 | **control plane** | the REAC conversation: establishment, head-amp records, chanmap | reac-pw |
 | **transport** | sockets, the SCHED_FIFO pacer, RT threads, PipeWire nodes | **reac-pw**, permanently |
 
@@ -40,8 +40,15 @@ How to encode or parse *one* control record:
 These are pure functions over bytes. No state, no clock, no IO — **identical in
 character to the audio frame builders**. They belong here for the same reason the
 braid oracle does: the DT1 checksum ordering is exactly the kind of fact that must
-have one home, and a second consumer already exists (reac-aes67 has to establish
-too, and would otherwise re-derive it).
+have one home, and a second consumer is already committed to needing it —
+reac-aes67 already emits REAC and is blocked on exactly this. Its encoder is
+written and running (`pipewire/src/reac_tx.c`, driven by `reac_sink_node.c`);
+what it lacks is the conversation — "it does **not** yet drive the connection
+handshake, so a real Roland desk will not link to it" (`pipewire/src/reac_tx.h`),
+with the JOIN/HOLD cold-connect sequence spelled out as the remaining work in
+`pipewire/src/reac_sink_node.h`. A second implementation of the DT1 checksum
+ordering is therefore not hypothetical; it is the next thing that repo has to
+write unless it can call ours.
 
 ### Conversation — stateful, and not ready
 
@@ -107,7 +114,13 @@ covers a new header at no cost.
 
 ## Sequencing
 
-1. **Audio frame builders** → libreac. *(the first move; byte-identity gated)*
+This list is the status of the move; keep it here and nowhere else.
+
+1. ~~**Audio frame builders** → libreac.~~ **Done in 0.4.0** —
+   `<reac/reac_encode.h>` (`reac_braid_encode`, `reac_downstream_build`) and
+   `src/reac_encode.c`. It went as planned: byte-identity gated against the
+   capture goldens, which is what made it the safe first move and what the FSM
+   still has no equivalent of.
 2. **Control vocabulary + the DT1 record codec** → libreac, same gate, proven
    against the capture goldens.
 3. **The FSM** → only once the four gates above hold, and only after step 2, so
