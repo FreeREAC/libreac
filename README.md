@@ -14,19 +14,41 @@ C tools all need, so they aren't duplicated or allowed to drift.
   capture and snap it).
 - **Frame helpers** — `reac_frame_is_reac()`, `reac_frame_counter()`,
   `reac_counter_gap()` (16-bit wrap-aware loss).
+- **The braid layout oracle** — `reac_braid_pos()` (`<reac/reac_braid.h>`): the
+  channel-pair byte map of the audio region, the REAC wire format in **both**
+  directions. `static inline`, so real-time encode and decode both call it. Do not
+  copy this byte map anywhere; consumers call the oracle.
+- **The sample codec** — `reac_s24le_to_f32()` / `reac_f32_to_s24le()`
+  (`<reac/reac_sample.h>`): the one s24-LE ↔ float pair, exact inverses. Both
+  directions live together so the round-trip contract cannot drift.
+- **Downstream decode** — `reac_frame_inspect()` / `reac_decode()`
+  (`<reac/reac_decode.h>`), plus capture and pcap sources for offline work.
+- **Upstream decode** — `reac_upstream_channels()` / `reac_upstream_decode()`
+  (`<reac/reac_upstream.h>`): the stagebox return, box-width sized.
 - **Constants** — EtherType, frame geometry, and the settled facts (96 kHz is
   40 ch / 8000 pps, *not* channel-halving).
 
 The wire-format reference these come from is
 [reac-protocol](https://github.com/FreeREAC/reac-protocol).
 
-## Scope: RX/measure today, TX is future work
+## Scope: the layout oracle for both directions; emission lives in reac-pw
 
-libreac is **receive- and measure-oriented** right now: validate a frame, read its
-counter, detect/snap the rate from cadence. Everything it models is the master's
-**downstream broadcast** — the fixed 40-channel program frame (1492 B = 50 + 1440 + 2),
-rate-invariant audio with the sample rate carried by the packet rate. That frame is
-well-characterised, so RX/measure is solid ground (mostly verified on the wire).
+libreac owns **what the bytes mean**, in both directions and for both roles. It
+validates and decodes frames, measures the wire (counter, loss, rate from cadence),
+and supplies the **layout and sample oracles the encoders use** — `reac_braid_pos()`
+is `static inline` precisely so a real-time TX path can call it, and
+`reac_sample.h`'s s24-LE ↔ float pair is bidirectional by construction (the two are
+exact inverses, which is the point of keeping them in one header).
+
+What it does **not** do is put frames on the wire. Builders, the control-plane
+checksums and counter stamping live in reac-pw — but they take their byte layout
+from here, so the layout has exactly one home. "libreac decodes, reac-pw emits" is
+the split; it is *not* that emission is unsolved. reac-pw's master role emits REAC
+that real Roland stageboxes lock to.
+
+The master's **downstream broadcast** is the fixed 40-channel program frame
+(1492 B = 50 + 1440 + 2), rate-invariant audio with the sample rate carried by the
+packet rate.
 
 A stagebox's **upstream return** (box → master) is a different, narrower frame,
 now **decoded here too** (`<reac/reac_upstream.h>`, resolved on the rig — reac-pw
@@ -59,9 +81,23 @@ dependent package declares `DEPENDS:=+libreac` and `#include <reac/reac.h>`.
 
 ## API
 
-See [`include/reac/reac.h`](include/reac/reac.h) — plain C with simple types, so it is
-also straightforward to bind from other languages (e.g. a thin `ctypes` wrapper for
-the Python tools) if cross-language consistency or speed ever calls for it.
+Seven headers under [`include/reac/`](include/reac), each carrying its own evidence
+trail in the header comment — read those before trusting any summary, including this
+one:
+
+| header | what lives there |
+| --- | --- |
+| `reac.h` | modes, rate snap/detect, frame helpers, geometry constants |
+| `reac_braid.h` | the audio-region byte map — the single layout oracle, both directions |
+| `reac_sample.h` | s24-LE ↔ float, the one conversion pair |
+| `reac_decode.h` | downstream frame inspect + decode |
+| `reac_upstream.h` | stagebox return decode, box-width sized |
+| `reac_capture.h` | AF_PACKET capture |
+| `pcap_source.h` | offline pcap source |
+
+Plain C with simple types, so it is also straightforward to bind from other languages
+(e.g. a thin `ctypes` wrapper for the Python tools) if cross-language consistency or
+speed ever calls for it.
 
 ## License
 
