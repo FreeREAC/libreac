@@ -41,9 +41,14 @@ These are pure functions over bytes. No state, no clock, no IO — **identical i
 character to the audio frame builders**. They belong here for the same reason the
 braid oracle does: the DT1 checksum ordering is exactly the kind of fact that must
 have one home, and a second consumer is already committed to needing it —
-reac-aes67's virtual-stagebox sink names the JOIN/HOLD cold-connect sequence as
-its remaining gap, "without it a real Roland desk will not link to us"
-(`pipewire/src/reac_sink_node.h`), so it will otherwise re-derive the same bytes.
+reac-aes67 already emits REAC and is blocked on exactly this. Its encoder is
+written and running (`pipewire/src/reac_tx.c`, driven by `reac_sink_node.c`);
+what it lacks is the conversation — "it does **not** yet drive the connection
+handshake, so a real Roland desk will not link to it" (`pipewire/src/reac_tx.h`),
+with the JOIN/HOLD cold-connect sequence spelled out as the remaining work in
+`pipewire/src/reac_sink_node.h`. A second implementation of the DT1 checksum
+ordering is therefore not hypothetical; it is the next thing that repo has to
+write unless it can call ours.
 
 ### Conversation — stateful, and not ready
 
