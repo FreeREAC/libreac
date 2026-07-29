@@ -4,6 +4,7 @@
 /test_capture
 /test_braid
 /test_upstream
+/test_decode
 /test_encode
 
 libreac-*.tar.gz
