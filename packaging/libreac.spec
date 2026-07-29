@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.4.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -80,6 +80,19 @@ PC
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Wed Jul 29 2026 Pau Aliagas <linuxnow@gmail.com> - 0.5.0-1
+- BEHAVIOUR CHANGE: reac_decode() decodes the channel-pair BRAID, the layout
+  reac_downstream_build() writes. Up to 0.4.0 it read plain LE sample-major, so
+  libreac could not read back a frame it had just built — 0 of 480 samples of a
+  self-built 1492 B frame agreed (#13). The signature is unchanged, so existing
+  callers become correct without a source change; there is one downstream layout
+  for every mixer generation and the per-generation plain-LE/braid split that
+  kept plain LE the default is refuted, not open.
+- Plain LE stays reachable as reac_decode_plain_le(), byte-identical to the
+  pre-0.5.0 reac_decode() and pinned as such by a digest computed from the 0.4.0
+  code. Diagnostic only: historical captures and the mid-byte lane-shift
+  artefact. New suite tests/test_decode.c pins the encode->decode round trip
+  exact at all three rates and rules out cross-wiring.
 * Wed Jul 29 2026 Pau Aliagas <linuxnow@gmail.com> - 0.4.0-1
 - Encode side lands here: reac_encode.{h,c} — reac_braid_encode() (the braided
   audio region, the exact inverse of reac_upstream_decode, used in BOTH

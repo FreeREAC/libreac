@@ -22,7 +22,9 @@ C tools all need, so they aren't duplicated or allowed to drift.
   (`<reac/reac_sample.h>`): the one s24-LE ↔ float pair, exact inverses. Both
   directions live together so the round-trip contract cannot drift.
 - **Downstream decode** — `reac_frame_inspect()` / `reac_decode()`
-  (`<reac/reac_decode.h>`), plus capture and pcap sources for offline work.
+  (`<reac/reac_decode.h>`): the master's 40-channel broadcast, un-braided through
+  the oracle — the exact inverse of `reac_downstream_build()`. Plus capture and
+  pcap sources for offline work.
 - **Upstream decode** — `reac_upstream_channels()` / `reac_upstream_decode()`
   (`<reac/reac_upstream.h>`): the stagebox return, box-width sized.
 - **Encode** — `reac_braid_encode()` / `reac_downstream_build()`
@@ -36,6 +38,29 @@ C tools all need, so they aren't duplicated or allowed to drift.
 The wire-format reference these come from is
 [reac-protocol](https://github.com/FreeREAC/reac-protocol).
 
+## Behaviour change in 0.5.0 — `reac_decode()` reads the braid
+
+Up to 0.4.0 `reac_downstream_build()` wrote the channel-pair braid while
+`reac_decode()` read plain LE sample-major, so **libreac could not read back a
+frame it had just built**: on a 1492 B frame of its own making, 0 of 480 samples
+agreed ([#13](https://github.com/FreeREAC/libreac/issues/13)). `reac_decode()`
+now decodes the braid, through the same `reac_braid_pos()` oracle the encoder
+writes through.
+
+The signature is unchanged, so **existing callers become correct without a source
+change** — but a same-call, different-audio change is exactly the kind that is
+easy to miss, hence the version bump and this section. Every downstream consumer
+wanted the braid; there is one downstream layout for every mixer generation, and
+the per-generation "M-5000 plain-LE vs M-200/M-300 braid" split that once kept
+plain LE the default here is refuted, not open.
+
+Plain LE stays *reachable*, under its own explicit name
+`reac_decode_plain_le()`, byte-identical to the pre-0.5.0 `reac_decode()` and
+pinned as such by the test suite. It is a **diagnostic**: it reads historical
+captures stored under that layout and reproduces the mid-byte lane shift behind
+the old "coherence 0.999" reading. It is not a layout the wire ever carried, and
+nothing should get it by accident.
+
 ## Scope: the wire format in both directions; IO and handshake live in reac-pw
 
 libreac owns **what the bytes mean**, in both directions and for both roles, and
@@ -44,7 +69,7 @@ loss, rate from cadence), and **builds** them. Encoding a frame is the same
 statement about the wire format that decoding makes, read backwards, so the two
 belong together — `reac_braid_encode()` is literally the inverse of
 `reac_upstream_decode()`, and `reac_downstream_build()` is the 40-channel master
-broadcast that `reac_decode()`'s counterpart reads.
+broadcast that `reac_decode()` reads back.
 
 What libreac does **not** do is touch a socket, a clock or a protocol state
 machine. Staying in reac-pw, deliberately:
@@ -76,8 +101,8 @@ task #108 + the S-4000 OHRCA captures):
   channel count** (S-0808 → 8 ch/340 B, S-1608 → 16 ch/628 B, S-4000 → 32 ch/1204 B).
 - Audio is the **channel-pair byte braid** (`<reac/reac_braid.h>` — the single
   layout oracle, with the full evidence trail; the braid is the wire format in
-  both directions). The plain-LE `reac_decode()` path is retained unchanged as
-  the diagnostic/legacy downstream decode — see the contested note in its header.
+  both directions, and since 0.5.0 both decoders read it). The plain-LE body is
+  retained unchanged as `reac_decode_plain_le()`, a diagnostic — see above.
 - The channel map is **plain ascending** (input N = wire channel N−1) — the once-
   suspected FPGA permutation was disproved by the captures.
 - OHRCA-generation gear appends a **+2 CRC trailer** after the end marker in both
@@ -111,7 +136,7 @@ one:
 | `reac.h` | modes, rate snap/detect, frame helpers, geometry constants |
 | `reac_braid.h` | the audio-region byte map — the single layout oracle, both directions |
 | `reac_sample.h` | s24-LE ↔ float, the one conversion pair |
-| `reac_decode.h` | downstream frame inspect + decode |
+| `reac_decode.h` | downstream frame inspect + decode (braid; plain-LE diagnostic) |
 | `reac_upstream.h` | stagebox return decode, box-width sized |
 | `reac_encode.h` | braided encode + the downstream frame builder |
 | `reac_capture.h` | AF_PACKET capture |
