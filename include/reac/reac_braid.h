@@ -27,11 +27,15 @@
  *     audio offset exactly 50, and as noise under every other layout x offset
  *     (reac-pw docs/VALIDATION-PLAN.md Stage B coherence table).
  *
- * The historical "plain LE sample-major" alternative survives ONLY as
- * reac_decode()'s diagnostic/legacy path (see reac_decode.h) — its
- * "coherence 0.999" was a mid-byte lane shift amplifying quiet braided audio
- * 256x into a coherent-looking image. Do not add a second copy of this byte
- * map anywhere; consumers (reac-pw, reac-aes67) call this oracle.
+ * There is ONE downstream layout across every mixer generation: the historical
+ * "plain LE sample-major" alternative, and the per-generation "M-5000 plain-LE
+ * vs M-200/M-300 braid" split that went with it, are refuted — its "coherence
+ * 0.999" was a mid-byte lane shift amplifying quiet braided audio 256x into a
+ * coherent-looking image. Since 0.5.0 both directions decode this braid by
+ * default (reac_decode / reac_upstream_decode) and plain LE survives only as
+ * the explicitly named diagnostic reac_decode_plain_le() (see reac_decode.h).
+ * Do not add a second copy of this byte map anywhere; consumers (reac-pw,
+ * reac-aes67) call this oracle.
  */
 #ifndef LIBREAC_REAC_BRAID_H
 #define LIBREAC_REAC_BRAID_H

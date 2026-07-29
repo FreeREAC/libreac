@@ -5,9 +5,10 @@
 # is under openwrt/libreac/ (built via scripts/build-apk.sh against the SDK).
 #
 # libreac is the shared REAC byte-layout core: wire constants + rate detect
-# (reac.c), plain-LE frame decode (reac_decode.c, diagnostic/legacy), the braided
-# box-upstream decode (reac_upstream.c) and the braided ENCODE + downstream frame
-# builder (reac_encode.c), both over the braid/sample header oracles
+# (reac.c), the braided downstream decode + its plain-LE diagnostic
+# (reac_decode.c), the braided box-upstream decode (reac_upstream.c) and the
+# braided ENCODE + downstream frame builder (reac_encode.c), all over the
+# braid/sample header oracles
 # (reac_braid.h / reac_sample.h), live AF_PACKET capture (reac_capture.c), and
 # the offline pcap reader (pcap_source.c). Consumed by reac-aes67 and reac-pw.
 #
