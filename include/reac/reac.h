@@ -28,12 +28,23 @@ extern "C" {
 #define REAC_END_MARKER_0     0xC2    /* last two bytes of a full frame */
 #define REAC_END_MARKER_1     0xEA
 
-/* OHRCA-generation consoles (M-5000/M-480; also the S-4000S merge units) append
- * a 2-byte per-frame CRC-16 trailer AFTER the C2 EA end marker, in BOTH
- * directions (measured on live M-5000 downstream captures 2026-07-11 and on the
- * S-4000 32-ch upstream, matrix-m200-s4000 2026-07-24). The trailer is not part
- * of the frame the decoders read — strip it with reac_frame_clean_len(). */
-#define REAC_FRAME_BYTES_OHRCA (REAC_FRAME_BYTES + 2)  /* 1494: OHRCA downstream */
+/* Some captures carry 2 extra bytes AFTER the C2 EA end marker. They are NOT a
+ * REAC protocol field: they are the low 16 bits of the frame's own Ethernet FCS
+ * (crc32 over the preceding bytes, little-endian), left behind by the capture
+ * path. Measured 2026-07-29 over the capture corpus: the identity holds for
+ * 100% of frames checked, in BOTH directions and across generations —
+ * 61,125/61,125 on S-4000 32-ch 1206 B returns, 54,163/54,163 on a second
+ * S-4000 unit, 45/45 on S-0808 342 B returns, and every 1494 B downstream
+ * sampled on M-200 (NOT OHRCA), M-5000 and S-0808 rigs. A genuine trailer
+ * cannot equal the frame's own FCS 115,000 consecutive times.
+ *
+ * It is therefore NOT OHRCA-specific: 56 captures carry it and 20 carry none;
+ * it appears on non-OHRCA M-200 rigs and is absent from OHRCA ones. The variable
+ * is the capture rig — mirroring BOTH RX and TX of a port, so a transiting frame
+ * is seen twice (same src MAC, same counter, identical payload), one copy clean
+ * and one with the residue. Strip it with reac_frame_clean_len(); never model it
+ * as a protocol field and never emit it. */
+#define REAC_FRAME_BYTES_OHRCA (REAC_FRAME_BYTES + 2)  /* 1494: a 1492 frame plus FCS residue */
 
 /* UPSTREAM (stagebox -> master) frame geometry — box-width sized:
  *     frame_len = REAC_UPSTREAM_OVERHEAD + n_channels * REAC_UPSTREAM_BYTES_PER_CH
@@ -73,13 +84,13 @@ int reac_rate_snap(double pps);
  * bytes 12..13. Returns 1 if REAC, 0 otherwise. */
 int reac_frame_is_reac(const uint8_t *frame, size_t len);
 
-/* Strip the OHRCA +2 CRC trailer from a frame length, if present. One rule
+/* Strip the +2 FCS residue from a frame length, if present. One rule
  * covers both directions: a clean REAC frame is 52 + n*36 bytes (n = channel
  * width, 40 downstream / the box width upstream), so a length that is 52 + n*36
  * + 2 carries the trailer and comes back reduced by 2 (1494 -> 1492,
  * 1206 -> 1204, ...). Any other length (including every clean length) is
  * returned unchanged — the caller still validates the result as a frame; this
- * only normalizes the OHRCA variant. */
+ * only normalizes a capture that kept two bytes of the FCS. */
 size_t reac_frame_clean_len(size_t len);
 
 /* The 16-bit little-endian sequence counter at bytes 14..15. The counter

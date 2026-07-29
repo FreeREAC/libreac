@@ -6,7 +6,8 @@
  * Fixtures are REAL captured frames from the rig (reac-captures zoneA-48k /
  * zoneB-48k, MAC-sanitized to the stand-in 00:40:ab:c4:80:f6 per that repo's
  * convention): an S-1608 16-ch 628 B return, an S-0808 8-ch 340 B return, and
- * two consecutive S-4000 32-ch 1206 B OHRCA returns (matrix-m200-s4000
+ * two consecutive S-4000 32-ch 1206 B returns, i.e. 1204 B frames the capture
+ * left 2 bytes of FCS on (matrix-m200-s4000
  * 2026-07-24; 1206 = 52 + 32*36 + the +2 CRC trailer after the end marker,
  * with a 1204 B trailerless variant on the same wire).
  * The expected planar PCM tables were produced by the capture-side analysis

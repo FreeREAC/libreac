@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* Unit test: the braid layout oracle + the sample conversion pair + the OHRCA
+/* Unit test: the braid layout oracle + the sample conversion pair + the FCS-residue
  * +2 trailer strip.
  *
  * 1. reac_braid_pos is BIJECTIVE over the whole n_ch*36-byte audio region for
@@ -13,7 +13,7 @@
  *    16-bit-word swap — see reac_braid.h for the evidence trail).
  * 3. reac_f32_to_s24le / reac_s24le_to_f32 are exact inverses over the full
  *    24-bit range (every s24 value round-trips), and the encode clamps.
- * 4. reac_frame_clean_len strips exactly the OHRCA +2 (1494->1492, 1206->1204,
+ * 4. reac_frame_clean_len strips exactly the +2 FCS residue (1494->1492, 1206->1204,
  *    630->628) and leaves clean/invalid lengths untouched.
  */
 #include <stdio.h>
@@ -83,7 +83,7 @@ int main(void)
 	reac_f32_to_s24le(-2.0f, b);
 	CHK(b[0] == 0x00 && b[1] == 0x00 && b[2] == 0x80);   /* -8388608 */
 
-	/* 4. OHRCA +2 strip */
+	/* 4. +2 FCS-residue strip */
 	CHK(reac_frame_clean_len(REAC_FRAME_BYTES_OHRCA) == (size_t)REAC_FRAME_BYTES);
 	CHK(reac_frame_clean_len(1206) == 1204);  /* S-4000 32-ch trailered */
 	CHK(reac_frame_clean_len(630) == 628);    /* S-1608 16-ch trailered */
@@ -99,6 +99,6 @@ int main(void)
 		return 1;
 	}
 	printf("OK: braid_pos bijective for widths 2..40 + reference byte map, "
-	       "f32<->s24 exact round-trip + clamp, OHRCA +2 strip\n");
+	       "f32<->s24 exact round-trip + clamp, FCS-residue +2 strip\n");
 	return 0;
 }
