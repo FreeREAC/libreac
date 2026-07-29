@@ -52,7 +52,8 @@ uint16_t reac_counter_gap(uint16_t last, uint16_t cur)
 
 size_t reac_frame_clean_len(size_t len)
 {
-	/* clean frame = 52 + n*36; OHRCA appends 2 after the end marker, so a
+	/* clean frame = 52 + n*36; a capture may leave 2 bytes of FCS after the
+	 * end marker, so a
 	 * trailered length is congruent to 2 mod 36 past the overhead. */
 	if (len >= REAC_UPSTREAM_OVERHEAD + 2 &&
 	    (len - REAC_UPSTREAM_OVERHEAD) % REAC_UPSTREAM_BYTES_PER_CH == 2)

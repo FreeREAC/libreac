@@ -10,7 +10,7 @@
 
 int reac_upstream_channels(size_t len)
 {
-	/* OHRCA path (M-5000/M-480, and the S-4000S — captured on OHRCA) appends a 2-byte
+	/* Some captures leave 2 bytes of Ethernet FCS after the end marker (a 2-byte
 	 * CRC-16 trailer AFTER the C2 EA end marker: the upstream analogue of the downstream
 	 * 1492->1494 (+2). Strip it so the box-width math below sees the clean frame;
 	 * without this the S-4000's 1206 B (52 + 32*36 + 2) fails the %36 check, an RX
@@ -37,7 +37,7 @@ int reac_upstream_decode(const uint8_t *raw, size_t len, uint8_t *out)
 		return -1;
 	if (raw[12] != 0x88 || raw[13] != 0x19)
 		return -1;
-	/* End-marker check against the CLEAN frame length (excludes any OHRCA +2 CRC trailer);
+	/* End-marker check against the CLEAN frame length (excludes any +2 FCS residue);
 	 * the audio region [50 : 50+nch*36] the loop below reads is unaffected by the trailer. */
 	size_t clean_len = REAC_UPSTREAM_OVERHEAD + (size_t)nch * REAC_UPSTREAM_BYTES_PER_CH;
 	if (raw[clean_len - 2] != REAC_END_MARKER_0 || raw[clean_len - 1] != REAC_END_MARKER_1)

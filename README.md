@@ -105,47 +105,8 @@ task #108 + the S-4000 OHRCA captures):
   retained unchanged as `reac_decode_plain_le()`, a diagnostic — see above.
 - The channel map is **plain ascending** (input N = wire channel N−1) — the once-
   suspected FPGA permutation was disproved by the captures.
-- OHRCA-generation gear appends a **+2 CRC trailer** after the end marker in both
-  directions; `reac_frame_clean_len()` is the one home for stripping it.
-
-Frame **emission** (sockets, the SCHED_FIFO pacer, the control-block stamping and
-the establishment handshake) stays in reac-pw — it takes the frame bytes from the
-encoders here, so the wire format has exactly one home.
-
-Where the boundary runs — and why the establishment FSM has **not** followed the
-wire format here yet — is recorded in [`docs/layering.md`](docs/layering.md),
-together with the concrete gates for moving it.
-## Build
-
-Native (static lib + tests):
-
-    make        # libreac.a
-    make test   # build + run the unit tests
-
-OpenWrt (shared lib + dev headers): the package recipe is `openwrt/libreac/`. A
-dependent package declares `DEPENDS:=+libreac` and `#include <reac/reac.h>`.
-
-## API
-
-Eight headers under [`include/reac/`](include/reac), each carrying its own evidence
-trail in the header comment — read those before trusting any summary, including this
-one:
-
-| header | what lives there |
-| --- | --- |
-| `reac.h` | modes, rate snap/detect, frame helpers, geometry constants |
-| `reac_braid.h` | the audio-region byte map — the single layout oracle, both directions |
-| `reac_sample.h` | s24-LE ↔ float, the one conversion pair |
-| `reac_decode.h` | downstream frame inspect + decode (braid; plain-LE diagnostic) |
-| `reac_upstream.h` | stagebox return decode, box-width sized |
-| `reac_encode.h` | braided encode + the downstream frame builder |
-| `reac_capture.h` | AF_PACKET capture |
-| `pcap_source.h` | offline pcap source |
-
-Plain C with simple types, so it is also straightforward to bind from other languages
-(e.g. a thin `ctypes` wrapper for the Python tools) if cross-language consistency or
-speed ever calls for it.
-
-## License
-
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+- Some captures carry **+2 bytes of Ethernet FCS residue** after the end marker,
+  in either direction. It is NOT a protocol field: the two bytes are the low 16
+  bits of the frame's own CRC-32 (verified on 100% of frames checked across five
+  rigs, both directions), left by a capture that mirrors RX and TX of one port.
+  `reac_frame_clean_len()` is the one home for stripping it — never emit it.
