@@ -125,3 +125,18 @@ This list is the status of the move; keep it here and nowhere else.
    against the capture goldens.
 3. **The FSM** → only once the four gates above hold, and only after step 2, so
    the FSM is already building its frames through libreac when it moves.
+
+## Versioning while the control plane is out of tree
+
+**0.5.x until `reac_ctrl` lands.** Operator decision, 2026-07-29: everything that
+ships before the control plane is a **patch** bump — 0.5.1, 0.5.2, … — because
+what remains in this phase is corrections and additions to the wire *vocabulary*,
+not a change in what the library is.
+
+The next **minor** (0.6.0) is reserved for the control-plane extraction described
+above: when `reac_ctrl.h` appears, libreac stops being purely a layout oracle and
+starts holding conversation state, which is the change a minor is for.
+
+Recent history under this rule: 0.4.0 added the encoders (the last minor before
+the freeze), 0.5.0 fixed `reac_decode()` to un-braid — a behaviour change to a
+public function, so it took the minor it was already due. From here, patch.
