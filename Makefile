@@ -30,7 +30,7 @@ all: libreac.a
 libreac.a: $(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
-test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c libreac.a
+test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c libreac.a
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -41,8 +41,10 @@ test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstr
 	./test_upstream
 	$(CC) $(CFLAGS) $(INC) tests/test_encode.c libreac.a -lm -o test_encode
 	./test_encode
+	$(CC) $(CFLAGS) $(INC) tests/test_decode.c libreac.a -lm -o test_decode
+	./test_decode
 
 clean:
-	rm -f $(OBJS) libreac.a test_reac test_capture test_braid test_upstream test_encode
+	rm -f $(OBJS) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode
 
 .PHONY: all test clean
