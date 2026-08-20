@@ -56,4 +56,15 @@ struct reac_box_ports {
  * otherwise, leaving `out` untouched. */
 int reac_ports_parse(const uint8_t block[32], struct reac_box_ports *out);
 
+/* The head-amp base a desk grants for a declared input width. A head-amp
+ * record's CH is base + (box_input - 1); every desk generation grants the same
+ * base for the same declaration (42 grant sweeps across 82 captures,
+ * reac-captures docs/PLACEMENT-EVIDENCE.md):
+ *
+ *     8 -> 0x00 (S-0808)    16 -> 0x20 (S-1608)    32 -> 0x00 (S-4000S)
+ *
+ * Returns -1 for a width with no captured placement — REFUSE, never guess:
+ * base 0 for a 16-input box addresses its preamps 32 slots low. */
+int reac_headamp_base(int in_ch);
+
 #endif /* REAC_PORTS_H */

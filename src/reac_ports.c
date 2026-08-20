@@ -27,3 +27,13 @@ int reac_ports_parse(const uint8_t block[32], struct reac_box_ports *out)
 	out->out_ch = out_slots * REAC_PORTS_CH_PER_SLOT;
 	return 0;
 }
+
+int reac_headamp_base(int in_ch)
+{
+	switch (in_ch) {
+	case 8:  return 0x00;   /* S-0808  */
+	case 16: return 0x20;   /* S-1608  */
+	case 32: return 0x00;   /* S-4000S */
+	default: return -1;     /* no captured placement: refuse, never guess */
+	}
+}
