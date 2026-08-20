@@ -79,6 +79,17 @@ int main(void)
 	CHK(reac_ports_parse(NULL, &pt) == -1);
 	CHK(reac_ports_parse(BLK_S0808, NULL) == -1);
 
+	/* Head-amp placement per declared width — the corpus law (42 grant sweeps,
+	 * reac-captures docs/PLACEMENT-EVIDENCE.md): every desk generation grants
+	 * the same base for the same declaration. Unknown width REFUSES (-1):
+	 * guessing base 0 addresses an S-1608's preamps 32 slots low. */
+	CHK(reac_headamp_base(8) == 0x00);
+	CHK(reac_headamp_base(16) == 0x20);
+	CHK(reac_headamp_base(32) == 0x00);
+	CHK(reac_headamp_base(24) == -1);
+	CHK(reac_headamp_base(0) == -1);
+	CHK(reac_headamp_base(-4) == -1);
+
 	printf("OK: reac_ports — three real declarations decode (16x8 / 8x8 / 32x8), "
 	       "geometry needs no model row, uncaptured slot codes refuse\n");
 	return 0;
