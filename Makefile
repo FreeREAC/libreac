@@ -20,7 +20,7 @@ AR      ?= ar
 CFLAGS  ?= -O2 -std=c11 -Wall -Wextra
 INC     := -Iinclude
 
-OBJS = reac.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o
+OBJS = reac.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o
 
 all: libreac.a
 
@@ -30,7 +30,7 @@ all: libreac.a
 libreac.a: $(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
-test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c libreac.a
+test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c libreac.a
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -43,8 +43,10 @@ test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstr
 	./test_encode
 	$(CC) $(CFLAGS) $(INC) tests/test_decode.c libreac.a -lm -o test_decode
 	./test_decode
+	$(CC) $(CFLAGS) $(INC) tests/test_ports.c libreac.a -lm -o test_ports
+	./test_ports
 
 clean:
-	rm -f $(OBJS) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode
+	rm -f $(OBJS) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports
 
 .PHONY: all test clean
