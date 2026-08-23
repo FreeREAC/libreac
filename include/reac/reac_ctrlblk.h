@@ -168,6 +168,13 @@ int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6]);
  * without moving every caller. */
 #define REAC_HEADAMP_SENS_MAX 0x37   /* 55 — the 56th and last step */
 
+/* The curve itself, in HUNDREDTHS of a dBu, public so the schema can bind to it:
+ * protocol-facts.yaml's `headamp_sens` group names these three and the generated
+ * reac_facts_assert.h refuses to compile if either side moves alone. */
+#define REAC_HEADAMP_SENS_REF_CDB  (-1000)   /* step 0x00, pad off: -10.00 dBu */
+#define REAC_HEADAMP_SENS_STEP_CDB   (100)   /* 1.00 dB, every step */
+#define REAC_HEADAMP_PAD_CDB        (2000)   /* the pad's 20.00 dB */
+
 /* Sensitivity for a step, in HUNDREDTHS of a dBu. Exact; the inverse round-trips.
  * `pad_on` adds the pad's 20 dB. */
 int      reac_headamp_sens_cdb(uint8_t value, int pad_on);

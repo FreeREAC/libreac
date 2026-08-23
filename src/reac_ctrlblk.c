@@ -160,9 +160,9 @@ int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6])
  *
  * Integer hundredths, not floats: this file is written to stay kernel-portable,
  * and a gain curve is exactly the place a float would sneak in. */
-#define SENS_REF_CDB   (-1000)   /* step 0, pad off: -10 dBu */
-#define SENS_STEP_CDB    (100)   /* 1 dB, every step */
-#define SENS_PAD_CDB    (2000)   /* the pad's 20 dB */
+#define SENS_REF_CDB   REAC_HEADAMP_SENS_REF_CDB
+#define SENS_STEP_CDB  REAC_HEADAMP_SENS_STEP_CDB
+#define SENS_PAD_CDB   REAC_HEADAMP_PAD_CDB
 
 int reac_headamp_sens_cdb(uint8_t value, int pad_on)
 {
