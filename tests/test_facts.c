@@ -22,48 +22,51 @@
 
 int main(void)
 {
-	/* SENS and the flags reach every channel, and they are the settled half. */
+	/* ALL THREE PARAMETERS REACH EVERY CHANNEL. Phantom joined the other two on
+	 * 2026-08-23: this loop used to run over SENS and PAD only, while phantom
+	 * had a loop of its own asserting that the API REFUSED to answer for three
+	 * channels in four. It is one loop now because there is one law.
+	 *
+	 * The count is the load-bearing part. The retracted reading made a sweep
+	 * emit 12 phantom records over a 48-channel space instead of 48, so a test
+	 * that only checked "carries" per channel would pass under both readings —
+	 * it is the TOTAL that separates them. */
+	int carried = 0;
 	for (int ch = 0; ch < REAC_HEADAMP_MAX_CH; ch++) {
 		CHK(reac_headamp_record_carries((unsigned char)ch, REAC_HEADAMP_SENS) == 1);
 		CHK(reac_headamp_record_carries((unsigned char)ch, REAC_HEADAMP_PAD) == 1);
+		CHK(reac_headamp_record_carries((unsigned char)ch, REAC_HEADAMP_PHANTOM) == 1);
 		CHK(reac_headamp_group_of((unsigned char)ch, REAC_HEADAMP_SENS) == ch);
 		CHK(reac_headamp_group_of((unsigned char)ch, REAC_HEADAMP_PAD) == ch);
+		CHK(reac_headamp_group_of((unsigned char)ch, REAC_HEADAMP_PHANTOM) == ch);
+		carried++;
 	}
+	CHK(carried == REAC_HEADAMP_MAX_CH);           /* 48 of 48, not 12 */
 
-	/* PHANTOM'S ACTUATION GRANULARITY IS OPEN and the API says so rather than
-	 * answering. The two readings — per four from an executed trace, per channel
-	 * from the box's own per-slot table — agree on a group-of-four anchor and
-	 * disagree on the other three in four, so that is where it answers and where
-	 * it refuses. NEVER 0: "the write lands nowhere" is a claim nobody is
-	 * entitled to make while this stands, and it is the claim that made a sweep
-	 * skip three records in four. */
-	int answered = 0, disputed = 0;
-	for (int ch = 0; ch < REAC_HEADAMP_MAX_CH; ch++) {
-		int c = reac_headamp_record_carries((unsigned char)ch, REAC_HEADAMP_PHANTOM);
-		CHK(c == 1 || c == REAC_HEADAMP_GRAN_DISPUTED);
-		CHK(c == ((ch % 4 == 0) ? 1 : REAC_HEADAMP_GRAN_DISPUTED));
-		answered += (c == 1);
-		disputed += (c == REAC_HEADAMP_GRAN_DISPUTED);
-		CHK(reac_headamp_group_of((unsigned char)ch, REAC_HEADAMP_PHANTOM)
-		    == REAC_HEADAMP_GRAN_DISPUTED);
-	}
-	CHK(answered == REAC_HEADAMP_MAX_CH / 4);      /* 12 of 48 */
-	CHK(disputed == REAC_HEADAMP_MAX_CH - answered);
+	/* THE CHANNELS THAT DISCRIMINATE. A per-four reading and a per-channel one
+	 * agree on every multiple of four and nowhere else, so the evidence is the
+	 * other three: 0x26 is the channel a real M-200i named six times while
+	 * toggling one input's phantom, and 0x26 & 3 == 2. */
+	CHK(reac_headamp_group_of(0x25, REAC_HEADAMP_PHANTOM) == 0x25);
+	CHK(reac_headamp_group_of(0x26, REAC_HEADAMP_PHANTOM) == 0x26);
+	CHK(reac_headamp_group_of(0x27, REAC_HEADAMP_PHANTOM) == 0x27);
 
 	/* The per-four field this used to be folded into is the INVENTORY CELL: a
 	 * declaration of what a group of four connectors is, and not a head-amp
 	 * parameter. It lives in reac_ports.h and spans the same 48 channels. */
 	CHK(REAC_PORTS_TABLE_SLOTS * REAC_PORTS_CH_PER_SLOT == REAC_HEADAMP_MAX_CH);
 
-	/* The readback nibble is a third axis, per eight, and stays named apart. */
-	CHK(REAC_HEADAMP_GRAN_READBACK_SHIFT != REAC_HEADAMP_GRAN_PHANTOM_SHIFT_TRACE);
+	/* The readback nibble is a third axis, per eight, and stays named apart —
+	 * now the one head-amp shift that is not zero. */
+	CHK(REAC_HEADAMP_GRAN_READBACK_SHIFT != REAC_HEADAMP_GRAN_PHANTOM_SHIFT);
+	CHK(REAC_HEADAMP_GRAN_PHANTOM_SHIFT == REAC_HEADAMP_GRAN_SENS_SHIFT);
+	CHK(REAC_HEADAMP_GRAN_PHANTOM_SHIFT == REAC_HEADAMP_GRAN_FLAGS_SHIFT);
 
 	CHK(reac_headamp_record_carries(0, 0x7f) == -1);   /* not a head-amp param */
 	CHK(reac_headamp_group_of(0, 0x7f) == -1);
 
 	printf("OK: schema assertions hold; the head-amp wire record is per channel "
-	       "for all three parameters, the per-four field is the inventory cell, "
-	       "and phantom's actuation granularity comes back DISPUTED off an "
-	       "anchor rather than as a number\n");
+	       "for all three parameters INCLUDING PHANTOM (measured 2026-08-23), "
+	       "and the per-four field is the inventory cell\n");
 	return 0;
 }
