@@ -1,7 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.6.0
+Version:        0.7.0
+# THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
+# `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
+# from it, so bumping it is what makes a mismatched pair refuse to install
+# instead of failing at exec time with `undefined symbol`. It tracks
+# LIBREAC_ABI in include/reac/reac.h -- packaging/make-tarball.sh refuses to
+# build a tarball when this copy and the header disagree, which is the only
+# moment the copy can be caught.
+%global abi 1
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -46,13 +54,13 @@ done
 # %%build_ldflags carries the Fedora link flags incl. --build-id, which the
 # debuginfo extraction requires (%%optflags already gave the objects -g).
 # -lm: reac_encode's float->s24 rounds with lrintf.
-cc %{build_ldflags} -shared -Wl,-soname,libreac.so.0 -o libreac.so.%{version} \
+cc %{build_ldflags} -shared -Wl,-soname,libreac.so.%{abi} -o libreac.so.%{version} \
   *.o -lm
 
 %install
 install -Dm0755 libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{version}
-ln -s libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.0
-ln -s libreac.so.0          %{buildroot}%{_libdir}/libreac.so
+ln -s libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{abi}
+ln -s libreac.so.%{abi}     %{buildroot}%{_libdir}/libreac.so
 # Same rule as %%build: every public header, derived. reac_ctrlblk.h and
 # reac_ports.h were missing from the old hand-kept list.
 for h in include/reac/*.h; do
@@ -81,7 +89,7 @@ make test
 %files
 %license LICENSE
 %{_libdir}/libreac.so.%{version}
-%{_libdir}/libreac.so.0
+%{_libdir}/libreac.so.%{abi}
 
 %files devel
 # The whole directory, so a new public header ships the day it lands instead of
@@ -92,6 +100,25 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Sun Aug 23 2026 Pau Aliagas <linuxnow@gmail.com> - 0.7.0-1
+- API BREAK, and this is the release that admits it. The identity record is one
+  message built by the identity-first surface; reac_ctrl_build_name_frame() and
+  reac_ctrl_build_extra_frame() are removed. Head-amp phantom is per channel on
+  the wire, measured 2026-08-23, and the control block is classified by link,
+  segment and opcode rather than by frame length.
+- SONAME 0 -> 1. The break above shipped once already under 0.6.0 with soname 0
+  and unchanged version digits. Nothing could see it: reac-pw's `>= 0.6.0`
+  floor accepted old and new alike, the identical NEVRA made `rpm -U` a no-op,
+  and the installed /usr/bin/reac-pw loaded the new libreac.so.0 and died on
+  `undefined symbol`. With the soname moved the two are co-installable, rpm's
+  generated requires refuse a mismatched pair at INSTALL time, and a stale
+  binary keeps loading .so.0 until it is replaced instead of breaking.
+- The soname's major now has one home, LIBREAC_ABI in include/reac/reac.h, and
+  %%global abi tracks it; make-tarball.sh refuses a tarball when the two
+  disagree, the same gate that already guarded the version digits.
+- Consumers must rebuild: reac-pw's floor is raised to >= 0.7.0 in the same
+  change. The library and any binary linked against it go in TOGETHER.
+
 * Sat Aug 22 2026 Pau Aliagas <linuxnow@gmail.com> - 0.6.0-1
 - The control-block and port-declaration core ships: src/reac_ctrlblk.c
   (reac_ctrl_* frame builders and parsers, the checksum stamp/verify pair, the
