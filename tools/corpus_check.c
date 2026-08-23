@@ -80,15 +80,35 @@ struct tally {
 	unsigned long audio_up_ok, audio_up_bad;
 };
 
-/* One frame. `corrupt` is the self-test: flip a control-block byte so a checker
- * that cannot fail is exposed before a green run is believed. */
+/* One frame. `corrupt` is the self-test, and it is a MASK because this report has
+ * two independent arms and one sabotage only proves one of them.
+ *
+ *   CORRUPT_CTRL  flips a control-block byte, so the classification, the block
+ *                 checksum and everything read out of [18:50] must move.
+ *
+ *   CORRUPT_AUDIO flips the frame's END MARKER, which is what
+ *                 reac_frame_inspect actually validates, so the dn=/up= audio
+ *                 tallies must move. THE CONTROL FLIP CANNOT DO THIS: the audio
+ *                 decoders read [50:] and never look at the control block, so
+ *                 --self-test alone left the audio arm unproven — it would have
+ *                 reported success over a corpus carrying no decodable audio at
+ *                 all. Only whole frames are touched: on a snaplen-truncated
+ *                 record the last captured byte is inside the control block
+ *                 (f[49] is the checksum), and flipping that would move the
+ *                 control counts and disguise itself as an audio result.
+ */
+#define CORRUPT_CTRL  1
+#define CORRUPT_AUDIO 2
+
 static void feed(struct tally *t, uint8_t *f, size_t len, int truncated, int corrupt)
 {
 	if (!reac_frame_is_reac(f, len))
 		return;
 	t->reac++;
-	if (corrupt)
+	if (corrupt & CORRUPT_CTRL)
 		f[REAC_CTRL_BLOCK_OFF + 4] ^= 0xff;
+	if ((corrupt & CORRUPT_AUDIO) && !truncated && len >= 2)
+		f[len - 1] ^= 0xff;
 
 	if (f[16] == 0xcd && f[17] == 0xea)
 		triple_add(&t->tr, ((unsigned)f[18] << 16) |
@@ -217,7 +237,9 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "--per-file") && i + 1 < argc)
 			cap = strtoul(argv[++i], NULL, 10);
 		else if (!strcmp(argv[i], "--self-test"))
-			corrupt = 1;
+			corrupt |= CORRUPT_CTRL;
+		else if (!strcmp(argv[i], "--self-test-audio"))
+			corrupt |= CORRUPT_AUDIO;
 		else if (!strcmp(argv[i], "--strip-prefix") && i + 1 < argc)
 			root = argv[++i];
 		else
@@ -226,7 +248,7 @@ int main(int argc, char **argv)
 	if (i >= argc) {
 		fprintf(stderr,
 		        "usage: corpus_check [--per-file N] [--self-test] "
-		        "[--strip-prefix DIR] FILE...\n");
+		        "[--self-test-audio] [--strip-prefix DIR] FILE...\n");
 		return 2;
 	}
 	size_t rl = strlen(root);
