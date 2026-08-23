@@ -143,6 +143,32 @@ the freeze), 0.5.0 fixed `reac_decode()` to un-braid — a behaviour change to a
 public function, so it took the minor it was already due. 0.6.0 took the minor
 the control-plane extraction was reserved above.
 
+## STANDING RULE while nothing is published (operator, 2026-08-23)
+
+**We are not publishing yet, so a change does not owe a bump.** 0.7.0 stands, and
+the next release does not need a new number merely because code changed. The
+churn this stops is real: a version was moved for four consecutive changes in one
+evening, which buys a bigger number and no reader — nobody outside this tree
+consumes these packages, and the library and reac-pw are installed TOGETHER,
+always.
+
+**When a bump IS warranted, move the MINOR.** 0.7.0 → 0.8.0. Not a new patch
+line, and not the soname.
+
+Two things this does not relax, because they are what made a mismatched pair
+detectable at all:
+
+- **The consumer's floor moves with the version.** A number that moves while
+  reac-pw's `>= …` stays put changes nothing — that inertness is the whole
+  lesson of the section below.
+- **Verify an upgrade by asking for what only the new build can answer**
+  (`nm -D --defined-only … | grep identity_first`), never by version string,
+  `dnf list`, or the daemon looking healthy.
+
+The section below is the history that produced 0.7.0 and soname 1. Keep it as
+the record of why those numbers are where they are; do not read it as a standing
+instruction to move two numbers per break.
+
 ## A removed symbol moves TWO numbers
 
 **0.7.0, and soname 0 → 1.** The rule the paragraphs above did not state, because
