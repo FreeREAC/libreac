@@ -111,7 +111,43 @@ uint16_t reac_counter_gap(uint16_t last, uint16_t cur);
  * non-blocking by this call. Linux only; returns -1 on a non-Linux build. */
 int reac_detect_rate_fd(int fd, int window_ms);
 
-/* Library version string, e.g. "0.1.0". */
+/* ---- THE VERSION, DEFINED ONCE ------------------------------------------
+ *
+ * Here, in the public header, and nowhere else. It used to be in three places
+ * with two different values - src/reac.c said 0.5.0 behind an overridable
+ * #ifndef, openwrt/libreac/Makefile said 0.5.0, packaging/libreac.spec said
+ * 0.6.0 - and none of them was reachable from a consumer at compile time, so
+ * no version floor anywhere in the estate could fail. The RPM spec and the
+ * OpenWrt recipe read the three numbers below; packaging/make-tarball.sh
+ * refuses to build a tarball whose spec disagrees with them.
+ *
+ * The digits appear once. The string is built from them, so the two spellings
+ * cannot drift.
+ *
+ * THE RULE (docs/layering.md): patch bumps until the control plane lands, and
+ * the minor is what the control-plane extraction takes. reac_ctrlblk.h is that
+ * extraction - the library holds conversation state now, not only layout. */
+#define LIBREAC_VERSION_MAJOR 0
+#define LIBREAC_VERSION_MINOR 6
+#define LIBREAC_VERSION_PATCH 0
+
+#define LIBREAC__STR(x)  #x
+#define LIBREAC__XSTR(x) LIBREAC__STR(x)
+#define LIBREAC_VERSION                       \
+	LIBREAC__XSTR(LIBREAC_VERSION_MAJOR) "."  \
+	LIBREAC__XSTR(LIBREAC_VERSION_MINOR) "."  \
+	LIBREAC__XSTR(LIBREAC_VERSION_PATCH)
+
+/* Comparable, so a floor is one #if and not a strcmp nobody writes. */
+#define LIBREAC_VERSION_NUM (LIBREAC_VERSION_MAJOR * 10000 + \
+                             LIBREAC_VERSION_MINOR * 100 + \
+                             LIBREAC_VERSION_PATCH)
+#define LIBREAC_VERSION_AT_LEAST(ma, mi, pa) \
+	(LIBREAC_VERSION_NUM >= ((ma) * 10000 + (mi) * 100 + (pa)))
+
+/* The version of the library actually linked, which is the one a header floor
+ * cannot check: a consumer built against this header can run against another
+ * build. Compare it with LIBREAC_VERSION when that matters. */
 const char *reac_version(void);
 
 #ifdef __cplusplus
