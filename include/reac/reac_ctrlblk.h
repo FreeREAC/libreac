@@ -345,18 +345,27 @@ struct reac_box_model {
 	const char *display;    /* human label for --help / logs            */
 	int         in_ch;      /* box input (upstream) width -> frame size  */
 	int         out_ch;     /* box output (downstream) width             */
-	uint8_t     config_block[32];  /* config-announce cdea 01 03 0010    */
-	int         has_name;   /* 1 -> also emit the ASCII name frame       */
-	uint8_t     name_block[32];    /* name frame cdea 04 01 001b (if any)*/
-	/* The mixer identifies the MODEL from the cold-connect INVENTORY frames, not
-	 * just the config-announce: the 0016/001a blocks differ per model, and some
-	 * models emit an extra 0402000d frame. Byte-verified per model. */
-	uint8_t     cc0014[32];        /* cold-connect cdea 04 03 0014       */
-	uint8_t     cc0013[32];        /* cold-connect cdea 04 03 0013       */
-	uint8_t     cc0016[32];        /* cold-connect cdea 04 03 0016       */
-	uint8_t     cc001a[32];        /* cold-connect cdea 04 03 001a       */
-	int         has_extra;  /* 1 -> also emit the cdea 04 02 000d frame  */
-	uint8_t     extra_block[32];   /* cdea 04 02 000d (if any)           */
+	uint8_t     config_block[32];  /* the declaration, link 1 opcode 0x82/0x84 */
+
+	/* THE IDENTITY RECORD, WHICH ARRIVES AS TWO FRAMES. A link-4 FIRST fragment
+	 * and the LAST fragment that closes it are ONE Roland SysEx - TAG 0x0500
+	 * carrying the ASCII model name - and its inner checksum closes only across
+	 * both: the address and data bytes sum to 358, and 128 - 358 % 128 = 0x1a,
+	 * the byte that arrives in the second frame. A model that emitted one
+	 * without the other would put a record on the wire that cannot be verified,
+	 * so ONE flag gates both and they cannot get out of step. Models whose desk
+	 * label comes from the declaration's constant alone send neither. */
+	int         has_identity_record;
+	uint8_t     identity_first[32];  /* link 4 FIRST — the name and the model id */
+	uint8_t     identity_last[32];   /* link 4 LAST — the closing checksum, f7  */
+
+	/* The mixer identifies the MODEL from the cold-connect INVENTORY records too,
+	 * not just from the declaration: these four link-4 SINGLEs differ per model.
+	 * Byte-verified per model. */
+	uint8_t     cc0014[32];        /* link 4 SINGLE, TAG 0x0100 join           */
+	uint8_t     cc0013[32];        /* link 4 SINGLE, TAG 0x0302 box ready      */
+	uint8_t     cc0016[32];        /* link 4 SINGLE, TAG 0x0500 identity, 6 B  */
+	uint8_t     cc001a[32];        /* link 4 SINGLE, TAG 0x0500 identity, 10 B */
 };
 const struct reac_box_model *reac_box_model_by_token(const char *token);
 const struct reac_box_model *reac_box_model_by_channels(int in_ch);
@@ -417,17 +426,16 @@ int reac_box_pin_notice(const char **pin, const char *recognized_token);
  * model family. in_ch selects the fixed-matrix row (falls back to S-1608). */
 size_t reac_ctrl_build_config_announce(uint8_t *out, const uint8_t master[6],
                                        const uint8_t src[6], uint16_t counter, int in_ch);
-/* ASCII model-name frame (cdea 04 01 001b) — required for the 0x84 family so the
- * desk shows the exact model (e.g. "S-0808") instead of the generic family name.
- * Returns 0 (emits nothing) for models whose name comes from the selector alone
- * (the 0x82 / S-1608 family). */
-size_t reac_ctrl_build_name_frame(uint8_t *out, const uint8_t master[6],
-                                  const uint8_t src[6], uint16_t counter, int in_ch);
-/* The extra cold-connect frame (cdea 04 02 000d) some models send (S-0808). The
- * mixer uses it, with the 0016/001a inventory, to determine the exact model.
- * Returns 0 (emits nothing) for models that don't send it (e.g. S-1608). */
-size_t reac_ctrl_build_extra_frame(uint8_t *out, const uint8_t master[6],
-                                   const uint8_t src[6], uint16_t counter, int in_ch);
+/* The identity record's two fragments. THEY ARE ONE MESSAGE AND MUST BOTH GO OUT,
+ * in this order: the FIRST fragment carries the DT1 preamble, TAG 0x0500 and the
+ * ASCII model name, and the LAST one carries the SysEx checksum that closes over
+ * the pair and the f7 that ends it. Sending only the first puts a record on the
+ * wire that nothing can verify. Both return 0, emitting nothing, for a model
+ * whose desk label comes from the declaration's constant alone. */
+size_t reac_ctrl_build_identity_first(uint8_t *out, const uint8_t master[6],
+                                      const uint8_t src[6], uint16_t counter, int in_ch);
+size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
+                                     const uint8_t src[6], uint16_t counter, int in_ch);
 /* The box cold-connect (cdea 04 03): the 32-byte control block over LIVE audio
  * [50:626] (the [38:66] region is per-frame audio, NOT device inventory). Audio is
  * planar float [ch][s], as build_upstream_filler; NULL planar -> silent. The master
