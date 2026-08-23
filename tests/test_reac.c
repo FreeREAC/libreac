@@ -74,6 +74,27 @@ int main(void)
 	CHECK(reac_headamp_sens_value_cdb(99999, 0)  == 0x00, "hotter than min gain clamps to 0x00");
 	CHECK(reac_headamp_sens_value_cdb(-99999, 0) == 0x37, "below max gain clamps to 0x37");
 
+	/* THE REFERENCE POINT, PINNED, because it is openly disagreed on and prose
+	 * has not stopped anyone converting one into the other. What libreac
+	 * publishes is SENSITIVITY in dBu and it runs the other way from gain:
+	 * against a 0 dBu reference the same control reads gain = 10 + value, where
+	 * openmixer publishes 0..55 dB. That is a 10 dB offset between two live
+	 * consumers, and ground truth is the M-200's own SENS display, unread. These
+	 * two assertions go red the moment libreac's own zero moves, whichever way
+	 * the dispute is closed - which is the point: it gets closed on both sides
+	 * at once, not by an adapter that quietly adds ten. */
+	{
+		int off_law = 0, matches_gain_law = 0;
+		for (int v = 0; v <= REAC_HEADAMP_SENS_MAX; v++) {
+			if (reac_headamp_sens_cdb((uint8_t)v, 0) != -(10 + v) * 100)
+				off_law++;
+			if (reac_headamp_sens_cdb((uint8_t)v, 0) == -v * 100)
+				matches_gain_law++;
+		}
+		CHECK(off_law == 0, "sensitivity_dBu = -10 - value across all 56 steps");
+		CHECK(matches_gain_law == 0, "and it is NOT the 0..55 dB reading, at any step");
+	}
+
 	if (fails == 0) printf("OK: all libreac tests passed\n");
 	else printf("%d libreac test(s) failed\n", fails);
 	return fails ? 1 : 0;
