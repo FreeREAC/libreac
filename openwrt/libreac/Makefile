@@ -7,7 +7,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=libreac
-PKG_VERSION:=0.5.0
+# THE VERSION LIVES IN include/reac/reac.h. Read it rather than keeping a fourth
+# copy: this one said 0.5.0 while the spec said 0.6.0 and the library reported a
+# third thing.
+PKG_VERSION:=$(shell awk '/^\#define LIBREAC_VERSION_MAJOR/{ma=$$3} /^\#define LIBREAC_VERSION_MINOR/{mi=$$3} /^\#define LIBREAC_VERSION_PATCH/{pa=$$3} END{printf "%s.%s.%s", ma, mi, pa}' $(CURDIR)/../../include/reac/reac.h)
+ifeq ($(PKG_VERSION),..)
+$(error could not read LIBREAC_VERSION_* from include/reac/reac.h)
+endif
 PKG_RELEASE:=1
 PKG_MAINTAINER:=Pau Aliagas <linuxnow@gmail.com>
 PKG_LICENSE:=GPL-3.0-or-later
