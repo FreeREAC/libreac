@@ -57,6 +57,11 @@ test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstr
 	./test_ctrl
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_facts.c libreac.a -lm -o test_facts
 	./test_facts
+	# A SOURCE-SHAPE ARM, not a value arm. The head-amp base must have exactly
+	# one source in the code — the announced strap. A per-width table agrees
+	# with the announce on every chassis we own, so no test built from our own
+	# captures can catch its return; only the shape of the code can.
+	tools/conformance-headamp-base.sh
 
 # THE CAPTURE CORPUS IS A REGRESSION SUITE. The unit suite above runs on
 # goldens; a change that decodes the frames in front of you better and quietly
@@ -66,6 +71,9 @@ test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstr
 # tools/run-corpus.sh, and run it with --self-test before believing a clean run.
 corpus_check: tools/corpus_check.c libreac.a
 	$(CC) $(CFLAGS) $(INC) tools/corpus_check.c libreac.a -lm -o corpus_check
+
+conformance:
+	tools/conformance-headamp-base.sh
 
 corpus: corpus_check
 	tools/run-corpus.sh
@@ -97,4 +105,4 @@ $(WIRE_TOOLS): %: tools/%.c libreac.a
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_facts corpus_check $(WIRE_TOOLS)
 
-.PHONY: all test corpus wire-tools clean
+.PHONY: all test conformance corpus wire-tools clean

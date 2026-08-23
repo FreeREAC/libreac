@@ -83,28 +83,86 @@ int main(void)
 	wrong[REAC_PORTS_TABLE_OFF + 0] = 0x00;
 	CHK(reac_ports_parse(wrong, &pt) == -1);
 
-	/* A refusal leaves the out-struct untouched. */
-	pt.in_ch = -7; pt.out_ch = -7;
+	/* A refusal leaves the out-struct untouched — INCLUDING THE BASE. A block
+	 * that does not parse is not a box, so nothing about it may be written:
+	 * the caller's struct must come back exactly as it went in. */
+	pt.in_ch = -7; pt.out_ch = -7; pt.headamp_base = -7;
 	memcpy(wrong, BLK_S0808, 32);
 	wrong[REAC_PORTS_TABLE_OFF] = 0xff;
 	CHK(reac_ports_parse(wrong, &pt) == -1);
-	CHK(pt.in_ch == -7 && pt.out_ch == -7);
+	CHK(pt.in_ch == -7 && pt.out_ch == -7 && pt.headamp_base == -7);
 
 	CHK(reac_ports_parse(NULL, &pt) == -1);
 	CHK(reac_ports_parse(BLK_S0808, NULL) == -1);
 
-	/* Head-amp placement per declared width — the corpus law (42 grant sweeps,
-	 * reac-captures docs/PLACEMENT-EVIDENCE.md): every desk generation grants
-	 * the same base for the same declaration. Unknown width REFUSES (-1):
-	 * guessing base 0 addresses an S-1608's preamps 32 slots low. */
-	CHK(reac_headamp_base(8) == 0x00);
-	CHK(reac_headamp_base(16) == 0x20);
-	CHK(reac_headamp_base(32) == 0x00);
-	CHK(reac_headamp_base(24) == -1);
-	CHK(reac_headamp_base(0) == -1);
-	CHK(reac_headamp_base(-4) == -1);
+	/* ---- THE HEAD-AMP BASE IS THE ANNOUNCED STRAP -----------------------
+	 *
+	 * The three real declarations, read off the wire the way the firmware does
+	 * it: base = block[7] * 0x10. */
+	CHK(reac_ports_parse(BLK_S0808, &pt) == 0);
+	CHK(pt.headamp_base == 0x00);          /* strap 0 */
+	CHK(reac_ports_parse(BLK_S1608, &pt) == 0);
+	CHK(pt.headamp_base == 0x20);          /* strap 2 */
+	CHK(reac_ports_parse(BLK_S4000S, &pt) == 0);
+	CHK(pt.headamp_base == 0x00);          /* strap 0 */
+
+	/* THE GUARD, AND THE WHOLE POINT OF IT. Every assertion above passes just
+	 * as well against the retired per-width table (8 -> 0x00, 16 -> 0x20,
+	 * 32 -> 0x00), because width and strap are collinear on all three chassis
+	 * we own. So the three above cannot tell the two derivations apart, and a
+	 * suite made only of them is what let the width table survive.
+	 *
+	 * These break the collinearity. Each is a real declaration with its strap
+	 * byte moved and NOTHING ELSE touched: the width the table would key on is
+	 * unchanged, so the two derivations must now disagree, and the announced
+	 * one has to win. If anyone puts the width table back, these go red and the
+	 * ones above do not. */
+	uint8_t strapped[32];
+
+	memcpy(strapped, BLK_S1608, 32);       /* still 16 in / 8 out */
+	strapped[REAC_HEADAMP_BASE_OFF] = 0x01;
+	CHK(reac_ports_parse(strapped, &pt) == 0);
+	CHK(pt.in_ch == 16);                   /* width unmoved ... */
+	CHK(pt.headamp_base == 0x10);          /* ... base follows the STRAP */
+	CHK(pt.headamp_base != 0x20);          /* which the width table would say */
+
+	memcpy(strapped, BLK_S0808, 32);       /* still 8 in / 8 out */
+	strapped[REAC_HEADAMP_BASE_OFF] = 0x02;
+	CHK(reac_ports_parse(strapped, &pt) == 0);
+	CHK(pt.in_ch == 8);
+	CHK(pt.headamp_base == 0x20);
+	CHK(pt.headamp_base != 0x00);          /* the width table's answer */
+
+	memcpy(strapped, BLK_S4000S, 32);      /* still 32 in / 8 out */
+	strapped[REAC_HEADAMP_BASE_OFF] = 0x03;
+	CHK(reac_ports_parse(strapped, &pt) == 0);
+	CHK(pt.in_ch == 32);
+	CHK(pt.headamp_base == 0x30);
+	CHK(pt.headamp_base != 0x00);
+
+	/* Two boxes of DIFFERENT widths on the same strap land on the same base —
+	 * the observation that rules out an allocation keyed on width. */
+	uint8_t a[32], b[32];
+	memcpy(a, BLK_S0808, 32);  a[REAC_HEADAMP_BASE_OFF] = 0x00;
+	memcpy(b, BLK_S4000S, 32); b[REAC_HEADAMP_BASE_OFF] = 0x00;
+	struct reac_box_ports pa, pb;
+	CHK(reac_ports_parse(a, &pa) == 0 && reac_ports_parse(b, &pb) == 0);
+	CHK(pa.in_ch == 8 && pb.in_ch == 32);
+	CHK(pa.headamp_base == pb.headamp_base && pa.headamp_base == 0x00);
+
+	/* The constants the schema binds. A row with no reader is a comment; these
+	 * are the readers, and protocol-facts.yaml asserts against them. */
+	CHK(REAC_HEADAMP_BASE_MULTIPLIER == 0x10);
+	CHK(REAC_HEADAMP_BASE_OFF == 7);
+	CHK(REAC_HEADAMP_BASE_FROM_CONFIG_BYTE7 == 1);
+	CHK(REAC_HEADAMP_BASE_IS_CHASSIS_NOT_GRANT == 1);
+	/* The APPLY unit — eight fabric rows per board. A DIFFERENT AXIS from
+	 * actuation, which is per channel; neither corroborates the other. */
+	CHK(REAC_HEADAMP_APPLY_UNIT_SLOTS == 8);
 
 	printf("OK: reac_ports — three real declarations decode (16x8 / 8x8 / 32x8), "
-	       "geometry needs no model row, uncaptured slot codes refuse\n");
+	       "geometry needs no model row, uncaptured slot codes refuse; the "
+	       "head-amp base is the ANNOUNCED strap x 0x10 and holds when width and "
+	       "strap disagree\n");
 	return 0;
 }
