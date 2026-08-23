@@ -353,7 +353,9 @@ size_t reac_ctrl_build_coldconnect_001a(uint8_t *out, const uint8_t master[6],
 enum reac_headamp_param {
 	REAC_HEADAMP_PHANTOM = 0x00,   /* +48V on/off (value 0|1) */
 	REAC_HEADAMP_PAD     = 0x01,   /* -20 dB pad on/off (value 0|1) */
-	REAC_HEADAMP_SENS    = 0x02,   /* sensitivity (value 0x00..0x37, 1 dB/step) */
+	REAC_HEADAMP_SENS    = 0x02,   /* sensitivity step, 0x00..0x37 — NOT 1 dB each;
+	                                * the box's own table is non-uniform, see
+	                                * reac_headamp_sens_cdb */
 };
 
 /* The head-amp WIRE-CHANNEL space: 0x00..0x2f, so 0x30 = 48 addressable channels.
@@ -413,6 +415,46 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame);
  * phantom/pad/SENS, one record per allocated channel per parameter); group B is
  * the fixed six-record constant (marker 12 11, TAG 05 00). Returns the row count
  * written (REAC_GRANT_SWEEP_LEN(width)), or -1. */
+/* ---- the three head-amp granularities ------------------------------------
+ * A head-amp record is {CH, PARAM, VALUE} and looks uniform. It is not: the
+ * three things it can carry are addressed at three DIFFERENT resolutions, and
+ * libreac used to express none of them.
+ *
+ *   SENS      per channel        ch >> 0
+ *   the flags per channel        ch >> 0
+ *   PHANTOM   per group of FOUR  ch >> 2
+ *   readback  per group of EIGHT ch >> 3   (a different axis from phantom)
+ *
+ * So only a record whose channel is a multiple of four carries the phantom group
+ * byte: a record to 0x24 moves group 9, one to 0x27 moves nothing at all. A
+ * consumer sweeping phantom per channel writes three records in four into the
+ * void — silently, because the bytes and both checksums are correct and the box
+ * acknowledges. Measured on our own wire: sixteen phantom records for channels
+ * 0x20..0x2f, of which four did anything.
+ *
+ * THAT IS NOT A BUG IN A SWEEP. Every real desk sweep is one contiguous pass over
+ * the box's full declared width with all three parameters per channel — 24
+ * records for an S-0808, 48 for an S-1608 — so the no-ops are what a real console
+ * emits too, and an emitter that "optimised" them away would stop matching the
+ * captures. The defect is only ever in a consumer that BELIEVES a per-channel
+ * phantom write took effect. Hence a predicate rather than a rewrite: ask.
+ *
+ * The readback nibble and the phantom command are deliberately named apart. They
+ * are not the same axis and collapsing them is how a binding gets this wrong.
+ * [Granularities: EVIDENCED — executed firmware trace.] */
+#define REAC_HEADAMP_GRAN_SENS_SHIFT     0
+#define REAC_HEADAMP_GRAN_FLAGS_SHIFT    0
+#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT  2
+#define REAC_HEADAMP_GRAN_READBACK_SHIFT 3
+
+/* The group a channel's PARAM actually addresses. */
+int reac_headamp_group_of(uint8_t ch, uint8_t param);
+
+/* Does a record addressed to `ch` actually carry `param`? 1 yes, 0 no (the write
+ * lands nowhere), -1 for a param outside the three. The one call that stops a
+ * caller open-coding a shift it has to remember. */
+int reac_headamp_record_carries(uint8_t ch, uint8_t param);
+
 /* Three head-amp parameters per channel. A protocol bound, so it lives with the
  * records that carry it rather than in one caller's header.
  * (REAC_HEADAMP_MAX_CH is defined once, above, with the head-amp CH space.) */

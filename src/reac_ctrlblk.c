@@ -1038,3 +1038,31 @@ int reac_ctrl_build_grant_sweep(uint8_t sweep[][34], int max, uint8_t base,
 	}
 	return k;
 }
+
+/* ---- head-amp granularity ------------------------------------------------
+ * See reac/reac_ctrlblk.h: SENS and the flags are per channel, phantom is per
+ * four, readback is per eight. Expressed as a predicate so no caller has to
+ * remember which shift belongs to which parameter. */
+int reac_headamp_group_of(uint8_t ch, uint8_t param)
+{
+	switch (param) {
+	case REAC_HEADAMP_SENS:    return ch >> REAC_HEADAMP_GRAN_SENS_SHIFT;
+	case REAC_HEADAMP_PAD:     return ch >> REAC_HEADAMP_GRAN_FLAGS_SHIFT;
+	case REAC_HEADAMP_PHANTOM: return ch >> REAC_HEADAMP_GRAN_PHANTOM_SHIFT;
+	default:                         return -1;
+	}
+}
+
+int reac_headamp_record_carries(uint8_t ch, uint8_t param)
+{
+	switch (param) {
+	case REAC_HEADAMP_SENS:
+	case REAC_HEADAMP_PAD:
+		return 1;                                    /* every channel carries it */
+	case REAC_HEADAMP_PHANTOM:
+		/* only the group's FIRST channel writes the group byte */
+		return (ch & ((1u << REAC_HEADAMP_GRAN_PHANTOM_SHIFT) - 1u)) == 0;
+	default:
+		return -1;
+	}
+}

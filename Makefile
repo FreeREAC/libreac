@@ -24,13 +24,21 @@ OBJS = reac.o reac_ctrlblk.o reac_ports.o reac_decode.o reac_upstream.o reac_enc
 
 all: libreac.a
 
+# -MMD -MP emits a .d per object listing the headers it included, and the include
+# below feeds them back to make. WITHOUT THIS A HEADER EDIT REBUILDS NOTHING:
+# `make` reported "libreac.a is up to date" after a header change, so the archive
+# kept objects compiled against the OLD header and every test linked against them
+# silently. Found when a deliberate sabotage — breaking a constant a test asserts
+# — failed to break the test.
 %.o: src/%.c
-	$(CC) $(CFLAGS) $(INC) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP $(INC) -c $< -o $@
+
+-include $(OBJS:.o=.d)
 
 libreac.a: $(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
-test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c libreac.a
+test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_facts.c libreac.a
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -45,8 +53,10 @@ test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstr
 	./test_decode
 	$(CC) $(CFLAGS) $(INC) tests/test_ports.c libreac.a -lm -o test_ports
 	./test_ports
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_facts.c libreac.a -lm -o test_facts
+	./test_facts
 
 clean:
-	rm -f $(OBJS) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_facts
 
 .PHONY: all test clean
