@@ -57,13 +57,72 @@ int  reac_ctrl_checksum_verify(const uint8_t *frame);
 void reac_ctrl_record_cksum_stamp(uint8_t *rec, size_t n);
 int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
 
+/* ---- THE CONTROL BLOCK'S HEADER: FOUR FIELDS, NOT AN OPCODE ---------------
+ *
+ * Every builder in both stagebox images lays down the same four fields before
+ * anything else (S-1608 FUN_0c003398, the box's own segmented upload):
+ *
+ *   block[0]    u8      LINK      which link the message belongs to
+ *   block[1]    u8      SEGMENT   bit 0 FIRST, bit 1 LAST
+ *   block[2:4]  u16 BE  LENGTH    always a length, never a selector
+ *   block[4]    u8      OPCODE    what the message is
+ *   block[31]   u8      checksum  -Sum(block[0..30])
+ *
+ * SO THERE ARE NOT SEVEN SCENE-AND-RECORD OPS. What the wire notes used to call
+ * ops 0x0101 / 0x0100 / 0x0102 / 0x0103 are ONE transfer on link 1 reading
+ * FIRST / MIDDLE / LAST / SINGLE, and 0x0401 / 0x0402 / 0x0403 are the same
+ * three states on link 4. Reading the first two bytes as a 16-bit opcode models
+ * a field that is not there, and it is why a control block used to be told apart
+ * by its LENGTH: the discriminator is block[4], as the box's own receive
+ * dispatch uses it (its state-2 gate is buf[0]==1 && (buf[1] & 1) && buf[4]==0).
+ *
+ * block[2:4] is a length in every case. What varies is its base: for the bulk
+ * opcode on link 1 it counts this frame's payload bytes only, and everywhere
+ * else it counts from block[4] inclusive. Each sub-page does happen to have a
+ * distinct length, so switching on it appears to work — right up to a window
+ * that is not full.
+ */
+#define REAC_LINK_CTRL     1   /* the stagebox control link                    */
+#define REAC_LINK_SECOND   2   /* an S-4000S-only second link                  */
+#define REAC_LINK_RECORD   4   /* the record link — DT1 containers             */
+
+#define REAC_SEG_MIDDLE 0x00   /* neither bit: a continuation                  */
+#define REAC_SEG_FIRST  0x01   /* bit 0                                        */
+#define REAC_SEG_LAST   0x02   /* bit 1                                        */
+#define REAC_SEG_SINGLE 0x03   /* both: a complete message in one frame        */
+
+/* Link-1 opcodes, block[4]. */
+#define REAC_OP_BULK       0x00  /* the scene push, in all four segment states */
+#define REAC_OP_SLOT_MAP   0x01  /* the slot-record window; also the poll a box
+                                  * answers with REAC_OP_BOX_HB               */
+#define REAC_OP_GROUP_MAP  0x10  /* ten bytes of packed group fields          */
+#define REAC_OP_DECL_ALT   0x80  /* the box's declaration, alternate arm       */
+#define REAC_OP_BOX_HB     0x81  /* the box's heartbeat reply, opcode only     */
+#define REAC_OP_DECL       0x82  /* the box's declaration                      */
+#define REAC_OP_DECL_OTHER 0x84  /* the same message with the other constant   */
+
+/* The Roland DT1 record a link-4 container carries: block[14] is the low byte of
+ * the model id, block[15] the command, block[16:18] the register page (the TAG),
+ * and the record the two checksums enclose runs block[16..21]. Frame-relative
+ * that is [32], [33], [34:36] and [34..39]. */
+#define REAC_DT1_MODEL_LO  0x12
+#define REAC_DT1_CMD_RQ1   0x11  /* a request                                  */
+#define REAC_DT1_CMD_DT1   0x12  /* a set                                      */
+#define REAC_DT1_TAG_HEAD_MARK 0x0000
+#define REAC_DT1_TAG_JOIN      0x0100
+#define REAC_DT1_TAG_HEADAMP   0x0101
+#define REAC_DT1_TAG_BOX_READY 0x0302
+#define REAC_DT1_TAG_IDENTITY  0x0500
+
 /* ---- THE SCENE PUSH: the master's enrolment transfer -----------------------
  *
  * After link-up a desk pushes its scene to the box as one bounded transfer:
  *
- *   op-0101 header  — declares the TOTAL (0x22c8) and carries the body's first 24 B
- *   op-0100 chunk   — 26 B of body, x341
- *   op-0102 final   — the last 14 B
+ *   FIRST  frame  — declares the TOTAL (0x22c8) and carries the body's first 24 B
+ *   MIDDLE frame  — 26 B of body, x341
+ *   LAST   frame  — the last 14 B
+ *
+ * All three are link 1, opcode 0x00. What changes is the SEGMENT byte.
  *
  *   24 + 341*26 + 14 = 8904 = 0x22c8
  *
@@ -79,19 +138,19 @@ int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
  * in 0.680 s, the box answers 01 03 0010 once the transfer completes, and only
  * then does the desk open its grant window. */
 #define REAC_SCENE_BYTES        8904   /* == 0x22c8, the declared total          */
-#define REAC_SCENE_HEAD_BYTES     24   /* body bytes carried by the op-0101      */
-#define REAC_SCENE_CHUNK_BYTES    26   /* body bytes per op-0100 (its 0x001a)    */
-#define REAC_SCENE_TAIL_BYTES     14   /* body bytes carried by the op-0102      */
-#define REAC_SCENE_CHUNKS        341   /* op-0100 count for a whole body         */
+#define REAC_SCENE_HEAD_BYTES     24   /* body bytes in the FIRST frame          */
+#define REAC_SCENE_CHUNK_BYTES    26   /* body bytes per MIDDLE frame            */
+#define REAC_SCENE_TAIL_BYTES     14   /* body bytes in the LAST frame           */
+#define REAC_SCENE_CHUNKS        341   /* MIDDLE count for a whole body          */
 #define REAC_SCENE_STEPS   (1 + REAC_SCENE_CHUNKS + 1)
 
 /* WHAT THE BOX VALIDATES. The state-4 commit does three four-byte compares and
  * promotes NOTHING if any one misses, while the transfer still looks complete
- * from outside. "1234" rides the header; SYSP and SCEN ride op-0100 chunks 32
- * and 33, so a body whose MIDDLE chunks are wrong fails silently. */
-#define REAC_SCENE_TAG_ID_OFF    0x000   /* "1234" — rides the op-0101 header  */
-#define REAC_SCENE_TAG_SYSP_OFF  0x368   /* "SYSP" — rides op-0100 chunk 32    */
-#define REAC_SCENE_TAG_SCEN_OFF  0x37c   /* "SCEN" — rides op-0100 chunk 33    */
+ * from outside. "1234" rides the FIRST frame; SYSP and SCEN ride MIDDLE frames
+ * 32 and 33, so a body whose middle is wrong fails silently. */
+#define REAC_SCENE_TAG_ID_OFF    0x000   /* "1234" — rides the FIRST frame     */
+#define REAC_SCENE_TAG_SYSP_OFF  0x368   /* "SYSP" — rides MIDDLE frame 32     */
+#define REAC_SCENE_TAG_SCEN_OFF  0x37c   /* "SCEN" — rides MIDDLE frame 33     */
 
 /* The master's own MAC sits INSIDE the body. On-wire identity must equal the L2
  * source, so a master replaying a recovered body substitutes its own. */
@@ -118,10 +177,15 @@ int reac_ctrl_scene_set_mac(uint8_t *body, size_t n, const uint8_t mac[6]);
  * scene means reproducing that structure. Returns 0, or -1. */
 int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6]);
 
-/* ---- HEAD-AMP SENSITIVITY: the box's own step -> gain curve ----------------
+/* ---- HEAD-AMP SENSITIVITY: the box's step -> sensitivity curve -------------
  *
- * ONE DECIBEL PER STEP, all 56 of them, with no duplicate steps anywhere.
- * Sensitivity runs -10 dBu at 0x00 down to -65 dBu at 0x37, pad off; the pad
+ * ONE DECIBEL PER STEP, all 56 of them, with no duplicate steps anywhere. The
+ * step table in the box image is 56 entries with no spares, which is where the
+ * COUNT comes from; what a step is WORTH is measured, not read.
+ *
+ *     sensitivity_dBu = -10 - value + (pad ? 20 : 0)
+ *
+ * so -10 dBu at 0x00 down to -65 dBu at 0x37 with the pad off, and the pad
  * shifts the whole travel up by 20. The curve is declared once in
  * reac-protocol's spec/protocol-facts.yaml (group `headamp_sens`) and this is
  * its C spelling.
@@ -135,32 +199,44 @@ int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6]);
  *   pad, measured          20.12 and 20.20 dB at two different steps
  *
  * The residual is the size of the measurement's own scatter, so the law this
- * spells is the round 1 dB and not the fitted 0.988.
+ * spells is the round 1 dB and the 0.988 is a measurement OF it, not a rival.
  *
- * WHAT THIS REPLACES, because it was here and it was wrong. A 56-entry table
- * read out of the S-1608's image at 0x0c0327a0 gives four coarse stages with
- * breaks at 8, 24 and 40. That structure is real. What was inferred from it was
- * not: that gain is CONTINUOUS across a break, so 7/8, 23/24 and 39/40 deliver
- * identical gain and the map is not injective. All three pairs were put to a
- * rapid A/B/A alternation, twice each, at two generator levels:
+ * THE FIRMWARE'S FOUR COARSE STAGES ARE REAL AND CHANGE NOTHING. The step table
+ * has breaks at 8, 24 and 40, and gain being continuous across a break — which
+ * would make 7/8, 23/24 and 39/40 deliver identical gain and the map
+ * non-injective — is an inference from that structure and it is refuted. All
+ * three pairs were put to a rapid A/B/A alternation, twice each, at two
+ * generator levels:
  *
  *    7 -> 8    +0.92 dB and +1.12 dB     (drift control: 0.08 / 0.10 dB)
  *   23 -> 24   +1.36 dB and +1.31 dB     (drift control: 0.34 / 0.15 dB)
  *   39 -> 40   +0.97 dB and +0.84 dB     (drift control: 0.26 / 0.08 dB)
  *
  * Every pair steps by about a decibel, an order of magnitude outside its own
- * control. There are no twins, so the map IS injective and a round trip is the
- * identity everywhere.
+ * control. There are no twins, the map IS injective, and a round trip through it
+ * is the identity everywhere. The 6.06 dB drop in the NOISE FLOOR at 23->24 is
+ * real and is a noise-figure step — the preamp switching to a quieter input
+ * stage — sitting on top of an ordinary 1 dB gain step, not instead of one. A
+ * floor is a good probe of repeatability and a biased probe of slope: it
+ * measures gain x input-referred noise PLUS what the output stage and converter
+ * add after the gain, and that second term does not scale. Do not derive a step
+ * size from one.
  *
- * WHY THE EARLIER NUMBERS CAME OUT LOW (0.90 / 0.95 / 0.98 per step, span
- * 48.75): they were taken from the preamp's own NOISE FLOOR. A floor is not a
- * gain probe. What it measures is gain x input-referred noise PLUS whatever the
- * output stage and converter add after the gain, and that second term does not
- * scale — so the floor's slope is always shallower than the gain's, and most so
- * at low gain. It is a good probe of REPEATABILITY (0.03 dB across sessions) and
- * a biased probe of SLOPE. The 6.06 dB floor drop at 23->24 is real and stands;
- * it is the preamp switching to a quieter input stage, and it is a noise-figure
- * step sitting on top of an ordinary 1 dB gain step, not instead of one.
+ * WHAT LIBREAC PUBLISHES IS SENSITIVITY IN dBu, NOT GAIN, and the two differ by
+ * a constant that is not settled. Sensitivity is the input level that reaches
+ * full scale, so it runs the OTHER WAY from gain: the hottest setting is the
+ * most negative number. Against a 0 dBu reference this library's curve is
+ * equivalent to gain_dB = 10 + value, and openmixer publishes the same control
+ * as 0..55 dB, a different zero by 10 dB.
+ *
+ * NEITHER IS SILENTLY CONVERTIBLE INTO THE OTHER. The loopback that measured the
+ * SPAN cannot separate the endpoint from the box's own converter reference — it
+ * sees only their sum — so -10 dBu at step 0 is carried over from every prior
+ * source that agreed on it and is INFERRED, not measured. Ground truth is the
+ * M-200's own SENS display and it has not been read. Until it is, a consumer
+ * that shows one number and a consumer that shows the other are 10 dB apart and
+ * both think they are right; whoever closes it moves BOTH sides deliberately, in
+ * one change, and not by making an adapter that quietly adds ten.
  *
  * A NOTE ON UNITS. The step is a whole decibel, so the integer-dB pair below is
  * exact and round-trips; the centi-dB pair is kept because it is the published
@@ -192,23 +268,45 @@ uint8_t  reac_headamp_sens_value(int db, int pad_on);
  * wire. Neither encodes a choice. What stays behind is what does — which slots we
  * grant a box, when we advance a state machine, how we wire it into a graph. */
 
+/* WHAT A CONTROL FRAME IS, decided the way the box decides it: the link at
+ * block[0], the segment bits at block[1] and the opcode at block[4]. Never the
+ * length — see the header section above for why a length looks like it works. */
 enum reac_ctrl_kind {
-	REAC_CTRL_NONE = 0,      /* not a 0x8819 frame */
-	REAC_CTRL_FILLER,        /* type 00 00 (audio/idle), checksum-exempt */
-	REAC_CTRL_PROBE,         /* master cdea 01, sub-state cycling (hunting) */
-	REAC_CTRL_MASTER_HB,     /* master cdea 01 03 0019 (established heartbeat) */
-	REAC_CTRL_MASTER_ANNOUNCE,/* master cfea (announce) */
-	REAC_CTRL_GRANT,         /* master cdea 04 03, record TAG 01 00 (the JOIN
-	                          * grant-burst; also any 04 03 tag we don't know) */
-	REAC_CTRL_HEADAMP,       /* master cdea 04 03, record TAG 01 01 (head-amp:
-	                          * CH PARAM VALUE — a preamp knob, NOT a grant) */
-	REAC_CTRL_BOX_HB,        /* a box cdea 01 03 0001 81 (our keep-alive) */
-	REAC_CTRL_SPLIT_ANNOUNCE,/* a splitter's ceea announce — the split role's
-	                          * own frame type (reac-aes67 REAC-PROTOCOL.md §6,
-	                          * source-derived; never yet captured, §14.1) */
-	REAC_CTRL_UNKNOWN_CTRL,  /* cdea/cfea we don't classify */
+	REAC_CTRL_NONE = 0,       /* not a 0x8819 frame                            */
+	REAC_CTRL_FILLER,         /* type 00 00 (audio/idle), checksum-exempt      */
+	REAC_CTRL_SCENE_TRANSFER, /* link 1, opcode 0x00 — the master's scene push,
+	                           * in any of its four segment states             */
+	REAC_CTRL_MASTER_HB,      /* link 1, opcode 0x01 — the slot-record window,
+	                           * which is also the poll a box answers          */
+	REAC_CTRL_MASTER_ANNOUNCE,/* master cfea (announce)                        */
+	REAC_CTRL_GRANT,          /* link 4, SINGLE, DT1 tag != head-amp: the join
+	                           * grant and the cold-connect inventory tags     */
+	REAC_CTRL_HEADAMP,        /* link 4, SINGLE, DT1 tag 0x0101 — CH PARAM
+	                           * VALUE, a preamp knob, NOT a grant             */
+	REAC_CTRL_BOX_HB,         /* link 1, opcode 0x81 — the box's reply         */
+	REAC_CTRL_SPLIT_ANNOUNCE, /* a splitter's ceea announce — the split role's
+	                           * own frame type (reac-aes67 REAC-PROTOCOL.md §6,
+	                           * source-derived; never yet captured, §14.1)    */
+	REAC_CTRL_CONFIG_ANNOUNCE,/* link 1, opcode 0x80/0x82/0x84 — the box's own
+	                           * declaration, and a SYMMETRIC exchange: the box
+	                           * image builds exactly the message it parses    */
+	REAC_CTRL_GROUP_MAP,      /* link 1, opcode 0x10 — ten bytes of packed
+	                           * group fields. Only the S-4000S image has a
+	                           * handler; the S-1608 has none at all           */
+	REAC_CTRL_RECORD_FRAGMENT,/* link 4, FIRST or LAST — HALF of a DT1 record.
+	                           * The two fragment bodies concatenate into one
+	                           * SysEx whose inner checksum closes only ACROSS
+	                           * BOTH, so a fragment on its own is a truncated
+	                           * record and its tag, fields and checksum must
+	                           * not be read as if it were whole              */
+	REAC_CTRL_LINK2,          /* link 2 — present in the S-4000S image, which
+	                           * length-checks it, routes three subtypes and
+	                           * throws all three away: empty stubs in ver2200 */
+	REAC_CTRL_UNKNOWN_CTRL,   /* cdea/cfea we do not classify                  */
 };
 
+/* The kind's name, for logs and for a report that has to stay diffable. */
+const char *reac_ctrl_kind_name(enum reac_ctrl_kind kind);
 
 struct reac_ctrl_parsed {
 	enum reac_ctrl_kind kind;
@@ -216,13 +314,19 @@ struct reac_ctrl_parsed {
 	uint8_t  dst[6];
 	int      is_broadcast;   /* dst == ff:ff:ff:ff:ff:ff */
 	uint16_t counter;        /* bytes 14-15 LE */
-	uint8_t  op0, op1;       /* control opcode bytes [18],[19] */
-	uint16_t op_len;         /* BE length [20:22] */
-	uint8_t  sel;            /* selector [22] (0x81/0x82/... or a channel byte) */
-	uint8_t  sel2;           /* second selector byte [23] (cold-connect: 0x02) */
-	uint8_t  ch;             /* HEADAMP only: wire channel (model_base + input-1) */
-	uint8_t  param;          /* HEADAMP only: enum reac_headamp_param */
-	uint8_t  value;          /* HEADAMP only: 0|1 (phantom/pad) or 0x00..0x37 (SENS) */
+
+	/* The header, field for field. There is no 16-bit "op": a caller that wants
+	 * the old 0x0103 spelling is asking for two different fields glued. */
+	uint8_t  link;           /* block[0]   — REAC_LINK_*                        */
+	uint8_t  seg;            /* block[1]   — REAC_SEG_* bits                    */
+	uint16_t blk_len;        /* block[2:4] — BE, always a length                */
+	uint8_t  opcode;         /* block[4]   — the discriminator                  */
+
+	/* Link 4 only, and only on a SINGLE: a fragment carries half a record. */
+	uint16_t dt1_tag;        /* block[16:18] = frame[34:36]                     */
+	uint8_t  ch;             /* HEADAMP: wire channel (model_base + input-1)    */
+	uint8_t  param;          /* HEADAMP: enum reac_headamp_param                */
+	uint8_t  value;          /* HEADAMP: 0|1 (phantom/pad) or 0x00..0x37 (SENS) */
 };
 
 
@@ -243,18 +347,27 @@ struct reac_box_model {
 	const char *display;    /* human label for --help / logs            */
 	int         in_ch;      /* box input (upstream) width -> frame size  */
 	int         out_ch;     /* box output (downstream) width             */
-	uint8_t     config_block[32];  /* config-announce cdea 01 03 0010    */
-	int         has_name;   /* 1 -> also emit the ASCII name frame       */
-	uint8_t     name_block[32];    /* name frame cdea 04 01 001b (if any)*/
-	/* The mixer identifies the MODEL from the cold-connect INVENTORY frames, not
-	 * just the config-announce: the 0016/001a blocks differ per model, and some
-	 * models emit an extra 0402000d frame. Byte-verified per model. */
-	uint8_t     cc0014[32];        /* cold-connect cdea 04 03 0014       */
-	uint8_t     cc0013[32];        /* cold-connect cdea 04 03 0013       */
-	uint8_t     cc0016[32];        /* cold-connect cdea 04 03 0016       */
-	uint8_t     cc001a[32];        /* cold-connect cdea 04 03 001a       */
-	int         has_extra;  /* 1 -> also emit the cdea 04 02 000d frame  */
-	uint8_t     extra_block[32];   /* cdea 04 02 000d (if any)           */
+	uint8_t     config_block[32];  /* the declaration, link 1 opcode 0x82/0x84 */
+
+	/* THE IDENTITY RECORD, WHICH ARRIVES AS TWO FRAMES. A link-4 FIRST fragment
+	 * and the LAST fragment that closes it are ONE Roland SysEx - TAG 0x0500
+	 * carrying the ASCII model name - and its inner checksum closes only across
+	 * both: the address and data bytes sum to 358, and 128 - 358 % 128 = 0x1a,
+	 * the byte that arrives in the second frame. A model that emitted one
+	 * without the other would put a record on the wire that cannot be verified,
+	 * so ONE flag gates both and they cannot get out of step. Models whose desk
+	 * label comes from the declaration's constant alone send neither. */
+	int         has_identity_record;
+	uint8_t     identity_first[32];  /* link 4 FIRST — the name and the model id */
+	uint8_t     identity_last[32];   /* link 4 LAST — the closing checksum, f7  */
+
+	/* The mixer identifies the MODEL from the cold-connect INVENTORY records too,
+	 * not just from the declaration: these four link-4 SINGLEs differ per model.
+	 * Byte-verified per model. */
+	uint8_t     cc0014[32];        /* link 4 SINGLE, TAG 0x0100 join           */
+	uint8_t     cc0013[32];        /* link 4 SINGLE, TAG 0x0302 box ready      */
+	uint8_t     cc0016[32];        /* link 4 SINGLE, TAG 0x0500 identity, 6 B  */
+	uint8_t     cc001a[32];        /* link 4 SINGLE, TAG 0x0500 identity, 10 B */
 };
 const struct reac_box_model *reac_box_model_by_token(const char *token);
 const struct reac_box_model *reac_box_model_by_channels(int in_ch);
@@ -315,17 +428,16 @@ int reac_box_pin_notice(const char **pin, const char *recognized_token);
  * model family. in_ch selects the fixed-matrix row (falls back to S-1608). */
 size_t reac_ctrl_build_config_announce(uint8_t *out, const uint8_t master[6],
                                        const uint8_t src[6], uint16_t counter, int in_ch);
-/* ASCII model-name frame (cdea 04 01 001b) — required for the 0x84 family so the
- * desk shows the exact model (e.g. "S-0808") instead of the generic family name.
- * Returns 0 (emits nothing) for models whose name comes from the selector alone
- * (the 0x82 / S-1608 family). */
-size_t reac_ctrl_build_name_frame(uint8_t *out, const uint8_t master[6],
-                                  const uint8_t src[6], uint16_t counter, int in_ch);
-/* The extra cold-connect frame (cdea 04 02 000d) some models send (S-0808). The
- * mixer uses it, with the 0016/001a inventory, to determine the exact model.
- * Returns 0 (emits nothing) for models that don't send it (e.g. S-1608). */
-size_t reac_ctrl_build_extra_frame(uint8_t *out, const uint8_t master[6],
-                                   const uint8_t src[6], uint16_t counter, int in_ch);
+/* The identity record's two fragments. THEY ARE ONE MESSAGE AND MUST BOTH GO OUT,
+ * in this order: the FIRST fragment carries the DT1 preamble, TAG 0x0500 and the
+ * ASCII model name, and the LAST one carries the SysEx checksum that closes over
+ * the pair and the f7 that ends it. Sending only the first puts a record on the
+ * wire that nothing can verify. Both return 0, emitting nothing, for a model
+ * whose desk label comes from the declaration's constant alone. */
+size_t reac_ctrl_build_identity_first(uint8_t *out, const uint8_t master[6],
+                                      const uint8_t src[6], uint16_t counter, int in_ch);
+size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
+                                     const uint8_t src[6], uint16_t counter, int in_ch);
 /* The box cold-connect (cdea 04 03): the 32-byte control block over LIVE audio
  * [50:626] (the [38:66] region is per-frame audio, NOT device inventory). Audio is
  * planar float [ch][s], as build_upstream_filler; NULL planar -> silent. The master
@@ -351,9 +463,10 @@ size_t reac_ctrl_build_coldconnect_001a(uint8_t *out, const uint8_t master[6],
                                         const uint8_t src[6], uint16_t counter,
                                         int n_ch, float *const *planar, int ns);
 
-/* ---- Head-amp source control (op 04 03, record TAG 01 01) ----
+/* ---- Head-amp source control (link 4 SINGLE, record TAG 0x0101) ----
  * Ground-truthed on a live M-200 driving an S-0808 + S-1608 (reac-captures/
- * m200-headamp-re/DECODE.md, 2026-07-17): op 04 03 is a RECORD CONTAINER, and
+ * m200-headamp-re/DECODE.md, 2026-07-17): a link-4 SINGLE is a RECORD
+ * CONTAINER, and
  * the record after the 12 12 marker is TAG(2) DATA(n) CKSUM(1). TAG 01 01 is
  * the console's preamp command, DATA = CH PARAM VALUE. CH is the WIRE channel:
  * model_base + (box_input - 1), model_base S-0808/S-4000S 0x00, S-1608 0x20.
@@ -424,44 +537,75 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame);
  * phantom/pad/SENS, one record per allocated channel per parameter); group B is
  * the fixed six-record constant (marker 12 11, TAG 05 00). Returns the row count
  * written (REAC_GRANT_SWEEP_LEN(width)), or -1. */
-/* ---- the three head-amp granularities ------------------------------------
- * A head-amp record is {CH, PARAM, VALUE} and looks uniform. It is not: the
- * three things it can carry are addressed at three DIFFERENT resolutions, and
- * libreac used to express none of them.
+/* ---- WHAT IS PER CHANNEL, WHAT IS PER FOUR, AND WHAT IS DISPUTED ----------
  *
- *   SENS      per channel        ch >> 0
- *   the flags per channel        ch >> 0
- *   PHANTOM   per group of FOUR  ch >> 2
- *   readback  per group of EIGHT ch >> 3   (a different axis from phantom)
+ * "Head-amp granularity" used to be one sentence here, and it had a wire fact
+ * and a hardware fact folded together. They are separate questions and only one
+ * of them is settled.
  *
- * So only a record whose channel is a multiple of four carries the phantom group
- * byte: a record to 0x24 moves group 9, one to 0x27 moves nothing at all. A
- * consumer sweeping phantom per channel writes three records in four into the
- * void — silently, because the bytes and both checksums are correct and the box
- * acknowledges. Measured on our own wire: sixteen phantom records for channels
- * 0x20..0x2f, of which four did anything.
+ * THE WIRE IS PER CHANNEL, ALL THREE PARAMETERS. A DT1 head-amp record is
+ * {CH, PARAM, VALUE} and addresses exactly one channel. Every real desk sweep is
+ * one contiguous pass over the box's declared width with all three parameters
+ * per channel — 24 records for an S-0808, 48 for an S-1608, 96 for an S-4000S.
+ * No desk addresses a bank, splits a sweep or repeats one, across three desk
+ * generations and 31 of 47 captures. An emitter that skipped records would stop
+ * matching the captures.
  *
- * THAT IS NOT A BUG IN A SWEEP. Every real desk sweep is one contiguous pass over
- * the box's full declared width with all three parameters per channel — 24
- * records for an S-0808, 48 for an S-1608 — so the no-ops are what a real console
- * emits too, and an emitter that "optimised" them away would stop matching the
- * captures. The defect is only ever in a consumer that BELIEVES a per-channel
- * phantom write took effect. Hence a predicate rather than a rewrite: ask.
+ * THE SLOT MAP IS PER SLOT, EVERY SLOT. The box's own per-slot table has stride
+ * 10 and carries the value byte and three flag bits for each of 0x00..0x2f. No
+ * entry in it is shared between channels.
  *
- * The readback nibble and the phantom command are deliberately named apart. They
- * are not the same axis and collapsing them is how a binding gets this wrong.
- * [Granularities: EVIDENCED — executed firmware trace.] */
-#define REAC_HEADAMP_GRAN_SENS_SHIFT     0
-#define REAC_HEADAMP_GRAN_FLAGS_SHIFT    0
-#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT  2
-#define REAC_HEADAMP_GRAN_READBACK_SHIFT 3
+ * THE PER-FOUR FIELD IS THE INVENTORY CELL, NOT PHANTOM. What divides by four in
+ * this protocol is the config-announce port table: twelve cells of four channels
+ * spanning the 48-channel fabric, and the slot record's HIGH NIBBLE, which
+ * carries that cell's code. It is a declaration of what a group of four physical
+ * connectors IS — REAC_PORTS_CH_PER_SLOT, in reac_ports.h — and it is not a
+ * head-amp parameter. Reading it as "phantom, 4 ch/group" is how the two got
+ * folded together.
+ *
+ * PHANTOM'S HARDWARE ACTUATION GRANULARITY IS OPEN, and libreac will not answer
+ * as if it were not. Two readings are live and neither is retired:
+ *
+ *   TRACE  ch >> 2, per group of four. An executed trace, and a rig measurement
+ *          that read sixteen phantom records to 0x20..0x2f as four doing
+ *          anything.
+ *   STATIC ch >> 0, per channel. The per-slot table read out of the box image
+ *          has an addressable flag for every one of 0x00..0x2f, and the field
+ *          that divides by four is the inventory cell above.
+ *
+ * The two agree on a channel that is a multiple of four and disagree everywhere
+ * else, so that is exactly where the API answers and where it refuses. A caller
+ * that needs the answer has to close the dispute, not read a constant.
+ *
+ * The readback nibble is a THIRD axis, per eight, and is named apart because
+ * collapsing it into either of the above is how a binding gets this wrong.
+ */
+#define REAC_HEADAMP_GRAN_SENS_SHIFT     0   /* EVIDENCED */
+#define REAC_HEADAMP_GRAN_FLAGS_SHIFT    0   /* EVIDENCED */
+#define REAC_HEADAMP_GRAN_READBACK_SHIFT 3   /* EVIDENCED */
 
-/* The group a channel's PARAM actually addresses. */
+/* The two live readings of phantom's actuation granularity. There is
+ * deliberately no unqualified REAC_HEADAMP_GRAN_PHANTOM_SHIFT: a caller cannot
+ * pick a side by accident, and neither can a sweep. */
+#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT_TRACE   2
+#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT_STATIC  0
+
+/* Returned where the two readings disagree. Distinct from 0, which would mean
+ * "the write lands nowhere" — a claim this library is not entitled to make —
+ * and from -1, which means the parameter is not a head-amp parameter at all. */
+#define REAC_HEADAMP_GRAN_DISPUTED (-2)
+
+/* The group a channel's PARAM addresses, or REAC_HEADAMP_GRAN_DISPUTED for
+ * phantom, or -1 for a param outside the three. */
 int reac_headamp_group_of(uint8_t ch, uint8_t param);
 
-/* Does a record addressed to `ch` actually carry `param`? 1 yes, 0 no (the write
- * lands nowhere), -1 for a param outside the three. The one call that stops a
- * caller open-coding a shift it has to remember. */
+/* Does a record addressed to `ch` carry `param` to the hardware?
+ *   1                            yes
+ *   REAC_HEADAMP_GRAN_DISPUTED   phantom off a group-of-four anchor: the two
+ *                                readings disagree and nobody knows
+ *   -1                           not a head-amp parameter
+ * Never 0. The one call that stops a caller open-coding a shift it has to
+ * remember, and stops it believing a per-channel phantom write took effect. */
 int reac_headamp_record_carries(uint8_t ch, uint8_t param);
 
 /* Three head-amp parameters per channel. A protocol bound, so it lives with the

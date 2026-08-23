@@ -38,7 +38,7 @@ all: libreac.a
 libreac.a: $(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
-test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_facts.c libreac.a
+test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c libreac.a
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -53,10 +53,24 @@ test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstr
 	./test_decode
 	$(CC) $(CFLAGS) $(INC) tests/test_ports.c libreac.a -lm -o test_ports
 	./test_ports
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_ctrl.c libreac.a -lm -o test_ctrl
+	./test_ctrl
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_facts.c libreac.a -lm -o test_facts
 	./test_facts
 
-clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_facts
+# THE CAPTURE CORPUS IS A REGRESSION SUITE. The unit suite above runs on
+# goldens; a change that decodes the frames in front of you better and quietly
+# stops decoding a capture that used to work leaves it green. `make corpus`
+# decodes every capture and diffs the result against tests/corpus-baseline.txt.
+# The corpus is not in this repo, so this is a dev-only gate — see
+# tools/run-corpus.sh, and run it with --self-test before believing a clean run.
+corpus_check: tools/corpus_check.c libreac.a
+	$(CC) $(CFLAGS) $(INC) tools/corpus_check.c libreac.a -lm -o corpus_check
 
-.PHONY: all test clean
+corpus: corpus_check
+	tools/run-corpus.sh
+
+clean:
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_facts corpus_check
+
+.PHONY: all test corpus clean

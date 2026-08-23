@@ -4,7 +4,8 @@
 /* reac_ports — the box's DECLARED port table, decoded from its config-announce.
  *
  * A stagebox declares its own geometry in the sync protocol: the config-announce
- * (cdea, op 01 03, len 0x0010) carries a PORT TABLE at block[8..19] — twelve
+ * (cdea, link 1, SINGLE, opcode 0x82 / 0x84 / 0x80) carries a PORT TABLE at
+ * block[8..19] — twelve
  * slots, one byte per 4-channel group, spanning the 48-channel REAC fabric ring
  * (12 x 4 = 48, the same ring the master's channel-map sweep walks):
  *
@@ -51,9 +52,9 @@ struct reac_box_ports {
 };
 
 /* Decode the port table from a config-announce CONTROL BLOCK (the 32 bytes at
- * frame[18:50]). Returns 0 and fills `out` when block[0..3] is the config-
- * announce opcode (01 03 00 10) and every table slot is a known code; -1
- * otherwise, leaving `out` untouched. */
+ * frame[18:50]). Returns 0 and fills `out` when the block is a complete link-1
+ * message whose OPCODE at block[4] is one of the three declaration arms, and
+ * every table slot is a known code; -1 otherwise, leaving `out` untouched. */
 int reac_ports_parse(const uint8_t block[32], struct reac_box_ports *out);
 
 /* The head-amp base a desk grants for a declared input width. A head-amp
