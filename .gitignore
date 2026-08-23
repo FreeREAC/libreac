@@ -21,3 +21,4 @@ test_ports
 *.a
 test_facts
 *.d
+corpus_check
