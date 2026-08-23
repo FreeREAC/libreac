@@ -69,17 +69,26 @@ int reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n)
 }
 
 /* ---- the scene push ------------------------------------------------------
- * Every step is the same 34-byte [type|block] shape: cd ea, the 2-byte op, the
- * BE payload length, one reserved 0x00, then the payload, checksum last.
+ * Every step is the same 34-byte [type|block] shape: cd ea, then the block's
+ * four header fields — link, segment, length, opcode — then the payload, block
+ * checksum last. The whole transfer is ONE opcode (0x00, bulk) on link 1; what
+ * changes step to step is the SEGMENT byte, which is why there is no op field
+ * here. The box builds it the same way, from the same four fields.
  *
- * The length a step declares is its PAYLOAD length, and those lengths are
- * exactly what sum to the declared total — so the three sizes and the total are
- * one fact, not four. A body whose lengths do not sum to what the header
- * declares leaves the box waiting for bytes that never come. */
-#define SCENE_OP_OFF          2   /* [2:4]  the 2-byte op                */
-#define SCENE_LEN_OFF         4   /* [4:6]  BE payload length            */
-#define SCENE_PAY_OFF         7   /* [7:..] payload ([6] stays reserved) */
-#define SCENE_HEAD_TOTAL_OFF  7   /* header only: BE total, payload at [9] */
+ * The length a step declares is its PAYLOAD length — the one place block[2:4]
+ * counts payload rather than counting from block[4] — and those lengths are
+ * exactly what sum to the declared total, so the three sizes and the total are
+ * one fact, not four. A body whose lengths do not sum to what the first frame
+ * declares leaves the box waiting for bytes that never come.
+ *
+ * Offsets are into the 34-byte [type|block] template, so block[k] is at k+2. */
+#define SCENE_LINK_OFF        2   /* block[0]   the link                       */
+#define SCENE_SEG_OFF         3   /* block[1]   FIRST / MIDDLE / LAST          */
+#define SCENE_LEN_OFF         4   /* block[2:4] BE payload length              */
+#define SCENE_OPCODE_OFF      6   /* block[4]   0x00, bulk, on every step      */
+#define SCENE_PAY_OFF         7   /* block[5]   payload, MIDDLE and LAST       */
+#define SCENE_HEAD_TOTAL_OFF  7   /* block[5:7] the total; FIRST's payload at
+                                   * block[7], two bytes further on           */
 
 int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
                                int step)
@@ -93,7 +102,9 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 	blk[0] = 0xcd; blk[1] = 0xea;
 
 	if (step == 0) {
-		blk[SCENE_OP_OFF] = 0x01; blk[SCENE_OP_OFF + 1] = 0x01;
+		blk[SCENE_LINK_OFF] = REAC_LINK_CTRL;
+		blk[SCENE_SEG_OFF]  = REAC_SEG_FIRST;
+		blk[SCENE_OPCODE_OFF] = REAC_OP_BULK;
 		blk[SCENE_LEN_OFF]     = (uint8_t)(REAC_SCENE_HEAD_BYTES >> 8);
 		blk[SCENE_LEN_OFF + 1] = (uint8_t)(REAC_SCENE_HEAD_BYTES & 0xff);
 		blk[SCENE_HEAD_TOTAL_OFF]     = (uint8_t)(REAC_SCENE_BYTES >> 8);
@@ -102,7 +113,9 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 	} else if (step <= REAC_SCENE_CHUNKS) {
 		size_t off = REAC_SCENE_HEAD_BYTES +
 		             (size_t)(step - 1) * REAC_SCENE_CHUNK_BYTES;
-		blk[SCENE_OP_OFF] = 0x01; blk[SCENE_OP_OFF + 1] = 0x00;
+		blk[SCENE_LINK_OFF] = REAC_LINK_CTRL;
+		blk[SCENE_SEG_OFF]  = REAC_SEG_MIDDLE;
+		blk[SCENE_OPCODE_OFF] = REAC_OP_BULK;
 		blk[SCENE_LEN_OFF]     = (uint8_t)(REAC_SCENE_CHUNK_BYTES >> 8);
 		blk[SCENE_LEN_OFF + 1] = (uint8_t)(REAC_SCENE_CHUNK_BYTES & 0xff);
 		memcpy(blk + SCENE_PAY_OFF, body + off, REAC_SCENE_CHUNK_BYTES);
@@ -110,7 +123,7 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 		/* The final chunk fills the SAME 26-byte payload slot as every other one
 		 * but declares only REAC_SCENE_TAIL_BYTES of it as body — the transfer
 		 * ends mid-slot. The 12 bytes behind the body are a fixed trailer, not
-		 * desk state: identical in every op-0102 of both the M-200i and the M-300
+		 * desk state: identical in every LAST frame of both the M-200i and the M-300
 		 * establish captures (3/3 each), so they are reproduced rather than
 		 * zeroed. Zeroing still satisfies the declared length, but this box has
 		 * punished "functionally equivalent" before. */
@@ -119,7 +132,9 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 			0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
 		};
 		size_t off = REAC_SCENE_BYTES - REAC_SCENE_TAIL_BYTES;
-		blk[SCENE_OP_OFF] = 0x01; blk[SCENE_OP_OFF + 1] = 0x02;
+		blk[SCENE_LINK_OFF] = REAC_LINK_CTRL;
+		blk[SCENE_SEG_OFF]  = REAC_SEG_LAST;
+		blk[SCENE_OPCODE_OFF] = REAC_OP_BULK;
 		blk[SCENE_LEN_OFF]     = (uint8_t)(REAC_SCENE_TAIL_BYTES >> 8);
 		blk[SCENE_LEN_OFF + 1] = (uint8_t)(REAC_SCENE_TAIL_BYTES & 0xff);
 		memcpy(blk + SCENE_PAY_OFF, body + off, REAC_SCENE_TAIL_BYTES);
@@ -899,7 +914,7 @@ size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
 	                 counter, in_ch, NULL, NULL, 0);
 }
 
-/* ---- Head-amp source control (op 04 03, record TAG 01 01) ---- */
+/* ---- Head-amp source control (link 4 SINGLE, record TAG 0x0101) ---- */
 
 /* param/value validity for a head-amp record (phantom/pad are boolean, SENS is
  * 0x00..0x37). Shared by the fresh-frame builder and the in-place stamp. */
