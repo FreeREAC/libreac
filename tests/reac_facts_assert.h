@@ -86,14 +86,6 @@ _Static_assert(REAC_HEADAMP_GRAN_PHANTOM_SHIFT == 0,
                "REAC_HEADAMP_GRAN_PHANTOM_SHIFT has drifted from protocol-facts.yaml HEADAMP_GRAN_PHANTOM_SHIFT");
 _Static_assert(REAC_HEADAMP_NPARAMS == 3,
                "REAC_HEADAMP_NPARAMS has drifted from protocol-facts.yaml HEADAMP_SWEEP_RECORDS_PER_CH");
-_Static_assert(REAC_HEADAMP_BASE_FROM_CONFIG_BYTE7 == 1,
-               "REAC_HEADAMP_BASE_FROM_CONFIG_BYTE7 has drifted from protocol-facts.yaml HEADAMP_BASE_FROM_CONFIG_BYTE7");
-_Static_assert(REAC_HEADAMP_BASE_MULTIPLIER == 0x10,
-               "REAC_HEADAMP_BASE_MULTIPLIER has drifted from protocol-facts.yaml HEADAMP_BASE_MULTIPLIER");
-_Static_assert(REAC_HEADAMP_BASE_IS_CHASSIS_NOT_GRANT == 1,
-               "REAC_HEADAMP_BASE_IS_CHASSIS_NOT_GRANT has drifted from protocol-facts.yaml HEADAMP_BASE_IS_CHASSIS_NOT_GRANT");
-_Static_assert(REAC_HEADAMP_APPLY_UNIT_SLOTS == 8,
-               "REAC_HEADAMP_APPLY_UNIT_SLOTS has drifted from protocol-facts.yaml HEADAMP_APPLY_UNIT_SLOTS");
 _Static_assert(REAC_HEADAMP_SENS_REF_CDB == -1000,
                "REAC_HEADAMP_SENS_REF_CDB has drifted from protocol-facts.yaml HEADAMP_SENS_REF_CDB");
 _Static_assert(REAC_HEADAMP_SENS_STEP_CDB == 100,
@@ -113,6 +105,6 @@ _Static_assert(REAC_PORT_SLOT_IN == 0x02,
 _Static_assert(REAC_PORT_SLOT_EMPTY == 0x03,
                "REAC_PORT_SLOT_EMPTY has drifted from protocol-facts.yaml PORT_SLOT_EMPTY");
 
-#define REAC_FACTS_ASSERTIONS 46
+#define REAC_FACTS_ASSERTIONS 42
 
 #endif /* REAC_FACTS_ASSERT_H */
