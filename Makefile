@@ -70,7 +70,31 @@ corpus_check: tools/corpus_check.c libreac.a
 corpus: corpus_check
 	tools/run-corpus.sh
 
-clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_facts corpus_check
+# THE WIRE TOOLS ANSWER A DIFFERENT SHAPE OF QUESTION FROM corpus_check. That
+# one TALLIES — "does this build still decode the corpus". A question about
+# protocol LAW needs individual records in time order, with the talker attached,
+# and it usually turns on something that did NOT happen. A count cannot see an
+# absence, and an absence is only a finding once the instrument has been shown
+# to detect the corresponding presence, so each of these carries its own control
+# and says so in its header. They are dev-only, they never open a socket, and
+# they are built here rather than pasted into a session because a verdict whose
+# instrument was thrown away is not reproducible.
+#
+#   headamp_trace   every head-amp record, in order, with src MAC and truncation
+#   wire_census     who talks on a segment and in what frame shapes
+#   ctrl_delta      which control-block bytes move, per talker and message kind
+#   upstream_watch  every byte a box's own frames change, classed by how often
+#   slotmap_watch   the sliding slot-map window unrolled into per-slot state
+#   seq_gaps        per-talker frame-counter holes — the control for any
+#                   "nothing was sent" claim
+WIRE_TOOLS = headamp_trace wire_census ctrl_delta upstream_watch slotmap_watch seq_gaps
 
-.PHONY: all test corpus clean
+wire-tools: $(WIRE_TOOLS)
+
+$(WIRE_TOOLS): %: tools/%.c libreac.a
+	$(CC) $(CFLAGS) $(INC) $< libreac.a -lm -o $@
+
+clean:
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_facts corpus_check $(WIRE_TOOLS)
+
+.PHONY: all test corpus wire-tools clean
