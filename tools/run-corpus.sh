@@ -29,14 +29,14 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CAPS=${REAC_CAPTURES:-$HOME/Devel/audio/reac-captures}
 BASELINE=$ROOT/tests/corpus-baseline.txt
-PER_FILE=1000000
+PER_FILE=0
 MODE=compare
 
 while [ $# -gt 0 ]; do
 	case $1 in
 	--captures) CAPS=$2; shift 2 ;;
 	--baseline) BASELINE=$2; shift 2 ;;
-	--per-file) PER_FILE=$2; shift 2 ;;
+	--per-file) PER_FILE=$2; shift 2 ;;   # 0 = every record; anything else HIDES traffic
 	--write-baseline) MODE=write; shift ;;
 	--self-test) MODE=selftest; shift ;;
 	*) echo "run-corpus.sh: unknown argument $1" >&2; exit 2 ;;

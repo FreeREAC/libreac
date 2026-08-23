@@ -205,7 +205,12 @@ static int scan(const char *path, const char *label, unsigned long cap, int corr
 
 int main(int argc, char **argv)
 {
-	unsigned long cap = 1000000;
+	/* NO CAP BY DEFAULT. A per-file cap reads the HEAD of each capture, and the
+	 * longest sessions are exactly the ones carrying most of the bulk transfer -
+	 * a cap of 1e6 records hid 43% of it and 76% of the box declarations, which
+	 * looked like agreement with everything except the absolute counts. The
+	 * whole 47.8 GB corpus takes about 20 s. */
+	unsigned long cap = 0;
 	int corrupt = 0, i = 1;
 	const char *root = "";
 	for (; i < argc; i++) {
