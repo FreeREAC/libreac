@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* reac_ctrlblk — the 32-byte REAC control block, and the scene transfer on it.
@@ -10,16 +10,16 @@
  * encodes a choice: establishment policy, slot allocation, transport, node
  * wiring. Those differ per implementation; these bytes do not.
  *
- * LICENCE, DELIBERATELY GPL-2.0-or-later WHILE THE REST OF THE PROJECT IS -3.0.
- * The Linux kernel is GPL-2.0-ONLY, with no "or later", so GPL-3 code can never
- * be linked into it and MODULE_LICENSE("GPL") would assert a compatibility a
- * GPL-3 module cannot claim. Keeping a kernel-side REAC possible therefore means
- * this layer must be GPL-2-compatible. "or later" makes it strictly WIDER in
- * reach than GPL-3 — GPL-3 projects consume it unchanged — so the choice costs
- * nothing and buys the kernel path. reac-pw, openmixer and the tooling stay
- * GPL-3.0-or-later.
+ * LICENCE: GPL-3.0-or-later, matching the rest of libreac. A kernel-side REAC
+ * would need this layer — the kernel is GPL-2.0-ONLY, so GPL-3 code cannot link
+ * into it — and the project's answer is a carve-out limited to the files a module
+ * actually needs, not a blanket relicence. That list was scoped before this file
+ * existed and does not name it. It is therefore a CANDIDATE for the carve-out and
+ * is written to be eligible; whoever designs the mechanism should decide, and
+ * nothing here presumes the outcome.
  *
- * KERNEL-PORTABLE BY CONSTRUCTION. These are commitments now, not style:
+ * KERNEL-PORTABLE BY CONSTRUCTION, which is what keeps that option open. These
+ * are commitments, not style:
  *   - no allocation, here or anywhere below;
  *   - no floating point;
  *   - buffers are always the CALLER's, with an explicit length;
