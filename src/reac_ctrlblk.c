@@ -345,7 +345,7 @@ size_t reac_ctrl_box_frame_len(int n_ch)
  * a MASTER (we ARE a mixer) the box's announce on the wire is the truth and this
  * matrix is only a default. Each row is a real box's captured config-announce
  * (selector byte = displayed model family; sum mod 256 == 0 with its trailing
- * check byte), plus, for the 0x84 family, the ASCII name frame that names the
+ * check byte), plus, for the 0x84 family, the identity record that names the
  * exact model. All blocks byte-matched to matrix-m200/m5000-s1608 / -s0808. */
 static const struct reac_box_model BOX_MODELS[] = {
 	{ .token = "s1608", .display = "S-1608 (16 in / 8 out)", .in_ch = 16, .out_ch = 8,
@@ -354,7 +354,7 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x02, 0x02, 0x02, 0x02, 0x01, 0x01, 0x03, 0x03,
 		0x03, 0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4c },
-	  .has_name = 0,     /* 0x82 family: named by selector, no ASCII frame */
+	  .has_identity_record = 0,   /* named by the declaration's constant */
 	  .cc0014 = {
 		0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe,
 		0x0f, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
@@ -375,15 +375,15 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x15, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
 		0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02,
 		0x00, 0x03, 0x00, 0x02, 0x6e, 0xf7, 0x00, 0xf4 },
-	  .has_extra = 0 },  /* S-1608 sends no 0402000d */
+	},
 	{ .token = "s0808", .display = "S-0808 (8 in / 8 out)", .in_ch = 8, .out_ch = 8,
 	  .config_block = {
 		0x01, 0x03, 0x00, 0x10, 0x84, 0x00, 0x00, 0x00,
 		0x02, 0x02, 0x01, 0x01, 0x03, 0x03, 0x03, 0x03,
 		0x03, 0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4a },
-	  .has_name = 1,     /* 0x84 family: ASCII name frame gives the exact model */
-	  .name_block = {
+	  .has_identity_record = 1,   /* the 0x84 constant needs the name */
+	  .identity_first = {
 		0x04, 0x01, 0x00, 0x1b, 0x00, 0x02, 0x00, 0xfe,
 		0x16, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
 		0x05, 0x00, 0x10, 0x00, 0x01, 0x53, 0x2d, 0x30,   /* "S-0" */
@@ -408,14 +408,13 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x15, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
 		0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x01,
 		0x00, 0x00, 0x00, 0x00, 0x74, 0xf7, 0x00, 0xf4 },
-	  .has_extra = 1,     /* S-0808 also sends cdea 04 02 000d */
-	  .extra_block = {
+	  .identity_last = {
 		0x04, 0x02, 0x00, 0x0d, 0x00, 0x02, 0x00, 0xfe,
 		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1a,
 		0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd4 } },
-	/* S-4000S — also 0x84 family but sends NO name frame (0x84's DEFAULT desk
-	 * label IS "S-4000S") and NO 0402000d. Its config descriptor + 0016/001a
+	/* S-4000S — also 0x84 family but sends NO identity record (0x84's DEFAULT
+	 * desk label IS "S-4000S"). Its config descriptor + 0016/001a
 	 * inventory are distinct. Byte-verified from a real S-4000S cold boot on an
 	 * M-5000 (s4000s-coldboot-m5000-2026-07-12, box c4:06:80). NOTE: captured on
 	 * OHRCA (frames +2 CRC trailer); the control blocks below are generation-
@@ -426,7 +425,7 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
 		0x01, 0x01, 0x03, 0x03, 0x00, 0x03, 0x00, 0x00,
 		0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4c },
-	  .has_name = 0,     /* 0x84 DEFAULT name is "S-4000S" — no ASCII frame */
+	  .has_identity_record = 0,   /* the 0x84 constant already reads S-4000S */
 	  .cc0014 = {
 		0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe,
 		0x0f, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
@@ -447,7 +446,7 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x15, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
 		0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02,
 		0x00, 0x01, 0x00, 0x02, 0x70, 0xf7, 0x00, 0xf4 },
-	  .has_extra = 0 },  /* S-4000S sends no 0402000d */
+	},
 };
 
 const struct reac_box_model *reac_box_model_table(size_t *count)
@@ -519,12 +518,12 @@ enum ctrl_block {
 	BLOCK_DESC,       /* the 00 7a per-slot descriptor — upstream FILLER   */
 	BLOCK_TMPL,       /* the row's own literal template                    */
 	BLOCK_CONFIG,     /* matrix: config-announce   cdea 01 03 0010         */
-	BLOCK_NAME,       /* matrix: ASCII name frame  cdea 04 01 001b         */
+	BLOCK_IDENT_FIRST,/* matrix: identity record, link 4 FIRST fragment    */
 	BLOCK_CC0014,     /* matrix: cold-connect      cdea 04 03 0014         */
 	BLOCK_CC0013,     /* matrix: cold-connect      cdea 04 03 0013         */
 	BLOCK_CC0016,     /* matrix: cold-connect      cdea 04 03 0016         */
 	BLOCK_CC001A,     /* matrix: cold-connect      cdea 04 03 001a         */
-	BLOCK_EXTRA,      /* matrix: extra frame       cdea 04 02 000d         */
+	BLOCK_IDENT_LAST, /* matrix: identity record, link 4 LAST fragment     */
 };
 
 /* Frame width. A box->master frame is 50 + 36*width + 2; a master->box frame is
@@ -535,12 +534,12 @@ enum ctrl_len {
 	LEN_DOWNSTREAM,      /* REAC_FRAME_BYTES (master direction)            */
 };
 
-/* Which models emit this frame at all (the 0x84-family name frame, the S-0808
- * 0402000d): a row names the matrix flag, ctrl_gate_ok() reads it. */
+/* Which models emit this frame at all: a row names the matrix flag and
+ * ctrl_gate_ok() reads it. Both identity fragments name the SAME flag, because
+ * they are one record and half of it is not a message. */
 enum ctrl_gate {
 	GATE_ALWAYS = 0,
-	GATE_HAS_NAME,
-	GATE_HAS_EXTRA,
+	GATE_HAS_IDENTITY,
 };
 
 /* Checksum policy. CKSUM_RECORD means the block carries a Roland DT1 record,
@@ -591,12 +590,12 @@ static const uint8_t *ctrl_model_block(const struct reac_box_model *m,
 {
 	switch (b) {
 	case BLOCK_CONFIG: return m->config_block;
-	case BLOCK_NAME:   return m->name_block;
+	case BLOCK_IDENT_FIRST: return m->identity_first;
 	case BLOCK_CC0014: return m->cc0014;
 	case BLOCK_CC0013: return m->cc0013;
 	case BLOCK_CC0016: return m->cc0016;
 	case BLOCK_CC001A: return m->cc001a;
-	case BLOCK_EXTRA:  return m->extra_block;
+	case BLOCK_IDENT_LAST:  return m->identity_last;
 	default:           return NULL;   /* not a matrix block */
 	}
 }
@@ -604,8 +603,7 @@ static const uint8_t *ctrl_model_block(const struct reac_box_model *m,
 static int ctrl_gate_ok(const struct reac_box_model *m, enum ctrl_gate g)
 {
 	switch (g) {
-	case GATE_HAS_NAME:  return m->has_name;
-	case GATE_HAS_EXTRA: return m->has_extra;
+	case GATE_HAS_IDENTITY: return m->has_identity_record;
 	default:             return 1;
 	}
 }
@@ -723,17 +721,17 @@ enum ctrl_frame_id {
 	CTRL_UPSTREAM_FILLER,
 	CTRL_FLOOD_FILLER,
 	CTRL_CONFIG_ANNOUNCE,
-	CTRL_NAME_FRAME,
+	CTRL_IDENT_FIRST,
 	CTRL_COLDCONNECT,
 	CTRL_COLDCONNECT_0013,
 	CTRL_COLDCONNECT_0016,
 	CTRL_COLDCONNECT_001A,
-	CTRL_EXTRA_FRAME,
+	CTRL_IDENT_LAST,
 	CTRL_HEADAMP,
 	CTRL_FRAME_COUNT,
 };
 
-/* Rows CTRL_CONFIG_ANNOUNCE..CTRL_EXTRA_FRAME are the RECONSTRUCTED JOIN frames
+/* Rows CTRL_CONFIG_ANNOUNCE..CTRL_IDENT_LAST are the RECONSTRUCTED JOIN frames
  * (experimental, not byte-verified as a SEQUENCE): each block is byte-matched to
  * a real capture, but the order and timing a box emits them in is reconstructed
  * from REAC-CONNECTION-FSM.md, not observed end to end. */
@@ -767,13 +765,14 @@ static const struct ctrl_frame CTRL_FRAMES[CTRL_FRAME_COUNT] = {
 	[CTRL_CONFIG_ANNOUNCE] = {
 		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_CONFIG,
 		.cksum = CKSUM_BLOCK, .len = LEN_MODEL_WIDTH },
-	/* The ASCII model-name frame (cdea 04 01 001b) — required for the 0x84 family
-	 * so the desk shows the exact model ("S-0808") instead of the generic family
-	 * name. The 0x82 / S-1608 family is named by its selector alone and emits
-	 * nothing here. */
-	[CTRL_NAME_FRAME] = {
-		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_NAME,
-		.cksum = CKSUM_NONE, .len = LEN_MODEL_WIDTH, .gate = GATE_HAS_NAME },
+	/* The identity record's FIRST fragment: the DT1 preamble, TAG 0x0500 and the
+	 * ASCII model name, so the desk shows "S-0808" and not the family constant's
+	 * default label. Whoever emits this MUST emit CTRL_IDENT_LAST after it — the
+	 * SysEx checksum lives there and closes over both. Models named by the
+	 * declaration's constant alone emit neither. */
+	[CTRL_IDENT_FIRST] = {
+		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_IDENT_FIRST,
+		.cksum = CKSUM_NONE, .len = LEN_MODEL_WIDTH, .gate = GATE_HAS_IDENTITY },
 	/* The cold-connect escalation a real S-1608 sends: 0014 -> 0013 -> 0016 ->
 	 * 001a, each the model's 32-byte control block over LIVE audio. The block's
 	 * [38:66] region is frame[52:80] and is AUDIO, not device inventory — on a
@@ -807,12 +806,12 @@ static const struct ctrl_frame CTRL_FRAMES[CTRL_FRAME_COUNT] = {
 	[CTRL_COLDCONNECT_001A] = {
 		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_CC001A,
 		.cksum = CKSUM_NONE, .len = LEN_ARG_WIDTH, .audio = 1 },
-	/* The cdea 04 02 000d frame some models (S-0808) send during cold-connect —
-	 * part of the inventory the mixer reads to name the exact model. Emitted raw
-	 * (byte-verified, matrix-m200-s0808); models without it emit nothing. */
-	[CTRL_EXTRA_FRAME] = {
-		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_EXTRA,
-		.cksum = CKSUM_NONE, .len = LEN_MODEL_WIDTH, .gate = GATE_HAS_EXTRA },
+	/* The identity record's LAST fragment: the SysEx checksum that closes over
+	 * both fragments, and the f7 that ends the record. Emitted raw
+	 * (byte-verified, matrix-m200-s0808). */
+	[CTRL_IDENT_LAST] = {
+		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_IDENT_LAST,
+		.cksum = CKSUM_NONE, .len = LEN_MODEL_WIDTH, .gate = GATE_HAS_IDENTITY },
 	/* The console-side preamp command, master->box at the downstream width. The
 	 * ONLY row that carries a DT1 record — and naming CKSUM_RECORD is all it has
 	 * to do: ctrl_finish() stamps the inner checksum and then the outer one, in
@@ -854,10 +853,10 @@ size_t reac_ctrl_build_config_announce(uint8_t *out, const uint8_t master[6],
 	                 counter, in_ch, NULL, NULL, 0);
 }
 
-size_t reac_ctrl_build_name_frame(uint8_t *out, const uint8_t master[6],
-                                  const uint8_t src[6], uint16_t counter, int in_ch)
+size_t reac_ctrl_build_identity_first(uint8_t *out, const uint8_t master[6],
+                                      const uint8_t src[6], uint16_t counter, int in_ch)
 {
-	return ctrl_emit(out, &CTRL_FRAMES[CTRL_NAME_FRAME], master, src,
+	return ctrl_emit(out, &CTRL_FRAMES[CTRL_IDENT_FIRST], master, src,
 	                 counter, in_ch, NULL, NULL, 0);
 }
 
@@ -893,10 +892,10 @@ size_t reac_ctrl_build_coldconnect_001a(uint8_t *out, const uint8_t master[6],
 	                 counter, n_ch, NULL, planar, ns);
 }
 
-size_t reac_ctrl_build_extra_frame(uint8_t *out, const uint8_t master[6],
-                                   const uint8_t src[6], uint16_t counter, int in_ch)
+size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
+                                     const uint8_t src[6], uint16_t counter, int in_ch)
 {
-	return ctrl_emit(out, &CTRL_FRAMES[CTRL_EXTRA_FRAME], master, src,
+	return ctrl_emit(out, &CTRL_FRAMES[CTRL_IDENT_LAST], master, src,
 	                 counter, in_ch, NULL, NULL, 0);
 }
 
