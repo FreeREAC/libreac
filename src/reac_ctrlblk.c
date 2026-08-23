@@ -1094,17 +1094,18 @@ int reac_ctrl_build_grant_sweep(uint8_t sweep[][34], int max, uint8_t base,
 }
 
 /* ---- head-amp granularity ------------------------------------------------
- * See reac/reac_ctrlblk.h: the wire record is per channel, the slot map is per
- * slot, the per-four field is the inventory cell, and phantom's hardware
- * actuation granularity is open. Expressed as predicates so no caller has to
- * remember which shift belongs to which parameter, and so the open question
- * comes back as itself rather than as a number. */
+ * See reac/reac_ctrlblk.h: the wire record is per channel for all three
+ * parameters, the slot map is per slot, and the per-four field is the inventory
+ * cell. Phantom's shift was disputed and these two functions used to return
+ * REAC_HEADAMP_GRAN_DISPUTED for it; the wire settled it at 0 on 2026-08-23.
+ * They stay as predicates so no caller open-codes a shift, which is how the
+ * wrong one spread in the first place. */
 int reac_headamp_group_of(uint8_t ch, uint8_t param)
 {
 	switch (param) {
 	case REAC_HEADAMP_SENS:    return ch >> REAC_HEADAMP_GRAN_SENS_SHIFT;
 	case REAC_HEADAMP_PAD:     return ch >> REAC_HEADAMP_GRAN_FLAGS_SHIFT;
-	case REAC_HEADAMP_PHANTOM: return REAC_HEADAMP_GRAN_DISPUTED;
+	case REAC_HEADAMP_PHANTOM: return ch >> REAC_HEADAMP_GRAN_PHANTOM_SHIFT;
 	default:                   return -1;
 	}
 }
@@ -1114,12 +1115,8 @@ int reac_headamp_record_carries(uint8_t ch, uint8_t param)
 	switch (param) {
 	case REAC_HEADAMP_SENS:
 	case REAC_HEADAMP_PAD:
-		return 1;                                    /* every channel carries it */
 	case REAC_HEADAMP_PHANTOM:
-		/* Both readings agree on a group-of-four anchor and only there. */
-		if ((ch & ((1u << REAC_HEADAMP_GRAN_PHANTOM_SHIFT_TRACE) - 1u)) == 0)
-			return 1;
-		return REAC_HEADAMP_GRAN_DISPUTED;
+		return 1;                       /* every channel carries all three */
 	default:
 		return -1;
 	}
