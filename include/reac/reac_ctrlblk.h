@@ -397,4 +397,26 @@ const char *reac_headamp_param_name(uint8_t param);
  * -1 when the record checksum is wrong. */
 int reac_ctrl_headamp_record_verify(const uint8_t *frame);
 
+/* ---- the grant sweep's SHAPE ---------------------------------------------
+ * Which records the enrolment burst carries and in which order. WHICH SLOTS a
+ * box is given, and what each one's phantom/pad/SENS should be, are the daemon's
+ * decisions: the caller passes the values in, `width * REAC_HEADAMP_NPARAMS` of
+ * them, laid out [channel][param] from `base`.
+ *
+ * Group A is the head-amp push (marker 12 12, TAG 01 01, sub-phase 00/01/02 =
+ * phantom/pad/SENS, one record per allocated channel per parameter); group B is
+ * the fixed six-record constant (marker 12 11, TAG 05 00). Returns the row count
+ * written (REAC_GRANT_SWEEP_LEN(width)), or -1. */
+/* Head-amp cells: three parameters per channel, over the 48-slot head-amp space
+ * (0x00..0x2f). Both are protocol bounds, so they live with the records that
+ * carry them rather than in one caller's header. */
+#define REAC_HEADAMP_NPARAMS    3
+#define REAC_HEADAMP_MAX_CH     48
+
+#define REAC_GRANT_GROUPB_LEN   6
+#define REAC_GRANT_SWEEP_LEN(w) (8 + (w) * 3)
+
+int reac_ctrl_build_grant_sweep(uint8_t sweep[][34], int max, uint8_t base,
+                                int width, const uint8_t *values);
+
 #endif /* REAC_CTRLBLK_H */
