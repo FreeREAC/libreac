@@ -118,4 +118,62 @@ int reac_ctrl_scene_set_mac(uint8_t *body, size_t n, const uint8_t mac[6]);
  * scene means reproducing that structure. Returns 0, or -1. */
 int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6]);
 
+/* ---- HEAD-AMP SENSITIVITY: the box's own step -> gain curve ----------------
+ *
+ * SENS is a step index, and the S-1608 turns it into hardware through a 56-entry
+ * table at 0x0c0327a0 in its own image (link base 0x0BFE0000), reached by BOTH
+ * write paths — the immediate writer and the stepped updater. 56 entries is
+ * exactly the 56 legal SENS values 0x00..0x37; there are no spare rows. (The
+ * 0..47 that head-amp code also deals in is the CHANNEL space, 16 channels at
+ * base 0x20 — a different axis entirely.)
+ *
+ * Each entry is a (coarse, fine) pair, not a dB value: four coarse stages with
+ * sixteen fine steps of 2 each (the first stage has only eight), so the table
+ * says WHERE the curve breaks and the metal has to say by how much. The breaks
+ * are at indices 8, 24 and 40, and the table ends exactly where the image's
+ * "V03.05" version string begins.
+ *
+ * MEASURED on an S-0808, using the preamp's own NOISE FLOOR — which tracks gain
+ * exactly inside a stage, where the noise figure is constant, and which
+ * reproduces to 0.03 dB across sessions where a microphone in a room does not:
+ *
+ *   stage 2 (idx  8..23)   0.90 dB per step
+ *   stage 1 (idx 24..39)   0.95 dB per step
+ *   stage 0 (idx 40..55)   0.98 dB per step
+ *   stage 3 (idx  0.. 7)   UNMEASURED — its floor sits under the converter's,
+ *                          so 0.90 is carried over from stage 2 and is a guess
+ *
+ * ACROSS a break the floor is NOT a gain probe, because the noise figure changes
+ * there too: at 23->24 the floor drops 6.06 dB while the SIGNAL is flat to within
+ * the source's own spread. So gain is continuous across the breaks — the drop is
+ * the preamp switching to a quieter input stage — and the table below carries no
+ * step at 8, 24 or 40.
+ *
+ * TOTAL SPAN 48.75 dB, not the 55 dB a flat 1 dB per step implies.
+ *
+ * THE MAP IS NOT INJECTIVE. Because gain is continuous across the three breaks,
+ * steps 7 and 8, 23 and 24, and 39 and 40 deliver the SAME gain. They differ in
+ * noise: the upper twin is in the quieter stage (measured 6.06 dB lower floor at
+ * 24 than at 23), so it is strictly better and the reverse lookup returns it. A
+ * round trip is therefore the identity everywhere except those three lower twins,
+ * which it promotes to their quieter partner — deliberately, and asserted.
+ *
+ * A NOTE ON UNITS, because it is a real limitation and not a detail. The steps
+ * are all under 1 dB, so an integer-dB API cannot represent them: neighbouring
+ * steps collide on the same integer and step -> dB -> step cannot be the
+ * identity. The centi-dB entry points below are exact and round-trip; the
+ * integer-dB pair is kept for callers that still speak whole dB and is
+ * documented as lossy rather than quietly wrong. */
+#define REAC_HEADAMP_SENS_MAX 0x37   /* 55 — the 56th and last table entry */
+
+/* Sensitivity for a step, in HUNDREDTHS of a dBu. Exact; the inverse round-trips.
+ * `pad_on` adds the pad's 20 dB. */
+int      reac_headamp_sens_cdb(uint8_t value, int pad_on);
+uint8_t  reac_headamp_sens_value_cdb(int cdb, int pad_on);
+
+/* The same in whole dBu. LOSSY BY CONSTRUCTION — the device's steps are smaller
+ * than 1 dB, so this cannot round-trip and must not be used to store a setting. */
+int      reac_headamp_sens_db(uint8_t value, int pad_on);
+uint8_t  reac_headamp_sens_value(int db, int pad_on);
+
 #endif /* REAC_CTRLBLK_H */

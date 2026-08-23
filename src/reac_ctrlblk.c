@@ -129,3 +129,71 @@ int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6])
 	memcpy(body + REAC_SCENE_MAC_OFF,      mac,    6);
 	return 0;
 }
+
+/* ---- head-amp sensitivity ------------------------------------------------
+ * Cumulative GAIN for each of the 56 SENS steps, in hundredths of a dB, built
+ * from the firmware table's stage structure (breaks at 8, 24, 40) with the
+ * per-stage step measured on the metal. See reac/reac_ctrlblk.h for how each
+ * number was obtained and which one is a guess.
+ *
+ * Integer hundredths, not floats: this file is written to stay kernel-portable,
+ * and a gain curve is exactly the place a float would sneak in. */
+static const short SENS_GAIN_CDB[REAC_HEADAMP_SENS_MAX + 1] = {
+	    0,    90,   180,   270,   360,   450,   540,   630,
+	  630,   720,   810,   900,   990,  1080,  1170,  1260,
+	 1350,  1440,  1530,  1620,  1710,  1800,  1890,  1980,
+	 1980,  2075,  2170,  2265,  2360,  2455,  2550,  2645,
+	 2740,  2835,  2930,  3025,  3120,  3215,  3310,  3405,
+	 3405,  3503,  3601,  3699,  3797,  3895,  3993,  4091,
+	 4189,  4287,  4385,  4483,  4581,  4679,  4777,  4875,
+};
+
+/* Step 0 is the least gain, and its sensitivity is the reference the desk
+ * publishes: -10 dBu reaches nominal with no pad. More gain means a smaller
+ * signal suffices, so sensitivity falls as the step rises. */
+#define SENS_REF_CDB   (-1000)   /* step 0, pad off */
+#define SENS_PAD_CDB    (2000)   /* the pad's 20 dB */
+
+int reac_headamp_sens_cdb(uint8_t value, int pad_on)
+{
+	if (value > REAC_HEADAMP_SENS_MAX)
+		value = REAC_HEADAMP_SENS_MAX;
+	return SENS_REF_CDB - SENS_GAIN_CDB[value] + (pad_on ? SENS_PAD_CDB : 0);
+}
+
+uint8_t reac_headamp_sens_value_cdb(int cdb, int pad_on)
+{
+	/* Nearest step. The curve is monotonic but NOT uniform, so this is a search
+	 * for the closest entry rather than arithmetic on a step size — which is the
+	 * whole reason the table exists. */
+	int want = SENS_REF_CDB + (pad_on ? SENS_PAD_CDB : 0) - cdb;   /* gain wanted */
+	int best = 0, best_err = -1;
+	for (int i = 0; i <= REAC_HEADAMP_SENS_MAX; i++) {
+		int err = SENS_GAIN_CDB[i] - want;
+		if (err < 0)
+			err = -err;
+		/* On a TIE, take the HIGHER step. The three stage breaks put two steps
+		 * on the same gain (7/8, 23/24, 39/40) — the coarse stage changes while
+		 * the fine code resets, so gain is unchanged. They are not equivalent
+		 * though: the upper twin sits in the quieter stage, measured 6.06 dB
+		 * lower noise floor at 24 than at 23 for the same gain. Same gain, less
+		 * hiss, so it is strictly the better choice. */
+		if (best_err < 0 || err <= best_err) {
+			best_err = err;
+			best = i;
+		}
+	}
+	return (uint8_t)best;
+}
+
+/* Whole-dB wrappers. Lossy: see the header. Rounds to nearest, away from zero. */
+int reac_headamp_sens_db(uint8_t value, int pad_on)
+{
+	int c = reac_headamp_sens_cdb(value, pad_on);
+	return (c >= 0) ? (c + 50) / 100 : -((-c + 50) / 100);
+}
+
+uint8_t reac_headamp_sens_value(int db, int pad_on)
+{
+	return reac_headamp_sens_value_cdb(db * 100, pad_on);
+}
