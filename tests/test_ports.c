@@ -8,6 +8,7 @@
  * NAMES a model, the table DECLARES its geometry, and both read the same wire
  * bytes. A slot code nobody has captured must refuse, never guess. */
 #include <reac/reac_ports.h>
+#include <reac/reac_ctrlblk.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -55,11 +56,24 @@ int main(void)
 	CHK(reac_ports_parse(unnamed, &pt) == 0);
 	CHK(pt.in_ch == 32 && pt.out_ch == 8);
 
-	/* Not a config-announce block: refuse. */
+	/* Not a config-announce block: refuse. WHAT MAKES IT ONE is the OPCODE at
+	 * block[4], not the length at block[2:4] — this test used to shorten the
+	 * length and call the result a heartbeat, which is the same mistake the
+	 * parser made. Move the opcode and the block stops being a declaration; move
+	 * the length and it is a declaration with a different body. */
 	uint8_t wrong[32];
 	memcpy(wrong, BLK_S0808, 32);
-	wrong[3] = 0x19;                          /* 01 03 0019 = master HB, not config */
+	wrong[4] = REAC_OP_SLOT_MAP;              /* the slot-record window */
 	CHK(reac_ports_parse(wrong, &pt) == -1);
+	memcpy(wrong, BLK_S0808, 32);
+	wrong[0] = REAC_LINK_RECORD;              /* right opcode, wrong link */
+	CHK(reac_ports_parse(wrong, &pt) == -1);
+	memcpy(wrong, BLK_S0808, 32);
+	wrong[1] = REAC_SEG_FIRST;                /* a fragment declares nothing */
+	CHK(reac_ports_parse(wrong, &pt) == -1);
+	memcpy(wrong, BLK_S0808, 32);
+	wrong[3] = 0x19;                          /* only the LENGTH moved */
+	CHK(reac_ports_parse(wrong, &pt) == 0);
 
 	/* A slot code nobody has captured: refuse the whole table, never guess. */
 	memcpy(wrong, BLK_S0808, 32);
