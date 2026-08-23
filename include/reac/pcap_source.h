@@ -16,7 +16,19 @@
 
 struct pcap_source {
 	FILE *f;
-	int swapped;   /* byte-swap per-packet headers */
+	int swapped;        /* byte-swap per-packet headers                     */
+	uint32_t last_orig_len;  /* origlen of the record pcap_source_next just
+	                          * returned. A CAPTURE TAKEN WITH A SNAPLEN
+	                          * HANDS BACK A SHORT BUFFER THAT IS NOT A SHORT
+	                          * FRAME: several corpus captures ran at snaplen
+	                          * 64/128/200/400, and a truncated record's caplen
+	                          * can land on 52+36n by coincidence, so it reaches
+	                          * a frame decoder and fails there for a reason
+	                          * that has nothing to do with the protocol. Every
+	                          * pcap record carries caplen AND origlen; the
+	                          * reader kept only caplen, so a caller could not
+	                          * tell the two apart. Compare this against the
+	                          * return value: greater means truncated.        */
 };
 
 /* Open a pcap file. Returns 0 on success, -1 on error. */
