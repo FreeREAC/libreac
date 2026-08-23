@@ -80,6 +80,12 @@ _Static_assert(REAC_HEADAMP_MAX_CH == 0x30,
                "REAC_HEADAMP_MAX_CH has drifted from protocol-facts.yaml HEADAMP_CH_SPAN");
 _Static_assert(REAC_HEADAMP_NPARAMS == 3,
                "REAC_HEADAMP_NPARAMS has drifted from protocol-facts.yaml HEADAMP_SWEEP_RECORDS_PER_CH");
+_Static_assert(REAC_HEADAMP_SENS_REF_CDB == -1000,
+               "REAC_HEADAMP_SENS_REF_CDB has drifted from protocol-facts.yaml HEADAMP_SENS_REF_CDB");
+_Static_assert(REAC_HEADAMP_SENS_STEP_CDB == 100,
+               "REAC_HEADAMP_SENS_STEP_CDB has drifted from protocol-facts.yaml HEADAMP_SENS_STEP_CDB");
+_Static_assert(REAC_HEADAMP_PAD_CDB == 2000,
+               "REAC_HEADAMP_PAD_CDB has drifted from protocol-facts.yaml HEADAMP_PAD_CDB");
 _Static_assert(REAC_PORTS_TABLE_OFF == 8,
                "REAC_PORTS_TABLE_OFF has drifted from protocol-facts.yaml PORTS_TABLE_OFF");
 _Static_assert(REAC_PORTS_TABLE_SLOTS == 12,
@@ -93,6 +99,6 @@ _Static_assert(REAC_PORT_SLOT_IN == 0x02,
 _Static_assert(REAC_PORT_SLOT_EMPTY == 0x03,
                "REAC_PORT_SLOT_EMPTY has drifted from protocol-facts.yaml PORT_SLOT_EMPTY");
 
-#define REAC_FACTS_ASSERTIONS 36
+#define REAC_FACTS_ASSERTIONS 39
 
 #endif /* REAC_FACTS_ASSERT_H */
