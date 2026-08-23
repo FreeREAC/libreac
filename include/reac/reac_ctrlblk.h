@@ -509,44 +509,75 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame);
  * phantom/pad/SENS, one record per allocated channel per parameter); group B is
  * the fixed six-record constant (marker 12 11, TAG 05 00). Returns the row count
  * written (REAC_GRANT_SWEEP_LEN(width)), or -1. */
-/* ---- the three head-amp granularities ------------------------------------
- * A head-amp record is {CH, PARAM, VALUE} and looks uniform. It is not: the
- * three things it can carry are addressed at three DIFFERENT resolutions, and
- * libreac used to express none of them.
+/* ---- WHAT IS PER CHANNEL, WHAT IS PER FOUR, AND WHAT IS DISPUTED ----------
  *
- *   SENS      per channel        ch >> 0
- *   the flags per channel        ch >> 0
- *   PHANTOM   per group of FOUR  ch >> 2
- *   readback  per group of EIGHT ch >> 3   (a different axis from phantom)
+ * "Head-amp granularity" used to be one sentence here, and it had a wire fact
+ * and a hardware fact folded together. They are separate questions and only one
+ * of them is settled.
  *
- * So only a record whose channel is a multiple of four carries the phantom group
- * byte: a record to 0x24 moves group 9, one to 0x27 moves nothing at all. A
- * consumer sweeping phantom per channel writes three records in four into the
- * void — silently, because the bytes and both checksums are correct and the box
- * acknowledges. Measured on our own wire: sixteen phantom records for channels
- * 0x20..0x2f, of which four did anything.
+ * THE WIRE IS PER CHANNEL, ALL THREE PARAMETERS. A DT1 head-amp record is
+ * {CH, PARAM, VALUE} and addresses exactly one channel. Every real desk sweep is
+ * one contiguous pass over the box's declared width with all three parameters
+ * per channel — 24 records for an S-0808, 48 for an S-1608, 96 for an S-4000S.
+ * No desk addresses a bank, splits a sweep or repeats one, across three desk
+ * generations and 31 of 47 captures. An emitter that skipped records would stop
+ * matching the captures.
  *
- * THAT IS NOT A BUG IN A SWEEP. Every real desk sweep is one contiguous pass over
- * the box's full declared width with all three parameters per channel — 24
- * records for an S-0808, 48 for an S-1608 — so the no-ops are what a real console
- * emits too, and an emitter that "optimised" them away would stop matching the
- * captures. The defect is only ever in a consumer that BELIEVES a per-channel
- * phantom write took effect. Hence a predicate rather than a rewrite: ask.
+ * THE SLOT MAP IS PER SLOT, EVERY SLOT. The box's own per-slot table has stride
+ * 10 and carries the value byte and three flag bits for each of 0x00..0x2f. No
+ * entry in it is shared between channels.
  *
- * The readback nibble and the phantom command are deliberately named apart. They
- * are not the same axis and collapsing them is how a binding gets this wrong.
- * [Granularities: EVIDENCED — executed firmware trace.] */
-#define REAC_HEADAMP_GRAN_SENS_SHIFT     0
-#define REAC_HEADAMP_GRAN_FLAGS_SHIFT    0
-#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT  2
-#define REAC_HEADAMP_GRAN_READBACK_SHIFT 3
+ * THE PER-FOUR FIELD IS THE INVENTORY CELL, NOT PHANTOM. What divides by four in
+ * this protocol is the config-announce port table: twelve cells of four channels
+ * spanning the 48-channel fabric, and the slot record's HIGH NIBBLE, which
+ * carries that cell's code. It is a declaration of what a group of four physical
+ * connectors IS — REAC_PORTS_CH_PER_SLOT, in reac_ports.h — and it is not a
+ * head-amp parameter. Reading it as "phantom, 4 ch/group" is how the two got
+ * folded together.
+ *
+ * PHANTOM'S HARDWARE ACTUATION GRANULARITY IS OPEN, and libreac will not answer
+ * as if it were not. Two readings are live and neither is retired:
+ *
+ *   TRACE  ch >> 2, per group of four. An executed trace, and a rig measurement
+ *          that read sixteen phantom records to 0x20..0x2f as four doing
+ *          anything.
+ *   STATIC ch >> 0, per channel. The per-slot table read out of the box image
+ *          has an addressable flag for every one of 0x00..0x2f, and the field
+ *          that divides by four is the inventory cell above.
+ *
+ * The two agree on a channel that is a multiple of four and disagree everywhere
+ * else, so that is exactly where the API answers and where it refuses. A caller
+ * that needs the answer has to close the dispute, not read a constant.
+ *
+ * The readback nibble is a THIRD axis, per eight, and is named apart because
+ * collapsing it into either of the above is how a binding gets this wrong.
+ */
+#define REAC_HEADAMP_GRAN_SENS_SHIFT     0   /* EVIDENCED */
+#define REAC_HEADAMP_GRAN_FLAGS_SHIFT    0   /* EVIDENCED */
+#define REAC_HEADAMP_GRAN_READBACK_SHIFT 3   /* EVIDENCED */
 
-/* The group a channel's PARAM actually addresses. */
+/* The two live readings of phantom's actuation granularity. There is
+ * deliberately no unqualified REAC_HEADAMP_GRAN_PHANTOM_SHIFT: a caller cannot
+ * pick a side by accident, and neither can a sweep. */
+#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT_TRACE   2
+#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT_STATIC  0
+
+/* Returned where the two readings disagree. Distinct from 0, which would mean
+ * "the write lands nowhere" — a claim this library is not entitled to make —
+ * and from -1, which means the parameter is not a head-amp parameter at all. */
+#define REAC_HEADAMP_GRAN_DISPUTED (-2)
+
+/* The group a channel's PARAM addresses, or REAC_HEADAMP_GRAN_DISPUTED for
+ * phantom, or -1 for a param outside the three. */
 int reac_headamp_group_of(uint8_t ch, uint8_t param);
 
-/* Does a record addressed to `ch` actually carry `param`? 1 yes, 0 no (the write
- * lands nowhere), -1 for a param outside the three. The one call that stops a
- * caller open-coding a shift it has to remember. */
+/* Does a record addressed to `ch` carry `param` to the hardware?
+ *   1                            yes
+ *   REAC_HEADAMP_GRAN_DISPUTED   phantom off a group-of-four anchor: the two
+ *                                readings disagree and nobody knows
+ *   -1                           not a head-amp parameter
+ * Never 0. The one call that stops a caller open-coding a shift it has to
+ * remember, and stops it believing a per-channel phantom write took effect. */
 int reac_headamp_record_carries(uint8_t ch, uint8_t param);
 
 /* Three head-amp parameters per channel. A protocol bound, so it lives with the
