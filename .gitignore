@@ -23,3 +23,9 @@ test_facts
 *.d
 corpus_check
 test_ctrl
+headamp_trace
+wire_census
+ctrl_delta
+upstream_watch
+slotmap_watch
+seq_gaps
