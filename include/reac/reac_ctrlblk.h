@@ -118,9 +118,11 @@ int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
  *
  * After link-up a desk pushes its scene to the box as one bounded transfer:
  *
- *   op-0101 header  — declares the TOTAL (0x22c8) and carries the body's first 24 B
- *   op-0100 chunk   — 26 B of body, x341
- *   op-0102 final   — the last 14 B
+ *   FIRST  frame  — declares the TOTAL (0x22c8) and carries the body's first 24 B
+ *   MIDDLE frame  — 26 B of body, x341
+ *   LAST   frame  — the last 14 B
+ *
+ * All three are link 1, opcode 0x00. What changes is the SEGMENT byte.
  *
  *   24 + 341*26 + 14 = 8904 = 0x22c8
  *
@@ -136,19 +138,19 @@ int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
  * in 0.680 s, the box answers 01 03 0010 once the transfer completes, and only
  * then does the desk open its grant window. */
 #define REAC_SCENE_BYTES        8904   /* == 0x22c8, the declared total          */
-#define REAC_SCENE_HEAD_BYTES     24   /* body bytes carried by the op-0101      */
-#define REAC_SCENE_CHUNK_BYTES    26   /* body bytes per op-0100 (its 0x001a)    */
-#define REAC_SCENE_TAIL_BYTES     14   /* body bytes carried by the op-0102      */
-#define REAC_SCENE_CHUNKS        341   /* op-0100 count for a whole body         */
+#define REAC_SCENE_HEAD_BYTES     24   /* body bytes in the FIRST frame          */
+#define REAC_SCENE_CHUNK_BYTES    26   /* body bytes per MIDDLE frame            */
+#define REAC_SCENE_TAIL_BYTES     14   /* body bytes in the LAST frame           */
+#define REAC_SCENE_CHUNKS        341   /* MIDDLE count for a whole body          */
 #define REAC_SCENE_STEPS   (1 + REAC_SCENE_CHUNKS + 1)
 
 /* WHAT THE BOX VALIDATES. The state-4 commit does three four-byte compares and
  * promotes NOTHING if any one misses, while the transfer still looks complete
- * from outside. "1234" rides the header; SYSP and SCEN ride op-0100 chunks 32
- * and 33, so a body whose MIDDLE chunks are wrong fails silently. */
-#define REAC_SCENE_TAG_ID_OFF    0x000   /* "1234" — rides the op-0101 header  */
-#define REAC_SCENE_TAG_SYSP_OFF  0x368   /* "SYSP" — rides op-0100 chunk 32    */
-#define REAC_SCENE_TAG_SCEN_OFF  0x37c   /* "SCEN" — rides op-0100 chunk 33    */
+ * from outside. "1234" rides the FIRST frame; SYSP and SCEN ride MIDDLE frames
+ * 32 and 33, so a body whose middle is wrong fails silently. */
+#define REAC_SCENE_TAG_ID_OFF    0x000   /* "1234" — rides the FIRST frame     */
+#define REAC_SCENE_TAG_SYSP_OFF  0x368   /* "SYSP" — rides MIDDLE frame 32     */
+#define REAC_SCENE_TAG_SCEN_OFF  0x37c   /* "SCEN" — rides MIDDLE frame 33     */
 
 /* The master's own MAC sits INSIDE the body. On-wire identity must equal the L2
  * source, so a master replaying a recovered body substitutes its own. */
@@ -461,9 +463,10 @@ size_t reac_ctrl_build_coldconnect_001a(uint8_t *out, const uint8_t master[6],
                                         const uint8_t src[6], uint16_t counter,
                                         int n_ch, float *const *planar, int ns);
 
-/* ---- Head-amp source control (op 04 03, record TAG 01 01) ----
+/* ---- Head-amp source control (link 4 SINGLE, record TAG 0x0101) ----
  * Ground-truthed on a live M-200 driving an S-0808 + S-1608 (reac-captures/
- * m200-headamp-re/DECODE.md, 2026-07-17): op 04 03 is a RECORD CONTAINER, and
+ * m200-headamp-re/DECODE.md, 2026-07-17): a link-4 SINGLE is a RECORD
+ * CONTAINER, and
  * the record after the 12 12 marker is TAG(2) DATA(n) CKSUM(1). TAG 01 01 is
  * the console's preamp command, DATA = CH PARAM VALUE. CH is the WIRE channel:
  * model_base + (box_input - 1), model_base S-0808/S-4000S 0x00, S-1608 0x20.
