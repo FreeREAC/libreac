@@ -4,17 +4,20 @@
 /* Bind libreac's constants to the protocol schema, and hold the head-amp
  * granularities to what is actually known about each of them.
  *
- * reac_facts_assert.h is GENERATED in FreeREAC/reac-protocol from
- * spec/protocol-facts.yaml, where every constant carries its evidence grade. It
- * is copied here rather than adopted wholesale: taking the full reac_facts.h in
- * place of our hand-written #defines is a real change and this migration is not
- * finished. The assertions cost one include and fail BY NAME on any drift, which
- * is the part worth having today.
+ * reac_facts_assert.h binds libreac's own macros to spec/protocol-facts.yaml
+ * in FreeREAC/reac-protocol; see that header for what it checks and how it
+ * gets here (generated at build time when the schema is reachable, the
+ * committed fallback otherwise). The assertions cost one include and fail BY
+ * NAME on any drift, which is the part worth having today — taking the full
+ * reac_facts.h in place of our hand-written #defines is a real change and
+ * this migration is not finished.
  *
- * When the schema moves, re-copy this file. It is the schema's, not ours — the
- * header says so itself. */
+ * Angle brackets, not quotes: the Makefile selects which reac_facts_assert.h
+ * this build uses via -I (build/, freshly generated, or tests/, the shipped
+ * fallback), and a quoted include would find tests/reac_facts_assert.h next
+ * to this file regardless of -I, silently defeating that selection. */
 
-#include "reac_facts_assert.h"
+#include <reac_facts_assert.h>
 #include <stdio.h>
 
 #define CHK(x) do { if (!(x)) { \
