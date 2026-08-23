@@ -19,3 +19,5 @@ test_decode
 test_ports
 *.o
 *.a
+test_facts
+*.d
