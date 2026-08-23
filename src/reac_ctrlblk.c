@@ -69,17 +69,26 @@ int reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n)
 }
 
 /* ---- the scene push ------------------------------------------------------
- * Every step is the same 34-byte [type|block] shape: cd ea, the 2-byte op, the
- * BE payload length, one reserved 0x00, then the payload, checksum last.
+ * Every step is the same 34-byte [type|block] shape: cd ea, then the block's
+ * four header fields — link, segment, length, opcode — then the payload, block
+ * checksum last. The whole transfer is ONE opcode (0x00, bulk) on link 1; what
+ * changes step to step is the SEGMENT byte, which is why there is no op field
+ * here. The box builds it the same way, from the same four fields.
  *
- * The length a step declares is its PAYLOAD length, and those lengths are
- * exactly what sum to the declared total — so the three sizes and the total are
- * one fact, not four. A body whose lengths do not sum to what the header
- * declares leaves the box waiting for bytes that never come. */
-#define SCENE_OP_OFF          2   /* [2:4]  the 2-byte op                */
-#define SCENE_LEN_OFF         4   /* [4:6]  BE payload length            */
-#define SCENE_PAY_OFF         7   /* [7:..] payload ([6] stays reserved) */
-#define SCENE_HEAD_TOTAL_OFF  7   /* header only: BE total, payload at [9] */
+ * The length a step declares is its PAYLOAD length — the one place block[2:4]
+ * counts payload rather than counting from block[4] — and those lengths are
+ * exactly what sum to the declared total, so the three sizes and the total are
+ * one fact, not four. A body whose lengths do not sum to what the first frame
+ * declares leaves the box waiting for bytes that never come.
+ *
+ * Offsets are into the 34-byte [type|block] template, so block[k] is at k+2. */
+#define SCENE_LINK_OFF        2   /* block[0]   the link                       */
+#define SCENE_SEG_OFF         3   /* block[1]   FIRST / MIDDLE / LAST          */
+#define SCENE_LEN_OFF         4   /* block[2:4] BE payload length              */
+#define SCENE_OPCODE_OFF      6   /* block[4]   0x00, bulk, on every step      */
+#define SCENE_PAY_OFF         7   /* block[5]   payload, MIDDLE and LAST       */
+#define SCENE_HEAD_TOTAL_OFF  7   /* block[5:7] the total; FIRST's payload at
+                                   * block[7], two bytes further on           */
 
 int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
                                int step)
@@ -93,7 +102,9 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 	blk[0] = 0xcd; blk[1] = 0xea;
 
 	if (step == 0) {
-		blk[SCENE_OP_OFF] = 0x01; blk[SCENE_OP_OFF + 1] = 0x01;
+		blk[SCENE_LINK_OFF] = REAC_LINK_CTRL;
+		blk[SCENE_SEG_OFF]  = REAC_SEG_FIRST;
+		blk[SCENE_OPCODE_OFF] = REAC_OP_BULK;
 		blk[SCENE_LEN_OFF]     = (uint8_t)(REAC_SCENE_HEAD_BYTES >> 8);
 		blk[SCENE_LEN_OFF + 1] = (uint8_t)(REAC_SCENE_HEAD_BYTES & 0xff);
 		blk[SCENE_HEAD_TOTAL_OFF]     = (uint8_t)(REAC_SCENE_BYTES >> 8);
@@ -102,7 +113,9 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 	} else if (step <= REAC_SCENE_CHUNKS) {
 		size_t off = REAC_SCENE_HEAD_BYTES +
 		             (size_t)(step - 1) * REAC_SCENE_CHUNK_BYTES;
-		blk[SCENE_OP_OFF] = 0x01; blk[SCENE_OP_OFF + 1] = 0x00;
+		blk[SCENE_LINK_OFF] = REAC_LINK_CTRL;
+		blk[SCENE_SEG_OFF]  = REAC_SEG_MIDDLE;
+		blk[SCENE_OPCODE_OFF] = REAC_OP_BULK;
 		blk[SCENE_LEN_OFF]     = (uint8_t)(REAC_SCENE_CHUNK_BYTES >> 8);
 		blk[SCENE_LEN_OFF + 1] = (uint8_t)(REAC_SCENE_CHUNK_BYTES & 0xff);
 		memcpy(blk + SCENE_PAY_OFF, body + off, REAC_SCENE_CHUNK_BYTES);
@@ -110,7 +123,7 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 		/* The final chunk fills the SAME 26-byte payload slot as every other one
 		 * but declares only REAC_SCENE_TAIL_BYTES of it as body — the transfer
 		 * ends mid-slot. The 12 bytes behind the body are a fixed trailer, not
-		 * desk state: identical in every op-0102 of both the M-200i and the M-300
+		 * desk state: identical in every LAST frame of both the M-200i and the M-300
 		 * establish captures (3/3 each), so they are reproduced rather than
 		 * zeroed. Zeroing still satisfies the declared length, but this box has
 		 * punished "functionally equivalent" before. */
@@ -119,7 +132,9 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 			0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
 		};
 		size_t off = REAC_SCENE_BYTES - REAC_SCENE_TAIL_BYTES;
-		blk[SCENE_OP_OFF] = 0x01; blk[SCENE_OP_OFF + 1] = 0x02;
+		blk[SCENE_LINK_OFF] = REAC_LINK_CTRL;
+		blk[SCENE_SEG_OFF]  = REAC_SEG_LAST;
+		blk[SCENE_OPCODE_OFF] = REAC_OP_BULK;
 		blk[SCENE_LEN_OFF]     = (uint8_t)(REAC_SCENE_TAIL_BYTES >> 8);
 		blk[SCENE_LEN_OFF + 1] = (uint8_t)(REAC_SCENE_TAIL_BYTES & 0xff);
 		memcpy(blk + SCENE_PAY_OFF, body + off, REAC_SCENE_TAIL_BYTES);
@@ -199,9 +214,42 @@ uint8_t reac_headamp_sens_value(int db, int pad_on)
 	return reac_headamp_sens_value_cdb(db * 100, pad_on);
 }
 
+static const char *const KIND_NAME[] = {
+	"none", "filler", "scene_transfer", "master_hb", "master_announce",
+	"grant", "headamp", "box_hb", "split_announce", "config_announce",
+	"group_map", "record_fragment", "link2", "unknown_ctrl",
+};
+
+const char *reac_ctrl_kind_name(enum reac_ctrl_kind kind)
+{
+	unsigned i = (unsigned)kind;
+	if (i >= sizeof KIND_NAME / sizeof KIND_NAME[0])
+		return "?";
+	return KIND_NAME[i];
+}
+
+/* The link-1 opcodes, in one place, so the classifier reads as the box's own
+ * dispatch does and a new opcode is a row rather than another else-if. */
+static enum reac_ctrl_kind kind_of_link1(uint8_t opcode)
+{
+	switch (opcode) {
+	case REAC_OP_BULK:       return REAC_CTRL_SCENE_TRANSFER;
+	case REAC_OP_SLOT_MAP:   return REAC_CTRL_MASTER_HB;
+	case REAC_OP_GROUP_MAP:  return REAC_CTRL_GROUP_MAP;
+	case REAC_OP_BOX_HB:     return REAC_CTRL_BOX_HB;
+	case REAC_OP_DECL:
+	case REAC_OP_DECL_ALT:
+	case REAC_OP_DECL_OTHER: return REAC_CTRL_CONFIG_ANNOUNCE;
+	default:                 return REAC_CTRL_UNKNOWN_CTRL;
+	}
+}
+
 enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
                                     struct reac_ctrl_parsed *out)
 {
+	struct reac_ctrl_parsed scratch;
+	if (!out)
+		out = &scratch;      /* the header promises NULL is allowed */
 	memset(out, 0, sizeof *out);
 	if (len < AUDIO_OFF || frame[12] != 0x88 || frame[13] != 0x19) {
 		out->kind = REAC_CTRL_NONE;
@@ -211,17 +259,23 @@ enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
 	memcpy(out->src, frame + 6, 6);
 	out->is_broadcast = (memcmp(frame, "\xff\xff\xff\xff\xff\xff", 6) == 0);
 	out->counter = (uint16_t)(frame[CNT_OFF] | (frame[CNT_OFF + 1] << 8));
-	out->op0 = frame[18]; out->op1 = frame[19];
-	out->op_len = (uint16_t)((frame[20] << 8) | frame[21]);
-	out->sel = frame[22];
-	out->sel2 = frame[23];
+
+	const uint8_t *block = frame + REAC_CTRL_BLOCK_OFF;
+	out->link    = block[0];
+	out->seg     = block[1];
+	out->blk_len = (uint16_t)((block[2] << 8) | block[3]);
+	out->opcode  = block[4];
 
 	const uint8_t t0 = frame[TYPE_OFF], t1 = frame[TYPE_OFF + 1];
 	if (t0 == 0x00 && t1 == 0x00) {
 		out->kind = REAC_CTRL_FILLER;
-	} else if (t0 == 0xcf && t1 == 0xea) {
+		return out->kind;
+	}
+	if (t0 == 0xcf && t1 == 0xea) {
 		out->kind = REAC_CTRL_MASTER_ANNOUNCE;
-	} else if (t0 == 0xce && t1 == 0xea) {
+		return out->kind;
+	}
+	if (t0 == 0xce && t1 == 0xea) {
 		/* A splitter's announce — the split role's own frame type, unicast to
 		 * the master ~1/s, block-checksummed like every announce (reac-aes67
 		 * REAC-PROTOCOL.md §6/§10.1, source-derived from reacdriver). Never
@@ -229,35 +283,49 @@ enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
 		 * names the kind and nothing more — no field decoding until a real
 		 * capture grounds the layout. */
 		out->kind = REAC_CTRL_SPLIT_ANNOUNCE;
-	} else if (t0 == 0xcd && t1 == 0xea) {
-		if (out->op0 == 0x04 && out->op1 == 0x03) {
-			/* op 04 03 is a RECORD CONTAINER, not one opcode: after the
-			 * 12 12 marker at [32] comes a 2-byte TAG. TAG 01 00 = the
-			 * connect-grant; TAG 01 01 = a HEAD-AMP record (CH PARAM
-			 * VALUE) — a live M-200 emits ~628 head-amp records per 14
-			 * grants, so a joining slave must NOT read a preamp
-			 * knob-turn as its grant. Every other tag (03 02, 05 00,
-			 * 00 00 — the cold-connect inventory variants) stays GRANT
-			 * as before (ground truth: m200-headamp-re/DECODE.md). */
-			if (frame[32] == 0x12 && frame[33] == 0x12 &&
-			    frame[34] == 0x01 && frame[35] == 0x01) {
-				out->kind = REAC_CTRL_HEADAMP;
-				out->ch    = frame[36];
-				out->param = frame[37];
-				out->value = frame[38];
-			} else {
-				out->kind = REAC_CTRL_GRANT;
-			}
-		} else if (out->op0 == 0x01 && out->op1 == 0x03 && out->op_len == 0x0019)
-			out->kind = REAC_CTRL_MASTER_HB;       /* master established heartbeat */
-		else if (out->op0 == 0x01 && out->op1 == 0x03 && out->op_len == 0x0001)
-			out->kind = REAC_CTRL_BOX_HB;          /* a box keep-alive */
-		else if (out->op0 == 0x01)
-			out->kind = REAC_CTRL_PROBE;           /* master hunting (sub-states) */
-		else
-			out->kind = REAC_CTRL_UNKNOWN_CTRL;
-	} else {
+		return out->kind;
+	}
+	if (t0 != 0xcd || t1 != 0xea) {
 		out->kind = REAC_CTRL_UNKNOWN_CTRL;
+		return out->kind;
+	}
+
+	switch (out->link) {
+	case REAC_LINK_CTRL:
+		out->kind = kind_of_link1(out->opcode);
+		break;
+	case REAC_LINK_SECOND:
+		out->kind = REAC_CTRL_LINK2;
+		break;
+	case REAC_LINK_RECORD:
+		if (out->seg != REAC_SEG_SINGLE) {
+			/* HALF a DT1 record. Its body concatenates with the other
+			 * fragment's and the SysEx checksum closes only across both, so
+			 * nothing inside it is read here: a tag lifted from a first
+			 * fragment is a tag read out of a truncated record. */
+			out->kind = REAC_CTRL_RECORD_FRAGMENT;
+			break;
+		}
+		/* A record container. block[14] is the DT1 model-id low byte, block[15]
+		 * the command and block[16:18] the register page. TAG 0x0101 is the
+		 * console's preamp command — a live M-200 emits ~628 head-amp records
+		 * per 14 grants, so a joining slave must not read a knob-turn as its
+		 * grant. Every other tag (the join grant, box-ready, identity, the head
+		 * mark) stays GRANT. */
+		out->dt1_tag = (uint16_t)((block[16] << 8) | block[17]);
+		if (block[14] == REAC_DT1_MODEL_LO && block[15] == REAC_DT1_CMD_DT1 &&
+		    out->dt1_tag == REAC_DT1_TAG_HEADAMP) {
+			out->kind  = REAC_CTRL_HEADAMP;
+			out->ch    = block[18];
+			out->param = block[19];
+			out->value = block[20];
+		} else {
+			out->kind = REAC_CTRL_GRANT;
+		}
+		break;
+	default:
+		out->kind = REAC_CTRL_UNKNOWN_CTRL;
+		break;
 	}
 	return out->kind;
 }
@@ -292,7 +360,7 @@ size_t reac_ctrl_box_frame_len(int n_ch)
  * a MASTER (we ARE a mixer) the box's announce on the wire is the truth and this
  * matrix is only a default. Each row is a real box's captured config-announce
  * (selector byte = displayed model family; sum mod 256 == 0 with its trailing
- * check byte), plus, for the 0x84 family, the ASCII name frame that names the
+ * check byte), plus, for the 0x84 family, the identity record that names the
  * exact model. All blocks byte-matched to matrix-m200/m5000-s1608 / -s0808. */
 static const struct reac_box_model BOX_MODELS[] = {
 	{ .token = "s1608", .display = "S-1608 (16 in / 8 out)", .in_ch = 16, .out_ch = 8,
@@ -301,7 +369,7 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x02, 0x02, 0x02, 0x02, 0x01, 0x01, 0x03, 0x03,
 		0x03, 0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4c },
-	  .has_name = 0,     /* 0x82 family: named by selector, no ASCII frame */
+	  .has_identity_record = 0,   /* named by the declaration's constant */
 	  .cc0014 = {
 		0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe,
 		0x0f, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
@@ -322,15 +390,15 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x15, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
 		0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02,
 		0x00, 0x03, 0x00, 0x02, 0x6e, 0xf7, 0x00, 0xf4 },
-	  .has_extra = 0 },  /* S-1608 sends no 0402000d */
+	},
 	{ .token = "s0808", .display = "S-0808 (8 in / 8 out)", .in_ch = 8, .out_ch = 8,
 	  .config_block = {
 		0x01, 0x03, 0x00, 0x10, 0x84, 0x00, 0x00, 0x00,
 		0x02, 0x02, 0x01, 0x01, 0x03, 0x03, 0x03, 0x03,
 		0x03, 0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4a },
-	  .has_name = 1,     /* 0x84 family: ASCII name frame gives the exact model */
-	  .name_block = {
+	  .has_identity_record = 1,   /* the 0x84 constant needs the name */
+	  .identity_first = {
 		0x04, 0x01, 0x00, 0x1b, 0x00, 0x02, 0x00, 0xfe,
 		0x16, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
 		0x05, 0x00, 0x10, 0x00, 0x01, 0x53, 0x2d, 0x30,   /* "S-0" */
@@ -355,14 +423,13 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x15, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
 		0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x01,
 		0x00, 0x00, 0x00, 0x00, 0x74, 0xf7, 0x00, 0xf4 },
-	  .has_extra = 1,     /* S-0808 also sends cdea 04 02 000d */
-	  .extra_block = {
+	  .identity_last = {
 		0x04, 0x02, 0x00, 0x0d, 0x00, 0x02, 0x00, 0xfe,
 		0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1a,
 		0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd4 } },
-	/* S-4000S — also 0x84 family but sends NO name frame (0x84's DEFAULT desk
-	 * label IS "S-4000S") and NO 0402000d. Its config descriptor + 0016/001a
+	/* S-4000S — also 0x84 family but sends NO identity record (0x84's DEFAULT
+	 * desk label IS "S-4000S"). Its config descriptor + 0016/001a
 	 * inventory are distinct. Byte-verified from a real S-4000S cold boot on an
 	 * M-5000 (s4000s-coldboot-m5000-2026-07-12, box c4:06:80). NOTE: captured on
 	 * OHRCA (frames +2 CRC trailer); the control blocks below are generation-
@@ -373,7 +440,7 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
 		0x01, 0x01, 0x03, 0x03, 0x00, 0x03, 0x00, 0x00,
 		0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4c },
-	  .has_name = 0,     /* 0x84 DEFAULT name is "S-4000S" — no ASCII frame */
+	  .has_identity_record = 0,   /* the 0x84 constant already reads S-4000S */
 	  .cc0014 = {
 		0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe,
 		0x0f, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
@@ -394,7 +461,7 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x15, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
 		0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02,
 		0x00, 0x01, 0x00, 0x02, 0x70, 0xf7, 0x00, 0xf4 },
-	  .has_extra = 0 },  /* S-4000S sends no 0402000d */
+	},
 };
 
 const struct reac_box_model *reac_box_model_table(size_t *count)
@@ -426,16 +493,18 @@ const struct reac_box_model *reac_box_model_by_channels(int in_ch)
 const struct reac_box_model *reac_ctrl_identify_box(const uint8_t *frame, size_t len)
 {
 	/* Recognize the connected box's MODEL from its config-announce
-	 * (cdea 01 03 0010) by matching the 32-byte descriptor block against the
+	 * (link 1, opcode 0x82 / 0x84 / 0x80) by matching the 32-byte descriptor
+	 * block against the
 	 * fixed matrix. Each row's config_block is unique (selector + descriptor:
 	 * S-1608 0x82; S-0808 / S-4000S both 0x84 but distinct descriptors), so an
 	 * exact block match uniquely names the model. NULL = not a config-announce,
 	 * or no known model -> caller falls back to the frame's own descriptor/width. */
 	if (len < REAC_CTRL_BLOCK_OFF + 32)               return NULL;
-	if (frame[12] != 0x88 || frame[13] != 0x19)       return NULL;   /* 0x8819    */
-	if (frame[16] != 0xcd || frame[17] != 0xea)       return NULL;   /* cdea      */
-	if (frame[18] != 0x01 || frame[19] != 0x03 ||
-	    frame[20] != 0x00 || frame[21] != 0x10)       return NULL;   /* 01 03 0010 */
+	if (frame[12] != 0x88 || frame[13] != 0x19)       return NULL;   /* 0x8819 */
+	if (frame[16] != 0xcd || frame[17] != 0xea)       return NULL;   /* cdea   */
+	struct reac_ctrl_parsed p;
+	if (reac_ctrl_parse(frame, len, &p) != REAC_CTRL_CONFIG_ANNOUNCE)
+		return NULL;
 	size_t n; const struct reac_box_model *t = reac_box_model_table(&n);
 	for (size_t i = 0; i < n; i++)
 		if (memcmp(frame + REAC_CTRL_BLOCK_OFF, t[i].config_block, 32) == 0)
@@ -464,12 +533,12 @@ enum ctrl_block {
 	BLOCK_DESC,       /* the 00 7a per-slot descriptor — upstream FILLER   */
 	BLOCK_TMPL,       /* the row's own literal template                    */
 	BLOCK_CONFIG,     /* matrix: config-announce   cdea 01 03 0010         */
-	BLOCK_NAME,       /* matrix: ASCII name frame  cdea 04 01 001b         */
+	BLOCK_IDENT_FIRST,/* matrix: identity record, link 4 FIRST fragment    */
 	BLOCK_CC0014,     /* matrix: cold-connect      cdea 04 03 0014         */
 	BLOCK_CC0013,     /* matrix: cold-connect      cdea 04 03 0013         */
 	BLOCK_CC0016,     /* matrix: cold-connect      cdea 04 03 0016         */
 	BLOCK_CC001A,     /* matrix: cold-connect      cdea 04 03 001a         */
-	BLOCK_EXTRA,      /* matrix: extra frame       cdea 04 02 000d         */
+	BLOCK_IDENT_LAST, /* matrix: identity record, link 4 LAST fragment     */
 };
 
 /* Frame width. A box->master frame is 50 + 36*width + 2; a master->box frame is
@@ -480,12 +549,12 @@ enum ctrl_len {
 	LEN_DOWNSTREAM,      /* REAC_FRAME_BYTES (master direction)            */
 };
 
-/* Which models emit this frame at all (the 0x84-family name frame, the S-0808
- * 0402000d): a row names the matrix flag, ctrl_gate_ok() reads it. */
+/* Which models emit this frame at all: a row names the matrix flag and
+ * ctrl_gate_ok() reads it. Both identity fragments name the SAME flag, because
+ * they are one record and half of it is not a message. */
 enum ctrl_gate {
 	GATE_ALWAYS = 0,
-	GATE_HAS_NAME,
-	GATE_HAS_EXTRA,
+	GATE_HAS_IDENTITY,
 };
 
 /* Checksum policy. CKSUM_RECORD means the block carries a Roland DT1 record,
@@ -536,12 +605,12 @@ static const uint8_t *ctrl_model_block(const struct reac_box_model *m,
 {
 	switch (b) {
 	case BLOCK_CONFIG: return m->config_block;
-	case BLOCK_NAME:   return m->name_block;
+	case BLOCK_IDENT_FIRST: return m->identity_first;
 	case BLOCK_CC0014: return m->cc0014;
 	case BLOCK_CC0013: return m->cc0013;
 	case BLOCK_CC0016: return m->cc0016;
 	case BLOCK_CC001A: return m->cc001a;
-	case BLOCK_EXTRA:  return m->extra_block;
+	case BLOCK_IDENT_LAST:  return m->identity_last;
 	default:           return NULL;   /* not a matrix block */
 	}
 }
@@ -549,8 +618,7 @@ static const uint8_t *ctrl_model_block(const struct reac_box_model *m,
 static int ctrl_gate_ok(const struct reac_box_model *m, enum ctrl_gate g)
 {
 	switch (g) {
-	case GATE_HAS_NAME:  return m->has_name;
-	case GATE_HAS_EXTRA: return m->has_extra;
+	case GATE_HAS_IDENTITY: return m->has_identity_record;
 	default:             return 1;
 	}
 }
@@ -668,17 +736,17 @@ enum ctrl_frame_id {
 	CTRL_UPSTREAM_FILLER,
 	CTRL_FLOOD_FILLER,
 	CTRL_CONFIG_ANNOUNCE,
-	CTRL_NAME_FRAME,
+	CTRL_IDENT_FIRST,
 	CTRL_COLDCONNECT,
 	CTRL_COLDCONNECT_0013,
 	CTRL_COLDCONNECT_0016,
 	CTRL_COLDCONNECT_001A,
-	CTRL_EXTRA_FRAME,
+	CTRL_IDENT_LAST,
 	CTRL_HEADAMP,
 	CTRL_FRAME_COUNT,
 };
 
-/* Rows CTRL_CONFIG_ANNOUNCE..CTRL_EXTRA_FRAME are the RECONSTRUCTED JOIN frames
+/* Rows CTRL_CONFIG_ANNOUNCE..CTRL_IDENT_LAST are the RECONSTRUCTED JOIN frames
  * (experimental, not byte-verified as a SEQUENCE): each block is byte-matched to
  * a real capture, but the order and timing a box emits them in is reconstructed
  * from REAC-CONNECTION-FSM.md, not observed end to end. */
@@ -712,13 +780,14 @@ static const struct ctrl_frame CTRL_FRAMES[CTRL_FRAME_COUNT] = {
 	[CTRL_CONFIG_ANNOUNCE] = {
 		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_CONFIG,
 		.cksum = CKSUM_BLOCK, .len = LEN_MODEL_WIDTH },
-	/* The ASCII model-name frame (cdea 04 01 001b) — required for the 0x84 family
-	 * so the desk shows the exact model ("S-0808") instead of the generic family
-	 * name. The 0x82 / S-1608 family is named by its selector alone and emits
-	 * nothing here. */
-	[CTRL_NAME_FRAME] = {
-		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_NAME,
-		.cksum = CKSUM_NONE, .len = LEN_MODEL_WIDTH, .gate = GATE_HAS_NAME },
+	/* The identity record's FIRST fragment: the DT1 preamble, TAG 0x0500 and the
+	 * ASCII model name, so the desk shows "S-0808" and not the family constant's
+	 * default label. Whoever emits this MUST emit CTRL_IDENT_LAST after it — the
+	 * SysEx checksum lives there and closes over both. Models named by the
+	 * declaration's constant alone emit neither. */
+	[CTRL_IDENT_FIRST] = {
+		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_IDENT_FIRST,
+		.cksum = CKSUM_NONE, .len = LEN_MODEL_WIDTH, .gate = GATE_HAS_IDENTITY },
 	/* The cold-connect escalation a real S-1608 sends: 0014 -> 0013 -> 0016 ->
 	 * 001a, each the model's 32-byte control block over LIVE audio. The block's
 	 * [38:66] region is frame[52:80] and is AUDIO, not device inventory — on a
@@ -752,12 +821,12 @@ static const struct ctrl_frame CTRL_FRAMES[CTRL_FRAME_COUNT] = {
 	[CTRL_COLDCONNECT_001A] = {
 		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_CC001A,
 		.cksum = CKSUM_NONE, .len = LEN_ARG_WIDTH, .audio = 1 },
-	/* The cdea 04 02 000d frame some models (S-0808) send during cold-connect —
-	 * part of the inventory the mixer reads to name the exact model. Emitted raw
-	 * (byte-verified, matrix-m200-s0808); models without it emit nothing. */
-	[CTRL_EXTRA_FRAME] = {
-		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_EXTRA,
-		.cksum = CKSUM_NONE, .len = LEN_MODEL_WIDTH, .gate = GATE_HAS_EXTRA },
+	/* The identity record's LAST fragment: the SysEx checksum that closes over
+	 * both fragments, and the f7 that ends the record. Emitted raw
+	 * (byte-verified, matrix-m200-s0808). */
+	[CTRL_IDENT_LAST] = {
+		.type0 = 0xcd, .type1 = 0xea, .block = BLOCK_IDENT_LAST,
+		.cksum = CKSUM_NONE, .len = LEN_MODEL_WIDTH, .gate = GATE_HAS_IDENTITY },
 	/* The console-side preamp command, master->box at the downstream width. The
 	 * ONLY row that carries a DT1 record — and naming CKSUM_RECORD is all it has
 	 * to do: ctrl_finish() stamps the inner checksum and then the outer one, in
@@ -799,10 +868,10 @@ size_t reac_ctrl_build_config_announce(uint8_t *out, const uint8_t master[6],
 	                 counter, in_ch, NULL, NULL, 0);
 }
 
-size_t reac_ctrl_build_name_frame(uint8_t *out, const uint8_t master[6],
-                                  const uint8_t src[6], uint16_t counter, int in_ch)
+size_t reac_ctrl_build_identity_first(uint8_t *out, const uint8_t master[6],
+                                      const uint8_t src[6], uint16_t counter, int in_ch)
 {
-	return ctrl_emit(out, &CTRL_FRAMES[CTRL_NAME_FRAME], master, src,
+	return ctrl_emit(out, &CTRL_FRAMES[CTRL_IDENT_FIRST], master, src,
 	                 counter, in_ch, NULL, NULL, 0);
 }
 
@@ -838,14 +907,14 @@ size_t reac_ctrl_build_coldconnect_001a(uint8_t *out, const uint8_t master[6],
 	                 counter, n_ch, NULL, planar, ns);
 }
 
-size_t reac_ctrl_build_extra_frame(uint8_t *out, const uint8_t master[6],
-                                   const uint8_t src[6], uint16_t counter, int in_ch)
+size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
+                                     const uint8_t src[6], uint16_t counter, int in_ch)
 {
-	return ctrl_emit(out, &CTRL_FRAMES[CTRL_EXTRA_FRAME], master, src,
+	return ctrl_emit(out, &CTRL_FRAMES[CTRL_IDENT_LAST], master, src,
 	                 counter, in_ch, NULL, NULL, 0);
 }
 
-/* ---- Head-amp source control (op 04 03, record TAG 01 01) ---- */
+/* ---- Head-amp source control (link 4 SINGLE, record TAG 0x0101) ---- */
 
 /* param/value validity for a head-amp record (phantom/pad are boolean, SENS is
  * 0x00..0x37). Shared by the fresh-frame builder and the in-place stamp. */
@@ -906,13 +975,19 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame)
 	/* The inner record is TAG(2) CH PARAM VALUE CKSUM at frame[34..39]; the
 	 * console builds CKSUM so the six bytes sum to 0x80 mod 256 (byte-verified
 	 * on the M-200, m200-headamp-re/DECODE.md). A frame that fails this carries a
-	 * corrupted preamp record and its CH/PARAM/VALUE must not be trusted. */
+	 * corrupted preamp record and its CH/PARAM/VALUE must not be trusted.
+	 *
+	 * ONLY ON A COMPLETE RECORD. A link-4 frame whose segment is not SINGLE
+	 * carries HALF a record, and the SysEx checksum of a split record closes
+	 * across BOTH fragments — 358 mod 128 = 102 and 128 - 102 = 0x1a, the byte
+	 * that arrives in the second one. Summing six bytes of a first fragment
+	 * tests an arithmetic identity that was never meant to hold there, so the
+	 * answer would be a fail with no meaning. Refuse instead. */
+	if (frame[REAC_CTRL_BLOCK_OFF] != REAC_LINK_RECORD ||
+	    frame[REAC_CTRL_BLOCK_OFF + 1] != REAC_SEG_SINGLE)
+		return -1;
 	return reac_ctrl_record_cksum_verify(frame + 34, 6);
 }
-
-/* SENS dB <-> VALUE (pad-relative, 1 dB/step): dB = -10 - value + (pad ? 20 : 0).
- * Ground-truthed on the M-200 SENS display: pad off 0x00 = -10 dBu .. 0x37 =
- * -65 dBu; pad on 0x00 = +10 .. 0x37 = -45. */
 
 /* cdea 04 03 0014, record 12 12 01 00: the master's ACK of the box's join params. */
 static const uint8_t GRANT_HEAD_ACK[34] = {
@@ -1019,16 +1094,18 @@ int reac_ctrl_build_grant_sweep(uint8_t sweep[][34], int max, uint8_t base,
 }
 
 /* ---- head-amp granularity ------------------------------------------------
- * See reac/reac_ctrlblk.h: SENS and the flags are per channel, phantom is per
- * four, readback is per eight. Expressed as a predicate so no caller has to
- * remember which shift belongs to which parameter. */
+ * See reac/reac_ctrlblk.h: the wire record is per channel, the slot map is per
+ * slot, the per-four field is the inventory cell, and phantom's hardware
+ * actuation granularity is open. Expressed as predicates so no caller has to
+ * remember which shift belongs to which parameter, and so the open question
+ * comes back as itself rather than as a number. */
 int reac_headamp_group_of(uint8_t ch, uint8_t param)
 {
 	switch (param) {
 	case REAC_HEADAMP_SENS:    return ch >> REAC_HEADAMP_GRAN_SENS_SHIFT;
 	case REAC_HEADAMP_PAD:     return ch >> REAC_HEADAMP_GRAN_FLAGS_SHIFT;
-	case REAC_HEADAMP_PHANTOM: return ch >> REAC_HEADAMP_GRAN_PHANTOM_SHIFT;
-	default:                         return -1;
+	case REAC_HEADAMP_PHANTOM: return REAC_HEADAMP_GRAN_DISPUTED;
+	default:                   return -1;
 	}
 }
 
@@ -1039,8 +1116,10 @@ int reac_headamp_record_carries(uint8_t ch, uint8_t param)
 	case REAC_HEADAMP_PAD:
 		return 1;                                    /* every channel carries it */
 	case REAC_HEADAMP_PHANTOM:
-		/* only the group's FIRST channel writes the group byte */
-		return (ch & ((1u << REAC_HEADAMP_GRAN_PHANTOM_SHIFT) - 1u)) == 0;
+		/* Both readings agree on a group-of-four anchor and only there. */
+		if ((ch & ((1u << REAC_HEADAMP_GRAN_PHANTOM_SHIFT_TRACE) - 1u)) == 0)
+			return 1;
+		return REAC_HEADAMP_GRAN_DISPUTED;
 	default:
 		return -1;
 	}

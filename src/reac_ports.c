@@ -4,13 +4,20 @@
 /* The config-announce port-table decode. See reac_ports.h for the layout and
  * the three-model evidence trail. */
 #include <reac/reac_ports.h>
+#include <reac/reac_ctrlblk.h>   /* REAC_LINK_CTRL, the declaration opcodes */
 
 int reac_ports_parse(const uint8_t block[32], struct reac_box_ports *out)
 {
 	if (!block || !out)
 		return -1;
-	if (block[0] != 0x01 || block[1] != 0x03 ||
-	    block[2] != 0x00 || block[3] != 0x10)
+	/* THE DISCRIMINATOR IS THE OPCODE AT block[4], not block[2:4]. Those two
+	 * bytes are a LENGTH, and a declaration happens to be 0x10 long, so testing
+	 * it appears to work and refuses any declaration whose body is not that
+	 * size. block[0] is the link and block[1] the segment bits. */
+	if (block[0] != REAC_LINK_CTRL || block[1] != REAC_SEG_SINGLE)
+		return -1;
+	if (block[4] != REAC_OP_DECL && block[4] != REAC_OP_DECL_ALT &&
+	    block[4] != REAC_OP_DECL_OTHER)
 		return -1;                       /* not a config-announce block */
 
 	int in_slots = 0, out_slots = 0;
