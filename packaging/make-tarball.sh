@@ -11,7 +11,7 @@ V="${1:-$SPEC_V}"
 [ -n "$V" ] || { echo "could not read Version: from packaging/libreac.spec"; exit 1; }
 T=$(mktemp -d); D="$T/libreac-$V"; mkdir -p "$D"
 rsync -a --exclude '.git' --exclude 'build' \
-      "$ROOT/src" "$ROOT/include" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/packaging" "$D/"
+      "$ROOT/src" "$ROOT/include" "$ROOT/tests" "$ROOT/Makefile" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/packaging" "$D/"
 tar -czf "$ROOT/libreac-$V.tar.gz" -C "$T" "libreac-$V"
 rm -rf "$T"
 echo "wrote $ROOT/libreac-$V.tar.gz"

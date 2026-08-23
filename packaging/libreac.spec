@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -10,6 +10,7 @@ URL:            https://github.com/FreeREAC/libreac
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  gcc
+BuildRequires:  make
 
 %description
 libreac is the shared byte-layout core of the REAC tools: recognise a REAC frame
@@ -33,21 +34,29 @@ Headers and pkg-config for building against libreac.
 %autosetup -n %{name}-%{version}
 
 %build
-for f in reac reac_decode reac_upstream reac_encode reac_capture pcap_source; do
-  cc %{optflags} -fPIC -Iinclude -c src/$f.c -o $f.o
+# Every src/*.c, never a hand-kept list. The list form had drifted twice: it was
+# still naming six files after src/reac_ports.c and src/reac_ctrlblk.c landed, so
+# the shared object shipped without reac_ports_parse, reac_headamp_base and the
+# whole reac_ctrl_*/reac_headamp_* control-block surface, while the -devel package
+# happily installed headers declaring them. Nothing failed at build time -- a
+# consumer only found out at link.
+for f in src/*.c; do
+  cc %{optflags} -fPIC -Iinclude -c "$f" -o "$(basename "$f" .c).o"
 done
 # %%build_ldflags carries the Fedora link flags incl. --build-id, which the
 # debuginfo extraction requires (%%optflags already gave the objects -g).
 # -lm: reac_encode's float->s24 rounds with lrintf.
 cc %{build_ldflags} -shared -Wl,-soname,libreac.so.0 -o libreac.so.%{version} \
-  reac.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o -lm
+  *.o -lm
 
 %install
 install -Dm0755 libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{version}
 ln -s libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.0
 ln -s libreac.so.0          %{buildroot}%{_libdir}/libreac.so
-for h in reac reac_decode reac_braid reac_sample reac_upstream reac_encode reac_capture pcap_source; do
-  install -Dm0644 include/reac/$h.h %{buildroot}%{_includedir}/reac/$h.h
+# Same rule as %%build: every public header, derived. reac_ctrlblk.h and
+# reac_ports.h were missing from the old hand-kept list.
+for h in include/reac/*.h; do
+  install -Dm0644 "$h" %{buildroot}%{_includedir}/reac/"$(basename "$h")"
 done
 mkdir -p %{buildroot}%{_libdir}/pkgconfig
 cat > %{buildroot}%{_libdir}/pkgconfig/libreac.pc <<PC
@@ -62,24 +71,41 @@ Libs: -L\${libdir} -lreac
 Cflags: -I\${includedir}
 PC
 
+%check
+# libreac's own suite, against the very objects %%build produced (the Makefile
+# finds them up to date and only archives them). Without this the RPM was built
+# and shipped without one assertion ever running -- the tests were not even in
+# the tarball.
+make test
+
 %files
 %license LICENSE
 %{_libdir}/libreac.so.%{version}
 %{_libdir}/libreac.so.0
 
 %files devel
-%{_includedir}/reac/reac.h
-%{_includedir}/reac/reac_decode.h
-%{_includedir}/reac/reac_braid.h
-%{_includedir}/reac/reac_sample.h
-%{_includedir}/reac/reac_upstream.h
-%{_includedir}/reac/reac_encode.h
-%{_includedir}/reac/reac_capture.h
-%{_includedir}/reac/pcap_source.h
+# The whole directory, so a new public header ships the day it lands instead of
+# waiting for someone to remember this list.
+%dir %{_includedir}/reac
+%{_includedir}/reac/*.h
 %{_libdir}/libreac.so
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Sat Aug 22 2026 Pau Aliagas <linuxnow@gmail.com> - 0.6.0-1
+- The control-block and port-declaration core ships: src/reac_ctrlblk.c
+  (reac_ctrl_* frame builders and parsers, the checksum stamp/verify pair, the
+  head-amp record surface reac_headamp_*) and src/reac_ports.c
+  (reac_ports_parse, reac_headamp_base). Both had been in the source tree and in
+  -devel's headers for some time while the shared object did not contain them:
+  the spec named its objects, its headers and its %%files entries in three
+  separate hand-kept lists and all three had drifted. They are now derived from
+  src/*.c and include/reac/*.h, and %%files devel owns %%{_includedir}/reac.
+- %%check runs the suite (8 binaries) during the build. It did not run at all
+  before, because make-tarball.sh did not ship tests/ or the Makefile.
+- The SENS curve is one flat dB per step; REAC_HEADAMP_SENS_* publish the three
+  constants the schema is held to.
+
 * Wed Jul 29 2026 Pau Aliagas <linuxnow@gmail.com> - 0.5.0-1
 - BEHAVIOUR CHANGE: reac_decode() decodes the channel-pair BRAID, the layout
   reac_downstream_build() writes. Up to 0.4.0 it read plain LE sample-major, so
