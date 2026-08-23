@@ -4,6 +4,7 @@
 #include "reac/reac.h"
 #include "reac/reac_ctrlblk.h"
 #include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 
 static int fails = 0;
@@ -94,6 +95,17 @@ int main(void)
 		CHECK(off_law == 0, "sensitivity_dBu = -10 - value across all 56 steps");
 		CHECK(matches_gain_law == 0, "and it is NOT the 0..55 dB reading, at any step");
 	}
+
+	/* ONE VERSION. The digits live once, in include/reac/reac.h; the string is
+	 * built from them and the running library reports that same string. It used
+	 * to be defined in three places with two values and no consumer could see
+	 * any of them at compile time, so no version floor could ever fail. */
+	CHECK(strcmp(reac_version(), LIBREAC_VERSION) == 0,
+	      "the linked library reports the header's version");
+	CHECK(strcmp(reac_version(), "0.6.0") == 0, "and it is 0.6.0");
+	CHECK(LIBREAC_VERSION_NUM == 600, "the comparable form agrees with the digits");
+	CHECK(LIBREAC_VERSION_AT_LEAST(0, 6, 0), "a floor at the current version holds");
+	CHECK(!LIBREAC_VERSION_AT_LEAST(0, 6, 1), "and one above it does not");
 
 	if (fails == 0) printf("OK: all libreac tests passed\n");
 	else printf("%d libreac test(s) failed\n", fails);
