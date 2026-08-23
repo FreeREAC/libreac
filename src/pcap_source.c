@@ -20,6 +20,7 @@ static uint32_t rd_u32(const uint8_t *p, int swap)
 int pcap_source_open(struct pcap_source *ps, const char *path)
 {
 	ps->f = fopen(path, "rb");
+	ps->last_orig_len = 0;
 	if (!ps->f)
 		return -1;
 	uint8_t gh[24];
@@ -56,6 +57,7 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
 		uint32_t sec = rd_u32(ph, ps->swapped);
 		uint32_t usec = rd_u32(ph + 4, ps->swapped);
 		uint32_t incl = rd_u32(ph + 8, ps->swapped);
+		ps->last_orig_len = rd_u32(ph + 12, ps->swapped);
 		if (incl > cap) {
 			/* Frame larger than the caller buffer (a jumbo/non-REAC packet, or
 			 * a corrupt header). Skip its body and keep going — returning -1
