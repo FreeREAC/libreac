@@ -30,7 +30,8 @@ This is the distinction the note exists to record. The control plane splits into
 
 How to encode or parse *one* control record:
 
-- the cold-connect frames (`0013` / `0016` / `001a`), config-announce, flood-filler;
+- the cold-connect records (link 4, tags `0100` / `0302` / `0500`), the box's
+  declaration (link 1, opcodes `82` / `84`), the flood-filler;
 - the head-amp **DT1 SysEx container** — TAG-dispatched, with **two nested
   checksums whose order is mandatory** (the inner record checksum is stamped
   first, then the outer block sum); tag `0101` is the 3-parameter head-amp page
