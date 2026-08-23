@@ -32,15 +32,9 @@ int reac_ports_parse(const uint8_t block[32], struct reac_box_ports *out)
 	}
 	out->in_ch  = in_slots  * REAC_PORTS_CH_PER_SLOT;
 	out->out_ch = out_slots * REAC_PORTS_CH_PER_SLOT;
+	/* THE BASE COMES OFF THE WIRE, from the chassis strap the box announces —
+	 * never from in_ch, which agrees only by a collinearity the next chassis is
+	 * free to break. See reac_ports.h for the firmware and corpus provenance. */
+	out->headamp_base = block[REAC_HEADAMP_BASE_OFF] * REAC_HEADAMP_BASE_MULTIPLIER;
 	return 0;
-}
-
-int reac_headamp_base(int in_ch)
-{
-	switch (in_ch) {
-	case 8:  return 0x00;   /* S-0808  */
-	case 16: return 0x20;   /* S-1608  */
-	case 32: return 0x00;   /* S-4000S */
-	default: return -1;     /* no captured placement: refuse, never guess */
-	}
 }

@@ -49,6 +49,7 @@
 struct reac_box_ports {
 	int in_ch;    /* declared input width  (4 per input slot)  */
 	int out_ch;   /* declared output width (4 per output slot) */
+	int headamp_base;  /* the box's own head-amp CH base, block[7] * 0x10 */
 };
 
 /* Decode the port table from a config-announce CONTROL BLOCK (the 32 bytes at
@@ -57,15 +58,65 @@ struct reac_box_ports {
  * every table slot is a known code; -1 otherwise, leaving `out` untouched. */
 int reac_ports_parse(const uint8_t block[32], struct reac_box_ports *out);
 
-/* The head-amp base a desk grants for a declared input width. A head-amp
- * record's CH is base + (box_input - 1); every desk generation grants the same
- * base for the same declaration (42 grant sweeps across 82 captures,
- * reac-captures docs/PLACEMENT-EVIDENCE.md):
+/* ---- THE HEAD-AMP BASE IS ANNOUNCED, NOT GRANTED ------------------------
  *
- *     8 -> 0x00 (S-0808)    16 -> 0x20 (S-1608)    32 -> 0x00 (S-4000S)
+ * A box's head-amp CH base is the box's OWN property. It rides the config
+ * announce (`01 03 00 10`) at block[7] — a chassis strap the box reads once —
+ * and the master addresses the box at base = block[7] * 0x10. A head-amp
+ * record's CH is base + (box_input - 1).
  *
- * Returns -1 for a width with no captured placement — REFUSE, never guess:
- * base 0 for a 16-input box addresses its preamps 32 slots low. */
-int reac_headamp_base(int in_ch);
+ * NOTHING IN THE BOX CONSUMES A GRANTED BASE. A master cannot move where a
+ * head-amp write lands by granting differently: the fabric-row-to-preamp map is
+ * a GPIO strap and a fitted-board inventory, both read before any frame
+ * arrives. The decisive observation is that an 8-input and a 32-input box are
+ * BOTH addressed at 0x00 — a width cannot be what selects the base.
+ *
+ * THIS REPLACES A PER-WIDTH TABLE, and the way that table survived is the
+ * lesson. The retired mapping took an input count and returned 8 -> 0x00,
+ * 16 -> 0x20, 32 -> 0x00. It agreed with the wire on every box we own, because
+ * width and strap are collinear across the three chassis we have: a 16-input
+ * chassis always straps 2. It was a second declaration of a fact the box
+ * already states, correct only by coincidence, and wrong in a way nothing
+ * downstream could detect. The first box that breaks the collinearity would
+ * have had its preamps addressed 32 slots off with every gate still green.
+ *
+ * Evidence: S-1608.BIN (SH-4 LE, base 0x0BFE0000) FUN_0c003c8a at 0x0c003c8a
+ * sets buf[7] = *0x0c080918, a GPIO strap read before the RTOS starts;
+ * FUN_0c0081f6 applies it through FUN_0c007fbc(bank, group). Corroborated on 29
+ * captures across M-200i, M-300 and M-5000 (reac-captures
+ * analysis/placement_table.csv): S-0808 0x00->0x00, S-1608 0x02->0x20,
+ * S-4000S 0x00->0x00.
+ *
+ * THE BASE IS A REQUIRED PROPERTY OF A BOX, not an optional one. It is set
+ * here, once, when the announce parses, and there is deliberately no sentinel
+ * for "not known yet" and no function that turns a width into a base. A box
+ * that has not announced has not followed the grammar, so it is not an
+ * incompletely-known box — it is not a box at all, and there is nothing to
+ * address. Modelling that state would put a branch in every caller that can
+ * never be taken. A caller holding a struct reac_box_ports has a base; a
+ * caller that has no box has nothing to ask about. */
+
+/* block-relative offset of the chassis strap the base is built from */
+#define REAC_HEADAMP_BASE_OFF 7
+
+/* base = block[REAC_HEADAMP_BASE_OFF] * this. Sixteen head-amp rows per strap
+ * step, which is two REAC_HEADAMP_APPLY_UNIT_SLOTS groups. */
+#define REAC_HEADAMP_BASE_MULTIPLIER 0x10
+
+/* The law rows, spelled so protocol-facts.yaml can bind them and so a change
+ * of mind has to edit a constant rather than drift a comment. */
+#define REAC_HEADAMP_BASE_FROM_CONFIG_BYTE7    1
+#define REAC_HEADAMP_BASE_IS_CHASSIS_NOT_GRANT 1
+
+/* THE BOX APPLIES HEAD-AMP IN GROUPS OF EIGHT fabric rows, one 8-port board at
+ * a time, passing the within-group index 0..7 to the preamp (S-1608.BIN
+ * FUN_0c007fbc at 0x0c007fbc: slot = group << 3, eight iterations).
+ *
+ * THIS IS THE APPLY UNIT AND IT IS A DIFFERENT AXIS FROM ACTUATION. Actuation
+ * is PER CHANNEL — 2304 of 3651 phantom records in the corpus address a
+ * channel that is not a multiple of four, and writing phantom off to a group
+ * neighbour of a live condenser left that mic ~45 dB above the floor. Neither
+ * number is evidence about the other; do not fold them together. */
+#define REAC_HEADAMP_APPLY_UNIT_SLOTS 8
 
 #endif /* REAC_PORTS_H */
