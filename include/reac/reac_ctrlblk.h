@@ -563,49 +563,55 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame);
  * head-amp parameter. Reading it as "phantom, 4 ch/group" is how the two got
  * folded together.
  *
- * PHANTOM'S HARDWARE ACTUATION GRANULARITY IS OPEN, and libreac will not answer
- * as if it were not. Two readings are live and neither is retired:
+ * PHANTOM IS PER CHANNEL, and this header used to say it was open. It carried
+ * two live readings — TRACE ch >> 2 (per group of four) and STATIC ch >> 0 (per
+ * channel) — refused to answer where they disagreed, and told a caller to close
+ * the dispute rather than read a constant. The dispute closed on 2026-08-23 on
+ * the wire, and STATIC won.
  *
- *   TRACE  ch >> 2, per group of four. An executed trace, and a rig measurement
- *          that read sixteen phantom records to 0x20..0x2f as four doing
- *          anything.
- *   STATIC ch >> 0, per channel. The per-slot table read out of the box image
- *          has an addressable flag for every one of 0x00..0x2f, and the field
- *          that divides by four is the inventory cell above.
+ * WHAT DECIDED IT. phantom-test.pcap, live rig, snaplen 200: phantom set on CH
+ * 0x24 and cleared again, and both records name 0x24 alone — never 0x25..0x27,
+ * the rest of its group. That alone only shows what OUR encoder emits, so the
+ * capture corpus supplied the real desks: across 3651 phantom records from an
+ * M-200i, an M-300 and an M-5000, 2304 address a channel that is not a multiple
+ * of four. The clean case is a real M-200i toggling one channel's phantom three
+ * times and naming CH 0x26 every time — 0x26 & 3 == 2, so a per-four desk could
+ * not have expressed that toggle at all.
  *
- * The two agree on a channel that is a multiple of four and disagree everywhere
- * else, so that is exactly where the API answers and where it refuses. A caller
- * that needs the answer has to close the dispute, not read a constant.
+ * The retracted TRACE reading was graded from an executed trace, which is why
+ * no amount of image reading was ever allowed to overturn it here. It took more
+ * executed traces, from more desks. Its likeliest origin is the inventory cell
+ * above: that field really is per four, and a trace of the CELL moving reads
+ * like phantom moving.
+ *
+ * WHAT IS STILL NOT KNOWN is the box's INTERNAL actuation — whether energising
+ * 0x24 also energises its neighbours inside the hardware. No wire can answer
+ * it: the box re-broadcasts no head-amp state at all, to us or to a real desk,
+ * so head-amp is WRITE-ONLY and there is nothing to query and compare against.
+ * Settling it needs a physical 48 V measurement, not a byte. The constant below
+ * is the WIRE law — which record carries which channel's phantom — and that is
+ * the only thing a byte library is entitled to state.
  *
  * The readback nibble is a THIRD axis, per eight, and is named apart because
  * collapsing it into either of the above is how a binding gets this wrong.
  */
 #define REAC_HEADAMP_GRAN_SENS_SHIFT     0   /* EVIDENCED */
 #define REAC_HEADAMP_GRAN_FLAGS_SHIFT    0   /* EVIDENCED */
+#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT  0   /* EVIDENCED (wire, 2026-08-23) */
 #define REAC_HEADAMP_GRAN_READBACK_SHIFT 3   /* EVIDENCED */
 
-/* The two live readings of phantom's actuation granularity. There is
- * deliberately no unqualified REAC_HEADAMP_GRAN_PHANTOM_SHIFT: a caller cannot
- * pick a side by accident, and neither can a sweep. */
-#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT_TRACE   2
-#define REAC_HEADAMP_GRAN_PHANTOM_SHIFT_STATIC  0
-
-/* Returned where the two readings disagree. Distinct from 0, which would mean
- * "the write lands nowhere" — a claim this library is not entitled to make —
- * and from -1, which means the parameter is not a head-amp parameter at all. */
-#define REAC_HEADAMP_GRAN_DISPUTED (-2)
-
-/* The group a channel's PARAM addresses, or REAC_HEADAMP_GRAN_DISPUTED for
- * phantom, or -1 for a param outside the three. */
+/* The group a channel's PARAM addresses, or -1 for a param outside the three.
+ * All three parameters are per channel, so the group IS the channel; the call
+ * stays because a caller open-coding `ch >> k` is how the wrong k spreads. */
 int reac_headamp_group_of(uint8_t ch, uint8_t param);
 
 /* Does a record addressed to `ch` carry `param` to the hardware?
- *   1                            yes
- *   REAC_HEADAMP_GRAN_DISPUTED   phantom off a group-of-four anchor: the two
- *                                readings disagree and nobody knows
- *   -1                           not a head-amp parameter
- * Never 0. The one call that stops a caller open-coding a shift it has to
- * remember, and stops it believing a per-channel phantom write took effect. */
+ *   1    yes — every channel, for all three parameters
+ *   -1   not a head-amp parameter
+ * Never 0: there is no channel a head-amp record cannot address inside
+ * REAC_HEADAMP_MAX_CH. It used to have a third answer, REAC_HEADAMP_GRAN_DISPUTED,
+ * for phantom off a group-of-four anchor; the measurement retired both the
+ * dispute and that return value. */
 int reac_headamp_record_carries(uint8_t ch, uint8_t param);
 
 /* Three head-amp parameters per channel. A protocol bound, so it lives with the
