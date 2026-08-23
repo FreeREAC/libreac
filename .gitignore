@@ -8,3 +8,14 @@
 /test_encode
 
 libreac-*.tar.gz
+
+# build products: the test binaries the Makefile drops in the tree
+test_reac
+test_capture
+test_braid
+test_upstream
+test_encode
+test_decode
+test_ports
+*.o
+*.a
