@@ -88,6 +88,23 @@ _c.reac_ctrl_build_headamp.argtypes = [
     ctypes.c_uint16, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8,
 ]
 
+# The reac_ctrl builder family that needs no audio payload. Every one of these
+# emits a complete control frame, so a test can build one and hand it straight to
+# the recognizer, the checksum verifier and the parser — the three independent
+# readers libreac already ships. The builders that take planar audio
+# (upstream_filler, flood_filler, coldconnect*) are deliberately NOT bound yet:
+# they need a float *const * of live samples, and a binding that fakes one would
+# be testing the fake.
+for _name in ("reac_ctrl_build_box_hb", "reac_ctrl_build_config_announce",
+              "reac_ctrl_build_identity_first", "reac_ctrl_build_identity_last"):
+    _f = getattr(_c, _name)
+    _f.restype = ctypes.c_size_t
+    _f.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p,
+                   ctypes.c_uint16, ctypes.c_int]
+
+_c.reac_ctrl_box_frame_len.restype = ctypes.c_size_t
+_c.reac_ctrl_box_frame_len.argtypes = [ctypes.c_int]
+
 _c.reac_ctrl_stamp_headamp.restype = ctypes.c_int
 _c.reac_ctrl_stamp_headamp.argtypes = [
     ctypes.c_char_p, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8,
@@ -199,3 +216,99 @@ def stamp_headamp(frame: bytes, ch: int, param: int, value: int) -> bytes:
             f"libreac refused to stamp ch={ch} param={param} value={value}"
         )
     return buf.raw[:len(frame)]
+
+
+def box_frame_len(n_ch: int) -> int:
+    """The clean upstream frame length for a box of `n_ch` inputs."""
+    return _c.reac_ctrl_box_frame_len(n_ch)
+
+
+def _build_simple(fn_name: str, master: bytes, src: bytes,
+                  counter: int, n_ch: int) -> bytes:
+    if len(master) != 6 or len(src) != 6:
+        raise ValueError("master and src are 6-byte MACs")
+    out = ctypes.create_string_buffer(2048)
+    n = getattr(_c, fn_name)(out, master, src, counter, n_ch)
+    if n == 0:
+        raise ValueError(f"libreac refused to build {fn_name} for n_ch={n_ch}")
+    return out.raw[:n]
+
+
+def build_box_hb(master: bytes, src: bytes, counter: int, n_ch: int) -> bytes:
+    """The box heartbeat."""
+    return _build_simple("reac_ctrl_build_box_hb", master, src, counter, n_ch)
+
+
+def build_config_announce(master: bytes, src: bytes, counter: int, in_ch: int) -> bytes:
+    """The box's config announce — the frame carrying the head-amp base strap."""
+    return _build_simple("reac_ctrl_build_config_announce", master, src, counter, in_ch)
+
+
+def build_identity_first(master: bytes, src: bytes, counter: int, in_ch: int) -> bytes:
+    """First fragment of the identity record. BOTH fragments are one message."""
+    return _build_simple("reac_ctrl_build_identity_first", master, src, counter, in_ch)
+
+
+def build_identity_last(master: bytes, src: bytes, counter: int, in_ch: int) -> bytes:
+    """Last fragment of the identity record. BOTH fragments are one message."""
+    return _build_simple("reac_ctrl_build_identity_last", master, src, counter, in_ch)
+
+
+class BoxModel(ctypes.Structure):
+    """libreac's fixed box-model matrix row, mirrored field-for-field.
+
+    Mirrored, not invented: the field order and types are libreac's
+    `struct reac_box_model`. If that struct changes, this breaks loudly at the
+    first read rather than returning plausible rubbish — which is why `token`
+    and `display` are asserted non-empty by the tests.
+    """
+    _fields_ = [
+        ("token", ctypes.c_char_p),
+        ("display", ctypes.c_char_p),
+        ("in_ch", ctypes.c_int),
+        ("out_ch", ctypes.c_int),
+        ("config_block", ctypes.c_uint8 * 32),
+    ]
+
+
+_c.reac_box_model_table.restype = ctypes.POINTER(BoxModel)
+_c.reac_box_model_table.argtypes = [ctypes.POINTER(ctypes.c_size_t)]
+_c.reac_box_model_by_token.restype = ctypes.POINTER(BoxModel)
+_c.reac_box_model_by_token.argtypes = [ctypes.c_char_p]
+_c.reac_box_model_by_channels.restype = ctypes.POINTER(BoxModel)
+_c.reac_box_model_by_channels.argtypes = [ctypes.c_int]
+
+
+def box_models() -> list:
+    """Every box model libreac knows, looked up ONE AT A TIME by width.
+
+    **The table is deliberately not strided.** `struct reac_box_model` carries
+    the identity record after `config_block`, so this module's mirror is SHORTER
+    than the real row; indexing `table()[i]` would land mid-struct and return
+    plausible rubbish. Asking by width returns a pointer to a whole, correctly
+    aligned row, and reading only the leading fields off it is safe.
+
+    Widening the mirror would mean copying a layout that is libreac's to change —
+    the second declaration this module exists to avoid. If the full row is ever
+    needed, libreac should export accessors.
+
+    This is the table a DESK uses to put a box's name on screen: the name is
+    resolved from the box's own config-announce declaration, not read out of a
+    name frame. That is why a real Roland mixer shows a name for EVERY box while
+    only the S-0808 ever transmits an ASCII model name.
+    """
+    seen, out = set(), []
+    for width in range(1, 65):
+        row = box_model_by_channels(width)
+        if row and row[0] not in seen:
+            seen.add(row[0])
+            out.append(row)
+    return out
+
+
+def box_model_by_channels(in_ch: int):
+    """The model a box of this input width declares itself to be, or None."""
+    p = _c.reac_box_model_by_channels(in_ch)
+    if not p:
+        return None
+    return (p[0].token.decode(), p[0].display.decode(), p[0].in_ch, p[0].out_ch)

@@ -138,6 +138,131 @@ def test_a_non_reac_buffer_is_rejected():
     assert not libreac.is_reac(b"\x00" * 64)
 
 
+
+# --- the reac_ctrl builder family, each frame checked by THREE readers ---------
+#
+# For every control frame libreac can build: its own recognizer accepts it, its
+# own checksum closes, its own parser names a kind, and — when the grammar is
+# reachable — reac.ksy accepts it too. The grammar is the INDEPENDENT opinion:
+# libreac agreeing with itself proves only internal consistency.
+
+CTRL_BUILDERS = [
+    ("box_hb", lambda c, n: libreac.build_box_hb(MASTER, BOX, c, n)),
+    ("config_announce", lambda c, n: libreac.build_config_announce(MASTER, BOX, c, n)),
+]
+
+WIDTHS = [8, 16, 32]
+
+
+def test_every_ctrl_builder_produces_a_frame_its_own_readers_accept():
+    built = 0
+    for name, fn in CTRL_BUILDERS:
+        for width in WIDTHS:
+            frame = fn(0x0042, width)
+            built += 1
+            assert libreac.is_reac(frame), f"{name}/{width}: recognizer rejects it"
+            assert libreac.ctrl_checksum_verify(frame) == 0, f"{name}/{width}: checksum"
+            assert libreac.frame_counter(frame) == 0x0042, f"{name}/{width}: counter"
+            kind = libreac.classify(frame)
+            assert kind and "unknown" not in kind.lower(), f"{name}/{width}: {kind}"
+    # A sweep that built nothing would pass every assertion above.
+    assert built == len(CTRL_BUILDERS) * len(WIDTHS), built
+
+
+def test_ctrl_frame_length_matches_the_box_width_formula():
+    # 52 + n*36, and libreac's own helper must agree with the frames it builds.
+    for width in WIDTHS:
+        frame = libreac.build_box_hb(MASTER, BOX, 1, width)
+        assert len(frame) == 52 + width * 36, (width, len(frame))
+        assert len(frame) == libreac.box_frame_len(width), width
+
+
+def test_the_grammar_accepts_every_frame_libreac_builds():
+    """The independent second opinion on our own TX.
+
+    SKIPS when the grammar is unreachable, and says so — an absent grammar is
+    not a clean grammar, and reporting it as a pass is the exact failure this
+    project keeps paying for.
+    """
+    from libreac import ksy
+
+    if not ksy.available():
+        print(f"     SKIP: {ksy.reason_unavailable()}")
+        return
+
+    checked = 0
+    for name, fn in CTRL_BUILDERS:
+        for width in WIDTHS:
+            frame = fn(9, width)
+            assert ksy.validates(frame), f"grammar rejects our own {name}/{width}"
+            checked += 1
+    for ch in (0x00, 0x20, 0x2F):
+        frame = libreac.build_headamp(MASTER, BOX, 3, ch, PHANTOM, 1)
+        assert ksy.validates(frame), f"grammar rejects our own headamp ch={ch:#x}"
+        checked += 1
+    assert checked > 0
+    # The negative control: the grammar must REJECT something, or "accepts
+    # everything" would look identical to "accepts our frames".
+    assert not ksy.validates(b"\x00" * 64), "grammar accepts garbage"
+
+
+def test_identity_record_is_built_only_for_the_box_that_carries_a_name():
+    # The S-0808 (8 in) transmits an ASCII model name; the wider boxes do not,
+    # and libreac refuses to build one for them. This is NOT the same as a desk
+    # being unable to NAME them — see the box-model table test below.
+    frame = libreac.build_identity_first(MASTER, BOX, 5, 8)
+    assert libreac.is_reac(frame) and libreac.ctrl_checksum_verify(frame) == 0
+    for width in (16, 32):
+        try:
+            libreac.build_identity_first(MASTER, BOX, 5, width)
+        except ValueError:
+            continue
+        raise AssertionError(f"expected no identity record for a {width}-input box")
+
+
+def test_every_known_box_resolves_to_a_display_name():
+    """How a desk names a box it never received a name frame from.
+
+    A real Roland mixer shows a name for EVERY box. That name is resolved from
+    the box's own declared width via this fixed matrix — not read off the wire —
+    which is why only the S-0808 needs to transmit one.
+    """
+    models = libreac.box_models()
+    assert len(models) >= 3, models
+    tokens = {t for t, _, _, _ in models}
+    assert {"s0808", "s1608", "s4000s"} <= tokens, tokens
+    for token, display, in_ch, out_ch in models:
+        assert token and display, (token, display)
+        assert in_ch > 0 and out_ch > 0, (token, in_ch, out_ch)
+        # The width round-trips: the matrix is keyed on what the box declares.
+        assert libreac.box_model_by_channels(in_ch)[0] == token
+
+
+def test_matrix_names_EVERY_width_an_s1608_which_is_a_DEFECT():
+    """CHARACTERIZATION TEST — this pins a bug, not a contract.
+
+    `reac_box_model_by_channels()` never answers "I do not know": widths 1, 7, 9,
+    24, 40 and 64 all come back as an S-1608. It is a fallback wearing a lookup's
+    clothes.
+
+    That matters for the stated use — verifying the values a box puts on the wire
+    against the matrix. A verifier that answers for every input cannot fail, so it
+    cannot verify: a corrupt announce, or any box model we have not met, is
+    confidently reported as an S-1608 and nothing downstream can tell.
+
+    It is also why `box_models()` must enumerate by trying known widths rather
+    than trusting this function to reject the rest.
+
+    WHEN LIBREAC IS FIXED to return NULL for an unmatched width, THIS TEST WILL
+    FAIL. That is the intent: replace it with the negative control it should have
+    been —
+        assert libreac.box_model_by_channels(7) is None
+    """
+    for width in (1, 7, 9, 24, 40, 64):
+        got = libreac.box_model_by_channels(width)
+        assert got is not None and got[0] == "s1608", (width, got)
+
+
 if __name__ == "__main__":
     fns = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
     failed = 0
