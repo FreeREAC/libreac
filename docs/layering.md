@@ -140,4 +140,36 @@ starts holding conversation state, which is the change a minor is for.
 
 Recent history under this rule: 0.4.0 added the encoders (the last minor before
 the freeze), 0.5.0 fixed `reac_decode()` to un-braid — a behaviour change to a
-public function, so it took the minor it was already due. From here, patch.
+public function, so it took the minor it was already due. 0.6.0 took the minor
+the control-plane extraction was reserved above.
+
+## A removed symbol moves TWO numbers
+
+**0.7.0, and soname 0 → 1.** The rule the paragraphs above did not state, because
+until then nothing had been removed: when a public function disappears, the
+version digits are only half the bump. The soname is the other half, and they
+fail at different moments — the version stops a BUILD against the wrong headers,
+the soname stops a RUN against the wrong shared object.
+
+This was learned the expensive way. `reac_ctrl_build_name_frame()` and
+`reac_ctrl_build_extra_frame()` were removed while the library kept calling
+itself 0.6.0 with soname 0, and every mechanism that should have caught it was
+inert at once:
+
+- reac-pw's `>= 0.6.0` floor accepted the old and the new library alike — meson
+  reported `libreac found: YES 0.6.0` for both;
+- the identical NEVRA made `rpm -U` a silent no-op;
+- the dynamic linker handed the installed `/usr/bin/reac-pw` the new
+  `libreac.so.0`, and it died on `undefined symbol` at exec.
+
+Under the new rule the same change is refused three times over: the floor moves
+to `>= 0.7.0` and fails at configure, the NEVRA changes so the package actually
+upgrades, and `.so.1` and `.so.0` are co-installable — a stale binary keeps
+loading the old one until it is replaced, instead of breaking.
+
+**Where the two numbers live.** Both in `include/reac/reac.h` and nowhere else:
+`LIBREAC_VERSION_*` and `LIBREAC_ABI`. The RPM spec carries a copy of each
+(`Version:`, `%global abi`) because rpm cannot read a header, and
+`packaging/make-tarball.sh` refuses to build a tarball when a copy disagrees —
+the only moment a copy can be caught. The OpenWrt recipe reads both with awk and
+keeps no copy at all.

@@ -14,6 +14,13 @@ PKG_VERSION:=$(shell awk '/^\#define LIBREAC_VERSION_MAJOR/{ma=$$3} /^\#define L
 ifeq ($(PKG_VERSION),..)
 $(error could not read LIBREAC_VERSION_* from include/reac/reac.h)
 endif
+# THE SONAME'S MAJOR LIVES IN THE SAME HEADER, for the same reason: this recipe
+# hardcoded 0 while the API broke, and a hardcoded soname is what let an old
+# binary load a new library and die on `undefined symbol`.
+PKG_ABI:=$(shell awk '/^\#define LIBREAC_ABI[ \t]/{print $$3; exit}' $(CURDIR)/../../include/reac/reac.h)
+ifeq ($(PKG_ABI),)
+$(error could not read LIBREAC_ABI from include/reac/reac.h)
+endif
 PKG_RELEASE:=1
 PKG_MAINTAINER:=Pau Aliagas <linuxnow@gmail.com>
 PKG_LICENSE:=GPL-3.0-or-later
@@ -25,7 +32,7 @@ define Package/libreac
   CATEGORY:=Libraries
   TITLE:=Shared REAC wire-format core (FreeREAC)
   URL:=https://github.com/FreeREAC/libreac
-  ABI_VERSION:=0
+  ABI_VERSION:=$(PKG_ABI)
 endef
 
 define Package/libreac/description
@@ -52,13 +59,13 @@ define Build/Compile
 	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/reac_encode.c -o $(PKG_BUILD_DIR)/reac_encode.o
 	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/reac_capture.c -o $(PKG_BUILD_DIR)/reac_capture.o
 	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/pcap_source.c -o $(PKG_BUILD_DIR)/pcap_source.o
-	$(TARGET_CC) $(TARGET_LDFLAGS) -shared -Wl,-soname,libreac.so.0 \
+	$(TARGET_CC) $(TARGET_LDFLAGS) -shared -Wl,-soname,libreac.so.$(PKG_ABI) \
 		-o $(PKG_BUILD_DIR)/libreac.so.$(PKG_VERSION) \
 		$(PKG_BUILD_DIR)/reac.o $(PKG_BUILD_DIR)/reac_decode.o \
 		$(PKG_BUILD_DIR)/reac_upstream.o $(PKG_BUILD_DIR)/reac_encode.o \
 		$(PKG_BUILD_DIR)/reac_capture.o $(PKG_BUILD_DIR)/pcap_source.o -lm
-	ln -sf libreac.so.$(PKG_VERSION) $(PKG_BUILD_DIR)/libreac.so.0
-	ln -sf libreac.so.0 $(PKG_BUILD_DIR)/libreac.so
+	ln -sf libreac.so.$(PKG_VERSION) $(PKG_BUILD_DIR)/libreac.so.$(PKG_ABI)
+	ln -sf libreac.so.$(PKG_ABI) $(PKG_BUILD_DIR)/libreac.so
 endef
 
 # headers + lib into the SDK staging dir, so dependent packages can build against it
@@ -73,7 +80,7 @@ endef
 define Package/libreac/install
 	$(INSTALL_DIR) $(1)/usr/lib
 	$(CP) $(PKG_BUILD_DIR)/libreac.so.$(PKG_VERSION) $(1)/usr/lib/
-	ln -sf libreac.so.$(PKG_VERSION) $(1)/usr/lib/libreac.so.0
+	ln -sf libreac.so.$(PKG_VERSION) $(1)/usr/lib/libreac.so.$(PKG_ABI)
 endef
 
 $(eval $(call BuildPackage,libreac))

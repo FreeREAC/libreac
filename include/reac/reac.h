@@ -126,10 +126,31 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * THE RULE (docs/layering.md): patch bumps until the control plane lands, and
  * the minor is what the control-plane extraction takes. reac_ctrlblk.h is that
- * extraction - the library holds conversation state now, not only layout. */
+ * extraction - the library holds conversation state now, not only layout.
+ *
+ * 0.7.0 IS AN API BREAK. reac_ctrl_build_name_frame() and
+ * reac_ctrl_build_extra_frame() are gone; the identity record is one message
+ * built by the identity-first surface that replaced them. The break first
+ * shipped WITHOUT moving these digits or the soname, and every mechanism that
+ * should have caught it was inert as a result: reac-pw's `>= 0.6.0` floor
+ * accepted both libraries, rpm saw the same NEVRA and made `rpm -U` a no-op,
+ * and the installed /usr/bin/reac-pw loaded the new libreac.so.0 and died on
+ * `undefined symbol`. A removed symbol needs BOTH numbers below to move. */
 #define LIBREAC_VERSION_MAJOR 0
-#define LIBREAC_VERSION_MINOR 6
+#define LIBREAC_VERSION_MINOR 7
 #define LIBREAC_VERSION_PATCH 0
+
+/* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
+ * digits alone only stop a BUILD against the wrong headers; the soname is what
+ * stops a RUN against the wrong shared object. While both libraries called
+ * themselves libreac.so.0 the dynamic linker was happy to hand an old binary
+ * the new library, and the error surfaced as a missing symbol at exec time
+ * instead of a refused install. Bumping this makes the two co-installable and
+ * the mismatch impossible: a binary linked against .so.1 will not load .so.0.
+ *
+ * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
+ * number; packaging/make-tarball.sh refuses a tarball whose spec disagrees. */
+#define LIBREAC_ABI 1
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)

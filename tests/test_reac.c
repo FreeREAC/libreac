@@ -102,10 +102,28 @@ int main(void)
 	 * any of them at compile time, so no version floor could ever fail. */
 	CHECK(strcmp(reac_version(), LIBREAC_VERSION) == 0,
 	      "the linked library reports the header's version");
-	CHECK(strcmp(reac_version(), "0.6.0") == 0, "and it is 0.6.0");
-	CHECK(LIBREAC_VERSION_NUM == 600, "the comparable form agrees with the digits");
-	CHECK(LIBREAC_VERSION_AT_LEAST(0, 6, 0), "a floor at the current version holds");
-	CHECK(!LIBREAC_VERSION_AT_LEAST(0, 6, 1), "and one above it does not");
+	/* DERIVED, NOT COPIED. These used to spell "0.6.0" and 600 out longhand,
+	 * which made the test a fourth place the version was declared -- the exact
+	 * defect the header comment above it describes. Every assertion below is
+	 * built from LIBREAC_VERSION_*, so it tests the MACHINERY (the string, the
+	 * comparable form, the floor's boundary) and cannot drift when the digits
+	 * move. The one thing worth pinning by hand is the cross-boundary check
+	 * above: the linked .so agreeing with the header it was compiled from. */
+	CHECK(LIBREAC_VERSION_NUM == LIBREAC_VERSION_MAJOR * 10000 +
+	                             LIBREAC_VERSION_MINOR * 100 +
+	                             LIBREAC_VERSION_PATCH,
+	      "the comparable form agrees with the digits");
+	CHECK(LIBREAC_VERSION_AT_LEAST(LIBREAC_VERSION_MAJOR, LIBREAC_VERSION_MINOR,
+	                               LIBREAC_VERSION_PATCH),
+	      "a floor at the current version holds");
+	CHECK(!LIBREAC_VERSION_AT_LEAST(LIBREAC_VERSION_MAJOR, LIBREAC_VERSION_MINOR,
+	                                LIBREAC_VERSION_PATCH + 1),
+	      "and one above it does not");
+	/* The soname's major is a number a consumer can read at compile time, so a
+	 * build can refuse a library whose ABI it was not written against. It only
+	 * ever goes up: 0.6.0 removed symbols and left it at 0, and that is what
+	 * let an old reac-pw load the new library and die on `undefined symbol`. */
+	CHECK(LIBREAC_ABI >= 1, "the ABI major is set and has left its pre-break value");
 
 	if (fails == 0) printf("OK: all libreac tests passed\n");
 	else printf("%d libreac test(s) failed\n", fails);
