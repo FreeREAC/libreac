@@ -22,3 +22,4 @@ test_ports
 test_facts
 *.d
 corpus_check
+test_ctrl

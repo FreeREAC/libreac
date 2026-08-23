@@ -57,6 +57,63 @@ int  reac_ctrl_checksum_verify(const uint8_t *frame);
 void reac_ctrl_record_cksum_stamp(uint8_t *rec, size_t n);
 int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
 
+/* ---- THE CONTROL BLOCK'S HEADER: FOUR FIELDS, NOT AN OPCODE ---------------
+ *
+ * Every builder in both stagebox images lays down the same four fields before
+ * anything else (S-1608 FUN_0c003398, the box's own segmented upload):
+ *
+ *   block[0]    u8      LINK      which link the message belongs to
+ *   block[1]    u8      SEGMENT   bit 0 FIRST, bit 1 LAST
+ *   block[2:4]  u16 BE  LENGTH    always a length, never a selector
+ *   block[4]    u8      OPCODE    what the message is
+ *   block[31]   u8      checksum  -Sum(block[0..30])
+ *
+ * SO THERE ARE NOT SEVEN SCENE-AND-RECORD OPS. What the wire notes used to call
+ * ops 0x0101 / 0x0100 / 0x0102 / 0x0103 are ONE transfer on link 1 reading
+ * FIRST / MIDDLE / LAST / SINGLE, and 0x0401 / 0x0402 / 0x0403 are the same
+ * three states on link 4. Reading the first two bytes as a 16-bit opcode models
+ * a field that is not there, and it is why a control block used to be told apart
+ * by its LENGTH: the discriminator is block[4], as the box's own receive
+ * dispatch uses it (its state-2 gate is buf[0]==1 && (buf[1] & 1) && buf[4]==0).
+ *
+ * block[2:4] is a length in every case. What varies is its base: for the bulk
+ * opcode on link 1 it counts this frame's payload bytes only, and everywhere
+ * else it counts from block[4] inclusive. Each sub-page does happen to have a
+ * distinct length, so switching on it appears to work — right up to a window
+ * that is not full.
+ */
+#define REAC_LINK_CTRL     1   /* the stagebox control link                    */
+#define REAC_LINK_SECOND   2   /* an S-4000S-only second link                  */
+#define REAC_LINK_RECORD   4   /* the record link — DT1 containers             */
+
+#define REAC_SEG_MIDDLE 0x00   /* neither bit: a continuation                  */
+#define REAC_SEG_FIRST  0x01   /* bit 0                                        */
+#define REAC_SEG_LAST   0x02   /* bit 1                                        */
+#define REAC_SEG_SINGLE 0x03   /* both: a complete message in one frame        */
+
+/* Link-1 opcodes, block[4]. */
+#define REAC_OP_BULK       0x00  /* the scene push, in all four segment states */
+#define REAC_OP_SLOT_MAP   0x01  /* the slot-record window; also the poll a box
+                                  * answers with REAC_OP_BOX_HB               */
+#define REAC_OP_GROUP_MAP  0x10  /* ten bytes of packed group fields          */
+#define REAC_OP_DECL_ALT   0x80  /* the box's declaration, alternate arm       */
+#define REAC_OP_BOX_HB     0x81  /* the box's heartbeat reply, opcode only     */
+#define REAC_OP_DECL       0x82  /* the box's declaration                      */
+#define REAC_OP_DECL_OTHER 0x84  /* the same message with the other constant   */
+
+/* The Roland DT1 record a link-4 container carries: block[14] is the low byte of
+ * the model id, block[15] the command, block[16:18] the register page (the TAG),
+ * and the record the two checksums enclose runs block[16..21]. Frame-relative
+ * that is [32], [33], [34:36] and [34..39]. */
+#define REAC_DT1_MODEL_LO  0x12
+#define REAC_DT1_CMD_RQ1   0x11  /* a request                                  */
+#define REAC_DT1_CMD_DT1   0x12  /* a set                                      */
+#define REAC_DT1_TAG_HEAD_MARK 0x0000
+#define REAC_DT1_TAG_JOIN      0x0100
+#define REAC_DT1_TAG_HEADAMP   0x0101
+#define REAC_DT1_TAG_BOX_READY 0x0302
+#define REAC_DT1_TAG_IDENTITY  0x0500
+
 /* ---- THE SCENE PUSH: the master's enrolment transfer -----------------------
  *
  * After link-up a desk pushes its scene to the box as one bounded transfer:
@@ -192,23 +249,45 @@ uint8_t  reac_headamp_sens_value(int db, int pad_on);
  * wire. Neither encodes a choice. What stays behind is what does — which slots we
  * grant a box, when we advance a state machine, how we wire it into a graph. */
 
+/* WHAT A CONTROL FRAME IS, decided the way the box decides it: the link at
+ * block[0], the segment bits at block[1] and the opcode at block[4]. Never the
+ * length — see the header section above for why a length looks like it works. */
 enum reac_ctrl_kind {
-	REAC_CTRL_NONE = 0,      /* not a 0x8819 frame */
-	REAC_CTRL_FILLER,        /* type 00 00 (audio/idle), checksum-exempt */
-	REAC_CTRL_PROBE,         /* master cdea 01, sub-state cycling (hunting) */
-	REAC_CTRL_MASTER_HB,     /* master cdea 01 03 0019 (established heartbeat) */
-	REAC_CTRL_MASTER_ANNOUNCE,/* master cfea (announce) */
-	REAC_CTRL_GRANT,         /* master cdea 04 03, record TAG 01 00 (the JOIN
-	                          * grant-burst; also any 04 03 tag we don't know) */
-	REAC_CTRL_HEADAMP,       /* master cdea 04 03, record TAG 01 01 (head-amp:
-	                          * CH PARAM VALUE — a preamp knob, NOT a grant) */
-	REAC_CTRL_BOX_HB,        /* a box cdea 01 03 0001 81 (our keep-alive) */
-	REAC_CTRL_SPLIT_ANNOUNCE,/* a splitter's ceea announce — the split role's
-	                          * own frame type (reac-aes67 REAC-PROTOCOL.md §6,
-	                          * source-derived; never yet captured, §14.1) */
-	REAC_CTRL_UNKNOWN_CTRL,  /* cdea/cfea we don't classify */
+	REAC_CTRL_NONE = 0,       /* not a 0x8819 frame                            */
+	REAC_CTRL_FILLER,         /* type 00 00 (audio/idle), checksum-exempt      */
+	REAC_CTRL_SCENE_TRANSFER, /* link 1, opcode 0x00 — the master's scene push,
+	                           * in any of its four segment states             */
+	REAC_CTRL_MASTER_HB,      /* link 1, opcode 0x01 — the slot-record window,
+	                           * which is also the poll a box answers          */
+	REAC_CTRL_MASTER_ANNOUNCE,/* master cfea (announce)                        */
+	REAC_CTRL_GRANT,          /* link 4, SINGLE, DT1 tag != head-amp: the join
+	                           * grant and the cold-connect inventory tags     */
+	REAC_CTRL_HEADAMP,        /* link 4, SINGLE, DT1 tag 0x0101 — CH PARAM
+	                           * VALUE, a preamp knob, NOT a grant             */
+	REAC_CTRL_BOX_HB,         /* link 1, opcode 0x81 — the box's reply         */
+	REAC_CTRL_SPLIT_ANNOUNCE, /* a splitter's ceea announce — the split role's
+	                           * own frame type (reac-aes67 REAC-PROTOCOL.md §6,
+	                           * source-derived; never yet captured, §14.1)    */
+	REAC_CTRL_CONFIG_ANNOUNCE,/* link 1, opcode 0x80/0x82/0x84 — the box's own
+	                           * declaration, and a SYMMETRIC exchange: the box
+	                           * image builds exactly the message it parses    */
+	REAC_CTRL_GROUP_MAP,      /* link 1, opcode 0x10 — ten bytes of packed
+	                           * group fields. Only the S-4000S image has a
+	                           * handler; the S-1608 has none at all           */
+	REAC_CTRL_RECORD_FRAGMENT,/* link 4, FIRST or LAST — HALF of a DT1 record.
+	                           * The two fragment bodies concatenate into one
+	                           * SysEx whose inner checksum closes only ACROSS
+	                           * BOTH, so a fragment on its own is a truncated
+	                           * record and its tag, fields and checksum must
+	                           * not be read as if it were whole              */
+	REAC_CTRL_LINK2,          /* link 2 — present in the S-4000S image, which
+	                           * length-checks it, routes three subtypes and
+	                           * throws all three away: empty stubs in ver2200 */
+	REAC_CTRL_UNKNOWN_CTRL,   /* cdea/cfea we do not classify                  */
 };
 
+/* The kind's name, for logs and for a report that has to stay diffable. */
+const char *reac_ctrl_kind_name(enum reac_ctrl_kind kind);
 
 struct reac_ctrl_parsed {
 	enum reac_ctrl_kind kind;
@@ -216,13 +295,19 @@ struct reac_ctrl_parsed {
 	uint8_t  dst[6];
 	int      is_broadcast;   /* dst == ff:ff:ff:ff:ff:ff */
 	uint16_t counter;        /* bytes 14-15 LE */
-	uint8_t  op0, op1;       /* control opcode bytes [18],[19] */
-	uint16_t op_len;         /* BE length [20:22] */
-	uint8_t  sel;            /* selector [22] (0x81/0x82/... or a channel byte) */
-	uint8_t  sel2;           /* second selector byte [23] (cold-connect: 0x02) */
-	uint8_t  ch;             /* HEADAMP only: wire channel (model_base + input-1) */
-	uint8_t  param;          /* HEADAMP only: enum reac_headamp_param */
-	uint8_t  value;          /* HEADAMP only: 0|1 (phantom/pad) or 0x00..0x37 (SENS) */
+
+	/* The header, field for field. There is no 16-bit "op": a caller that wants
+	 * the old 0x0103 spelling is asking for two different fields glued. */
+	uint8_t  link;           /* block[0]   — REAC_LINK_*                        */
+	uint8_t  seg;            /* block[1]   — REAC_SEG_* bits                    */
+	uint16_t blk_len;        /* block[2:4] — BE, always a length                */
+	uint8_t  opcode;         /* block[4]   — the discriminator                  */
+
+	/* Link 4 only, and only on a SINGLE: a fragment carries half a record. */
+	uint16_t dt1_tag;        /* block[16:18] = frame[34:36]                     */
+	uint8_t  ch;             /* HEADAMP: wire channel (model_base + input-1)    */
+	uint8_t  param;          /* HEADAMP: enum reac_headamp_param                */
+	uint8_t  value;          /* HEADAMP: 0|1 (phantom/pad) or 0x00..0x37 (SENS) */
 };
 
 

@@ -37,11 +37,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NKINDS 10
-static const char *KIND_NAME[NKINDS] = {
-	"none", "filler", "probe", "master_hb", "master_announce",
-	"grant", "headamp", "box_hb", "split_announce", "unknown_ctrl",
-};
+/* One more than the last kind. The names come from the library, so this file
+ * carries no second spelling of them. */
+#define NKINDS (REAC_CTRL_UNKNOWN_CTRL + 1)
 
 /* The header triple (link, segment, opcode) — block[0], block[1], block[4] — read
  * straight off the wire, INDEPENDENT of how reac_ctrl_parse classifies it. This
@@ -175,7 +173,8 @@ static int scan(const char *path, const char *label, unsigned long cap, int corr
 	       label, t.records, t.reac, t.truncated, t.off_length);
 	for (int i = 0; i < NKINDS; i++)
 		if (t.kind[i])
-			printf(" %s=%lu", KIND_NAME[i], t.kind[i]);
+			printf(" %s=%lu", reac_ctrl_kind_name((enum reac_ctrl_kind)i),
+			       t.kind[i]);
 	for (unsigned a = 0; a < t.tr.n; a++) {    /* sorted, so the line is stable */
 		unsigned best = 0;
 		for (unsigned b = 1; b < t.tr.n; b++)

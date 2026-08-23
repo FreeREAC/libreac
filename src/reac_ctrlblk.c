@@ -199,9 +199,42 @@ uint8_t reac_headamp_sens_value(int db, int pad_on)
 	return reac_headamp_sens_value_cdb(db * 100, pad_on);
 }
 
+static const char *const KIND_NAME[] = {
+	"none", "filler", "scene_transfer", "master_hb", "master_announce",
+	"grant", "headamp", "box_hb", "split_announce", "config_announce",
+	"group_map", "record_fragment", "link2", "unknown_ctrl",
+};
+
+const char *reac_ctrl_kind_name(enum reac_ctrl_kind kind)
+{
+	unsigned i = (unsigned)kind;
+	if (i >= sizeof KIND_NAME / sizeof KIND_NAME[0])
+		return "?";
+	return KIND_NAME[i];
+}
+
+/* The link-1 opcodes, in one place, so the classifier reads as the box's own
+ * dispatch does and a new opcode is a row rather than another else-if. */
+static enum reac_ctrl_kind kind_of_link1(uint8_t opcode)
+{
+	switch (opcode) {
+	case REAC_OP_BULK:       return REAC_CTRL_SCENE_TRANSFER;
+	case REAC_OP_SLOT_MAP:   return REAC_CTRL_MASTER_HB;
+	case REAC_OP_GROUP_MAP:  return REAC_CTRL_GROUP_MAP;
+	case REAC_OP_BOX_HB:     return REAC_CTRL_BOX_HB;
+	case REAC_OP_DECL:
+	case REAC_OP_DECL_ALT:
+	case REAC_OP_DECL_OTHER: return REAC_CTRL_CONFIG_ANNOUNCE;
+	default:                 return REAC_CTRL_UNKNOWN_CTRL;
+	}
+}
+
 enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
                                     struct reac_ctrl_parsed *out)
 {
+	struct reac_ctrl_parsed scratch;
+	if (!out)
+		out = &scratch;      /* the header promises NULL is allowed */
 	memset(out, 0, sizeof *out);
 	if (len < AUDIO_OFF || frame[12] != 0x88 || frame[13] != 0x19) {
 		out->kind = REAC_CTRL_NONE;
@@ -211,17 +244,23 @@ enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
 	memcpy(out->src, frame + 6, 6);
 	out->is_broadcast = (memcmp(frame, "\xff\xff\xff\xff\xff\xff", 6) == 0);
 	out->counter = (uint16_t)(frame[CNT_OFF] | (frame[CNT_OFF + 1] << 8));
-	out->op0 = frame[18]; out->op1 = frame[19];
-	out->op_len = (uint16_t)((frame[20] << 8) | frame[21]);
-	out->sel = frame[22];
-	out->sel2 = frame[23];
+
+	const uint8_t *block = frame + REAC_CTRL_BLOCK_OFF;
+	out->link    = block[0];
+	out->seg     = block[1];
+	out->blk_len = (uint16_t)((block[2] << 8) | block[3]);
+	out->opcode  = block[4];
 
 	const uint8_t t0 = frame[TYPE_OFF], t1 = frame[TYPE_OFF + 1];
 	if (t0 == 0x00 && t1 == 0x00) {
 		out->kind = REAC_CTRL_FILLER;
-	} else if (t0 == 0xcf && t1 == 0xea) {
+		return out->kind;
+	}
+	if (t0 == 0xcf && t1 == 0xea) {
 		out->kind = REAC_CTRL_MASTER_ANNOUNCE;
-	} else if (t0 == 0xce && t1 == 0xea) {
+		return out->kind;
+	}
+	if (t0 == 0xce && t1 == 0xea) {
 		/* A splitter's announce — the split role's own frame type, unicast to
 		 * the master ~1/s, block-checksummed like every announce (reac-aes67
 		 * REAC-PROTOCOL.md §6/§10.1, source-derived from reacdriver). Never
@@ -229,35 +268,49 @@ enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
 		 * names the kind and nothing more — no field decoding until a real
 		 * capture grounds the layout. */
 		out->kind = REAC_CTRL_SPLIT_ANNOUNCE;
-	} else if (t0 == 0xcd && t1 == 0xea) {
-		if (out->op0 == 0x04 && out->op1 == 0x03) {
-			/* op 04 03 is a RECORD CONTAINER, not one opcode: after the
-			 * 12 12 marker at [32] comes a 2-byte TAG. TAG 01 00 = the
-			 * connect-grant; TAG 01 01 = a HEAD-AMP record (CH PARAM
-			 * VALUE) — a live M-200 emits ~628 head-amp records per 14
-			 * grants, so a joining slave must NOT read a preamp
-			 * knob-turn as its grant. Every other tag (03 02, 05 00,
-			 * 00 00 — the cold-connect inventory variants) stays GRANT
-			 * as before (ground truth: m200-headamp-re/DECODE.md). */
-			if (frame[32] == 0x12 && frame[33] == 0x12 &&
-			    frame[34] == 0x01 && frame[35] == 0x01) {
-				out->kind = REAC_CTRL_HEADAMP;
-				out->ch    = frame[36];
-				out->param = frame[37];
-				out->value = frame[38];
-			} else {
-				out->kind = REAC_CTRL_GRANT;
-			}
-		} else if (out->op0 == 0x01 && out->op1 == 0x03 && out->op_len == 0x0019)
-			out->kind = REAC_CTRL_MASTER_HB;       /* master established heartbeat */
-		else if (out->op0 == 0x01 && out->op1 == 0x03 && out->op_len == 0x0001)
-			out->kind = REAC_CTRL_BOX_HB;          /* a box keep-alive */
-		else if (out->op0 == 0x01)
-			out->kind = REAC_CTRL_PROBE;           /* master hunting (sub-states) */
-		else
-			out->kind = REAC_CTRL_UNKNOWN_CTRL;
-	} else {
+		return out->kind;
+	}
+	if (t0 != 0xcd || t1 != 0xea) {
 		out->kind = REAC_CTRL_UNKNOWN_CTRL;
+		return out->kind;
+	}
+
+	switch (out->link) {
+	case REAC_LINK_CTRL:
+		out->kind = kind_of_link1(out->opcode);
+		break;
+	case REAC_LINK_SECOND:
+		out->kind = REAC_CTRL_LINK2;
+		break;
+	case REAC_LINK_RECORD:
+		if (out->seg != REAC_SEG_SINGLE) {
+			/* HALF a DT1 record. Its body concatenates with the other
+			 * fragment's and the SysEx checksum closes only across both, so
+			 * nothing inside it is read here: a tag lifted from a first
+			 * fragment is a tag read out of a truncated record. */
+			out->kind = REAC_CTRL_RECORD_FRAGMENT;
+			break;
+		}
+		/* A record container. block[14] is the DT1 model-id low byte, block[15]
+		 * the command and block[16:18] the register page. TAG 0x0101 is the
+		 * console's preamp command — a live M-200 emits ~628 head-amp records
+		 * per 14 grants, so a joining slave must not read a knob-turn as its
+		 * grant. Every other tag (the join grant, box-ready, identity, the head
+		 * mark) stays GRANT. */
+		out->dt1_tag = (uint16_t)((block[16] << 8) | block[17]);
+		if (block[14] == REAC_DT1_MODEL_LO && block[15] == REAC_DT1_CMD_DT1 &&
+		    out->dt1_tag == REAC_DT1_TAG_HEADAMP) {
+			out->kind  = REAC_CTRL_HEADAMP;
+			out->ch    = block[18];
+			out->param = block[19];
+			out->value = block[20];
+		} else {
+			out->kind = REAC_CTRL_GRANT;
+		}
+		break;
+	default:
+		out->kind = REAC_CTRL_UNKNOWN_CTRL;
+		break;
 	}
 	return out->kind;
 }
@@ -426,16 +479,18 @@ const struct reac_box_model *reac_box_model_by_channels(int in_ch)
 const struct reac_box_model *reac_ctrl_identify_box(const uint8_t *frame, size_t len)
 {
 	/* Recognize the connected box's MODEL from its config-announce
-	 * (cdea 01 03 0010) by matching the 32-byte descriptor block against the
+	 * (link 1, opcode 0x82 / 0x84 / 0x80) by matching the 32-byte descriptor
+	 * block against the
 	 * fixed matrix. Each row's config_block is unique (selector + descriptor:
 	 * S-1608 0x82; S-0808 / S-4000S both 0x84 but distinct descriptors), so an
 	 * exact block match uniquely names the model. NULL = not a config-announce,
 	 * or no known model -> caller falls back to the frame's own descriptor/width. */
 	if (len < REAC_CTRL_BLOCK_OFF + 32)               return NULL;
-	if (frame[12] != 0x88 || frame[13] != 0x19)       return NULL;   /* 0x8819    */
-	if (frame[16] != 0xcd || frame[17] != 0xea)       return NULL;   /* cdea      */
-	if (frame[18] != 0x01 || frame[19] != 0x03 ||
-	    frame[20] != 0x00 || frame[21] != 0x10)       return NULL;   /* 01 03 0010 */
+	if (frame[12] != 0x88 || frame[13] != 0x19)       return NULL;   /* 0x8819 */
+	if (frame[16] != 0xcd || frame[17] != 0xea)       return NULL;   /* cdea   */
+	struct reac_ctrl_parsed p;
+	if (reac_ctrl_parse(frame, len, &p) != REAC_CTRL_CONFIG_ANNOUNCE)
+		return NULL;
 	size_t n; const struct reac_box_model *t = reac_box_model_table(&n);
 	for (size_t i = 0; i < n; i++)
 		if (memcmp(frame + REAC_CTRL_BLOCK_OFF, t[i].config_block, 32) == 0)
@@ -906,13 +961,19 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame)
 	/* The inner record is TAG(2) CH PARAM VALUE CKSUM at frame[34..39]; the
 	 * console builds CKSUM so the six bytes sum to 0x80 mod 256 (byte-verified
 	 * on the M-200, m200-headamp-re/DECODE.md). A frame that fails this carries a
-	 * corrupted preamp record and its CH/PARAM/VALUE must not be trusted. */
+	 * corrupted preamp record and its CH/PARAM/VALUE must not be trusted.
+	 *
+	 * ONLY ON A COMPLETE RECORD. A link-4 frame whose segment is not SINGLE
+	 * carries HALF a record, and the SysEx checksum of a split record closes
+	 * across BOTH fragments — 358 mod 128 = 102 and 128 - 102 = 0x1a, the byte
+	 * that arrives in the second one. Summing six bytes of a first fragment
+	 * tests an arithmetic identity that was never meant to hold there, so the
+	 * answer would be a fail with no meaning. Refuse instead. */
+	if (frame[REAC_CTRL_BLOCK_OFF] != REAC_LINK_RECORD ||
+	    frame[REAC_CTRL_BLOCK_OFF + 1] != REAC_SEG_SINGLE)
+		return -1;
 	return reac_ctrl_record_cksum_verify(frame + 34, 6);
 }
-
-/* SENS dB <-> VALUE (pad-relative, 1 dB/step): dB = -10 - value + (pad ? 20 : 0).
- * Ground-truthed on the M-200 SENS display: pad off 0x00 = -10 dBu .. 0x37 =
- * -65 dBu; pad on 0x00 = +10 .. 0x37 = -45. */
 
 /* cdea 04 03 0014, record 12 12 01 00: the master's ACK of the box's join params. */
 static const uint8_t GRANT_HEAD_ACK[34] = {
