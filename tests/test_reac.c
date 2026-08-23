@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 #include "reac/reac.h"
+#include "reac/reac_ctrlblk.h"
 #include <stdio.h>
 #include <stdint.h>
 
@@ -41,6 +42,37 @@ int main(void)
 	CHECK(reac_counter_gap(0x1233, 0x1234) == 0, "gap consecutive = 0");
 	CHECK(reac_counter_gap(0x1233, 0x1236) == 2, "gap of 2");
 	CHECK(reac_counter_gap(0xFFFF, 0x0001) == 1, "gap across 16-bit wrap = 1");
+
+	/* HEAD-AMP SENS: one dB per step over all 56, and the library owns the law.
+	 * It was only ever exercised from reac-pw, which is how a curve with three
+	 * duplicate-gain steps lived here for as long as it did — nothing in libreac
+	 * would have gone red if it were wrong. Measured 2026-08-23 on an S-0808
+	 * electrical loopback; see reac/reac_ctrlblk.h. */
+	CHECK(reac_headamp_sens_cdb(0x00, 0) == -1000, "SENS 0x00 pad off = -10.00 dBu");
+	CHECK(reac_headamp_sens_cdb(0x37, 0) == -6500, "SENS 0x37 pad off = -65.00 dBu");
+	CHECK(reac_headamp_sens_cdb(0x00, 1) ==  1000, "SENS 0x00 pad on  = +10.00 dBu");
+	CHECK(reac_headamp_sens_cdb(0x37, 1) == -4500, "SENS 0x37 pad on  = -45.00 dBu");
+	CHECK(reac_headamp_sens_db(0x37, 0) == -65, "whole-dB endpoint is exact, not rounded");
+	{
+		int uneven = 0, notid = 0;
+		for (int v = 0; v < REAC_HEADAMP_SENS_MAX; v++)
+			if (reac_headamp_sens_cdb((uint8_t)v, 0) -
+			    reac_headamp_sens_cdb((uint8_t)(v + 1), 0) != 100)
+				uneven++;
+		/* Named individually because the refuted claim was about these three. */
+		CHECK(reac_headamp_sens_cdb(7, 0)  != reac_headamp_sens_cdb(8, 0),  "7 and 8 differ");
+		CHECK(reac_headamp_sens_cdb(23, 0) != reac_headamp_sens_cdb(24, 0), "23 and 24 differ");
+		CHECK(reac_headamp_sens_cdb(39, 0) != reac_headamp_sens_cdb(40, 0), "39 and 40 differ");
+		CHECK(uneven == 0, "every one of the 55 steps is exactly 100 cdB");
+		for (int pad = 0; pad <= 1; pad++)
+			for (int v = 0; v <= REAC_HEADAMP_SENS_MAX; v++)
+				if (reac_headamp_sens_value_cdb(
+					reac_headamp_sens_cdb((uint8_t)v, pad), pad) != v)
+					notid++;
+		CHECK(notid == 0, "the map is injective, so the round trip is the identity");
+	}
+	CHECK(reac_headamp_sens_value_cdb(99999, 0)  == 0x00, "hotter than min gain clamps to 0x00");
+	CHECK(reac_headamp_sens_value_cdb(-99999, 0) == 0x37, "below max gain clamps to 0x37");
 
 	if (fails == 0) printf("OK: all libreac tests passed\n");
 	else printf("%d libreac test(s) failed\n", fails);
