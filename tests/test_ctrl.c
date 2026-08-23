@@ -19,6 +19,7 @@
 
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_ports.h>
+#include <reac/reac.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -189,6 +190,29 @@ int main(void)
 	CHK(reac_ports_parse(f + REAC_CTRL_BLOCK_OFF, &ports) == -1);
 	frame_of(f, FX_L1_GROUP_MAP);
 	CHK(reac_ports_parse(f + REAC_CTRL_BLOCK_OFF, &ports) == -1);
+
+	/* ---- THE BUILDERS EMIT THE PAIR, AND THE PAIR CLOSES ------------------
+	 * A model either sends the identity record or it does not; it never sends
+	 * half. The two builders read one matrix flag, so the emitted fragments
+	 * cannot get out of step, and the record they carry is the one the corpus
+	 * holds - byte for byte, including the 0x1a the second frame closes with. */
+	static const uint8_t MASTER[6] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x01 };
+	static const uint8_t SRC[6]    = { 0x00, 0x40, 0xab, 0x00, 0x00, 0x02 };
+	uint8_t a[REAC_FRAME_BYTES], b[REAC_FRAME_BYTES];
+	size_t na = reac_ctrl_build_identity_first(a, MASTER, SRC, 1, 8);
+	size_t nb = reac_ctrl_build_identity_last(b, MASTER, SRC, 2, 8);
+	CHK(na > 0 && nb > 0);                     /* the S-0808 sends the record */
+	CHK(memcmp(a + 16, FX_FRAG_FIRST, 34) == 0);
+	CHK(memcmp(b + 16, FX_FRAG_LAST, 34) == 0);
+	CHK(reac_ctrl_parse(a, na, &p) == REAC_CTRL_RECORD_FRAGMENT && p.seg == REAC_SEG_FIRST);
+	CHK(reac_ctrl_parse(b, nb, &p) == REAC_CTRL_RECORD_FRAGMENT && p.seg == REAC_SEG_LAST);
+
+	/* ONE FLAG GATES BOTH, so a model cannot be made to emit a first fragment
+	 * with nothing to close it. Both widths that send no record send neither. */
+	CHK(reac_ctrl_build_identity_first(a, MASTER, SRC, 1, 16) == 0);
+	CHK(reac_ctrl_build_identity_last(b, MASTER, SRC, 2, 16) == 0);
+	CHK(reac_ctrl_build_identity_first(a, MASTER, SRC, 1, 32) == 0);
+	CHK(reac_ctrl_build_identity_last(b, MASTER, SRC, 2, 32) == 0);
 
 	/* ---- NULL out is allowed, as the header says ---- */
 	frame_of(f, FX_L1_BOX_HB);
