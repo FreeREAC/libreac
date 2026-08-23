@@ -175,10 +175,15 @@ int reac_ctrl_scene_set_mac(uint8_t *body, size_t n, const uint8_t mac[6]);
  * scene means reproducing that structure. Returns 0, or -1. */
 int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6]);
 
-/* ---- HEAD-AMP SENSITIVITY: the box's own step -> gain curve ----------------
+/* ---- HEAD-AMP SENSITIVITY: the box's step -> sensitivity curve -------------
  *
- * ONE DECIBEL PER STEP, all 56 of them, with no duplicate steps anywhere.
- * Sensitivity runs -10 dBu at 0x00 down to -65 dBu at 0x37, pad off; the pad
+ * ONE DECIBEL PER STEP, all 56 of them, with no duplicate steps anywhere. The
+ * step table in the box image is 56 entries with no spares, which is where the
+ * COUNT comes from; what a step is WORTH is measured, not read.
+ *
+ *     sensitivity_dBu = -10 - value + (pad ? 20 : 0)
+ *
+ * so -10 dBu at 0x00 down to -65 dBu at 0x37 with the pad off, and the pad
  * shifts the whole travel up by 20. The curve is declared once in
  * reac-protocol's spec/protocol-facts.yaml (group `headamp_sens`) and this is
  * its C spelling.
@@ -192,32 +197,44 @@ int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6]);
  *   pad, measured          20.12 and 20.20 dB at two different steps
  *
  * The residual is the size of the measurement's own scatter, so the law this
- * spells is the round 1 dB and not the fitted 0.988.
+ * spells is the round 1 dB and the 0.988 is a measurement OF it, not a rival.
  *
- * WHAT THIS REPLACES, because it was here and it was wrong. A 56-entry table
- * read out of the S-1608's image at 0x0c0327a0 gives four coarse stages with
- * breaks at 8, 24 and 40. That structure is real. What was inferred from it was
- * not: that gain is CONTINUOUS across a break, so 7/8, 23/24 and 39/40 deliver
- * identical gain and the map is not injective. All three pairs were put to a
- * rapid A/B/A alternation, twice each, at two generator levels:
+ * THE FIRMWARE'S FOUR COARSE STAGES ARE REAL AND CHANGE NOTHING. The step table
+ * has breaks at 8, 24 and 40, and gain being continuous across a break — which
+ * would make 7/8, 23/24 and 39/40 deliver identical gain and the map
+ * non-injective — is an inference from that structure and it is refuted. All
+ * three pairs were put to a rapid A/B/A alternation, twice each, at two
+ * generator levels:
  *
  *    7 -> 8    +0.92 dB and +1.12 dB     (drift control: 0.08 / 0.10 dB)
  *   23 -> 24   +1.36 dB and +1.31 dB     (drift control: 0.34 / 0.15 dB)
  *   39 -> 40   +0.97 dB and +0.84 dB     (drift control: 0.26 / 0.08 dB)
  *
  * Every pair steps by about a decibel, an order of magnitude outside its own
- * control. There are no twins, so the map IS injective and a round trip is the
- * identity everywhere.
+ * control. There are no twins, the map IS injective, and a round trip through it
+ * is the identity everywhere. The 6.06 dB drop in the NOISE FLOOR at 23->24 is
+ * real and is a noise-figure step — the preamp switching to a quieter input
+ * stage — sitting on top of an ordinary 1 dB gain step, not instead of one. A
+ * floor is a good probe of repeatability and a biased probe of slope: it
+ * measures gain x input-referred noise PLUS what the output stage and converter
+ * add after the gain, and that second term does not scale. Do not derive a step
+ * size from one.
  *
- * WHY THE EARLIER NUMBERS CAME OUT LOW (0.90 / 0.95 / 0.98 per step, span
- * 48.75): they were taken from the preamp's own NOISE FLOOR. A floor is not a
- * gain probe. What it measures is gain x input-referred noise PLUS whatever the
- * output stage and converter add after the gain, and that second term does not
- * scale — so the floor's slope is always shallower than the gain's, and most so
- * at low gain. It is a good probe of REPEATABILITY (0.03 dB across sessions) and
- * a biased probe of SLOPE. The 6.06 dB floor drop at 23->24 is real and stands;
- * it is the preamp switching to a quieter input stage, and it is a noise-figure
- * step sitting on top of an ordinary 1 dB gain step, not instead of one.
+ * WHAT LIBREAC PUBLISHES IS SENSITIVITY IN dBu, NOT GAIN, and the two differ by
+ * a constant that is not settled. Sensitivity is the input level that reaches
+ * full scale, so it runs the OTHER WAY from gain: the hottest setting is the
+ * most negative number. Against a 0 dBu reference this library's curve is
+ * equivalent to gain_dB = 10 + value, and openmixer publishes the same control
+ * as 0..55 dB, a different zero by 10 dB.
+ *
+ * NEITHER IS SILENTLY CONVERTIBLE INTO THE OTHER. The loopback that measured the
+ * SPAN cannot separate the endpoint from the box's own converter reference — it
+ * sees only their sum — so -10 dBu at step 0 is carried over from every prior
+ * source that agreed on it and is INFERRED, not measured. Ground truth is the
+ * M-200's own SENS display and it has not been read. Until it is, a consumer
+ * that shows one number and a consumer that shows the other are 10 dB apart and
+ * both think they are right; whoever closes it moves BOTH sides deliberately, in
+ * one change, and not by making an adapter that quietly adds ten.
  *
  * A NOTE ON UNITS. The step is a whole decibel, so the integer-dB pair below is
  * exact and round-trips; the centi-dB pair is kept because it is the published
