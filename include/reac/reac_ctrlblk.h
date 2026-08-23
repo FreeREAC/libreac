@@ -176,4 +176,86 @@ uint8_t  reac_headamp_sens_value_cdb(int cdb, int pad_on);
 int      reac_headamp_sens_db(uint8_t value, int pad_on);
 uint8_t  reac_headamp_sens_value(int db, int pad_on);
 
+
+/* ---- frame parsing and the device matrix ---------------------------------
+ * Moved out of the daemon because every REAC implementation needs exactly this
+ * and would otherwise rewrite it: what a frame IS, and which real box is on the
+ * wire. Neither encodes a choice. What stays behind is what does — which slots we
+ * grant a box, when we advance a state machine, how we wire it into a graph. */
+
+enum reac_ctrl_kind {
+	REAC_CTRL_NONE = 0,      /* not a 0x8819 frame */
+	REAC_CTRL_FILLER,        /* type 00 00 (audio/idle), checksum-exempt */
+	REAC_CTRL_PROBE,         /* master cdea 01, sub-state cycling (hunting) */
+	REAC_CTRL_MASTER_HB,     /* master cdea 01 03 0019 (established heartbeat) */
+	REAC_CTRL_MASTER_ANNOUNCE,/* master cfea (announce) */
+	REAC_CTRL_GRANT,         /* master cdea 04 03, record TAG 01 00 (the JOIN
+	                          * grant-burst; also any 04 03 tag we don't know) */
+	REAC_CTRL_HEADAMP,       /* master cdea 04 03, record TAG 01 01 (head-amp:
+	                          * CH PARAM VALUE — a preamp knob, NOT a grant) */
+	REAC_CTRL_BOX_HB,        /* a box cdea 01 03 0001 81 (our keep-alive) */
+	REAC_CTRL_SPLIT_ANNOUNCE,/* a splitter's ceea announce — the split role's
+	                          * own frame type (reac-aes67 REAC-PROTOCOL.md §6,
+	                          * source-derived; never yet captured, §14.1) */
+	REAC_CTRL_UNKNOWN_CTRL,  /* cdea/cfea we don't classify */
+};
+
+
+struct reac_ctrl_parsed {
+	enum reac_ctrl_kind kind;
+	uint8_t  src[6];
+	uint8_t  dst[6];
+	int      is_broadcast;   /* dst == ff:ff:ff:ff:ff:ff */
+	uint16_t counter;        /* bytes 14-15 LE */
+	uint8_t  op0, op1;       /* control opcode bytes [18],[19] */
+	uint16_t op_len;         /* BE length [20:22] */
+	uint8_t  sel;            /* selector [22] (0x81/0x82/... or a channel byte) */
+	uint8_t  sel2;           /* second selector byte [23] (cold-connect: 0x02) */
+	uint8_t  ch;             /* HEADAMP only: wire channel (model_base + input-1) */
+	uint8_t  param;          /* HEADAMP only: enum reac_headamp_param */
+	uint8_t  value;          /* HEADAMP only: 0|1 (phantom/pad) or 0x00..0x37 (SENS) */
+};
+
+
+/* Classify a frame. Returns the kind and fills *out (which may be NULL). */
+enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
+                                    struct reac_ctrl_parsed *out);
+
+/* ---- FIXED box-model matrix ----
+ * A REAC stagebox is identified on the wire by three orthogonal fields (see
+ * docs/REAC-BOX-STATE-DIAGRAM.md): the config-announce SELECTOR byte (model
+ * family), an optional ASCII NAME frame (exact model within the 0x84 family),
+ * and the channel DESCRIPTOR + width (52 + 36*in_ch bytes). We ship a fixed
+ * table of byte-verified real models so a model always matches its channels —
+ * there is no "S-1608 with 8 channels". Pick a row by token or by in-channel
+ * count; both resolve to the same entry. */
+struct reac_box_model {
+	const char *token;      /* CLI token: "s1608", "s0808"              */
+	const char *display;    /* human label for --help / logs            */
+	int         in_ch;      /* box input (upstream) width -> frame size  */
+	int         out_ch;     /* box output (downstream) width             */
+	uint8_t     config_block[32];  /* config-announce cdea 01 03 0010    */
+	int         has_name;   /* 1 -> also emit the ASCII name frame       */
+	uint8_t     name_block[32];    /* name frame cdea 04 01 001b (if any)*/
+	/* The mixer identifies the MODEL from the cold-connect INVENTORY frames, not
+	 * just the config-announce: the 0016/001a blocks differ per model, and some
+	 * models emit an extra 0402000d frame. Byte-verified per model. */
+	uint8_t     cc0014[32];        /* cold-connect cdea 04 03 0014       */
+	uint8_t     cc0013[32];        /* cold-connect cdea 04 03 0013       */
+	uint8_t     cc0016[32];        /* cold-connect cdea 04 03 0016       */
+	uint8_t     cc001a[32];        /* cold-connect cdea 04 03 001a       */
+	int         has_extra;  /* 1 -> also emit the cdea 04 02 000d frame  */
+	uint8_t     extra_block[32];   /* cdea 04 02 000d (if any)           */
+};
+const struct reac_box_model *reac_box_model_by_token(const char *token);
+const struct reac_box_model *reac_box_model_by_channels(int in_ch);
+const struct reac_box_model *reac_box_model_table(size_t *count);
+
+/* The box a cold-connect/config frame belongs to, or NULL when no row matches.
+ * Never guesses: an unknown width is unknown, not the nearest model. */
+const struct reac_box_model *reac_ctrl_identify_box(const uint8_t *frame, size_t len);
+
+/* The wire length of a box->master frame at a given input width. */
+size_t reac_ctrl_box_frame_len(int n_ch);
+
 #endif /* REAC_CTRLBLK_H */
