@@ -20,7 +20,7 @@ AR      ?= ar
 CFLAGS  ?= -O2 -std=c11 -Wall -Wextra
 INC     := -Iinclude
 
-OBJS = reac.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o
+OBJS = reac.o reac_ctrlblk.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o
 
 all: libreac.a
 
