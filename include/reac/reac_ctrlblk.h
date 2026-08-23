@@ -362,9 +362,9 @@ size_t reac_ctrl_build_coldconnect_001a(uint8_t *out, const uint8_t master[6],
 enum reac_headamp_param {
 	REAC_HEADAMP_PHANTOM = 0x00,   /* +48V on/off (value 0|1) */
 	REAC_HEADAMP_PAD     = 0x01,   /* -20 dB pad on/off (value 0|1) */
-	REAC_HEADAMP_SENS    = 0x02,   /* sensitivity step, 0x00..0x37 — NOT 1 dB each;
-	                                * the box's own table is non-uniform, see
-	                                * reac_headamp_sens_cdb */
+	REAC_HEADAMP_SENS    = 0x02,   /* sensitivity step, 0x00..0x37, a flat 1 dB
+	                                * each — see reac_headamp_sens_cdb and
+	                                * REAC_HEADAMP_SENS_STEP_CDB */
 };
 
 /* The head-amp WIRE-CHANNEL space: 0x00..0x2f, so 0x30 = 48 addressable channels.
