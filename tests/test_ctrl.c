@@ -147,7 +147,18 @@ int main(void)
 	CHK(six % 256 != 0x80);
 	forged[23] = (uint8_t)(forged[23] + (0x80 - six % 256));
 	frame_of(f, forged);
+	reac_ctrl_checksum_apply(f);         /* valid in every respect but the field
+	                                      * under test - an outer checksum left
+	                                      * wrong would give the guard a second
+	                                      * reason to refuse and hide whether it
+	                                      * is the one doing the work */
+	CHK(reac_ctrl_checksum_verify(f) == 0);
 	CHK(reac_ctrl_record_cksum_verify(f + 34, 6) == 0);   /* it does sum to 0x80 */
+	/* AND THE PARSER MUST REACH THE GUARD. Without this the fixture could stop
+	 * being a link-4 fragment at all and the assertion below would pass for the
+	 * wrong reason - a guard nothing feeds is decoration. */
+	CHK(reac_ctrl_parse(f, sizeof f, &p) == REAC_CTRL_RECORD_FRAGMENT);
+	CHK(p.link == REAC_LINK_RECORD && p.seg == REAC_SEG_FIRST);
 	CHK(reac_ctrl_headamp_record_verify(f) == -1);        /* and is still half   */
 
 	/* THE SPLIT RECORD'S CHECKSUM CLOSES ONLY ACROSS BOTH FRAGMENTS. Sum the
