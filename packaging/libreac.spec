@@ -69,8 +69,9 @@ done
 mkdir -p %{buildroot}%{_libdir}/pkgconfig
 cat > %{buildroot}%{_libdir}/pkgconfig/libreac.pc <<PC
 prefix=%{_prefix}
-libdir=%{_libdir}
-includedir=%{_includedir}
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/%{_lib}
+includedir=\${prefix}/include
 
 Name: libreac
 Description: Roland REAC wire-format core
