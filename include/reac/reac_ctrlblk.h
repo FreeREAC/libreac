@@ -366,8 +366,14 @@ enum reac_headamp_param {
  * REAC_M_CHANMAP_RING = 48 channels + the 0xfe marker). A 16-input S-1608 based at
  * 0x20 occupies 0x20..0x2f = 32..47, so a table bounded by 40 silently REJECTED
  * that box's inputs 9..16 — its top half could never be given phantom/pad/sens.
- * Both spaces are defined once in reac_slots.h (#69); this is the head-amp one. */
-#define REAC_HEADAMP_MAX_CH REAC_HEADAMP_SLOTS
+ * This is the head-amp one, and it is defined HERE and only here. It used to be
+ * spelled REAC_HEADAMP_SLOTS, which is reac-pw's name for it in reac_slots.h — a
+ * header libreac does not have. Carrying that spelling across in the migration
+ * left this expanding to an undefined identifier, and a second definition further
+ * down agreed on the value, so nothing that compared VALUES could see it. The
+ * damage was structural: every translation unit including this header warned, and
+ * a -Werror consumer could not build at all. One name, one definition, here. */
+#define REAC_HEADAMP_MAX_CH 48
 
 /* Build the head-amp command frame (master->box direction, downstream width:
  * a real console BROADCASTS these interleaved in its stream — pass the
@@ -407,11 +413,10 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame);
  * phantom/pad/SENS, one record per allocated channel per parameter); group B is
  * the fixed six-record constant (marker 12 11, TAG 05 00). Returns the row count
  * written (REAC_GRANT_SWEEP_LEN(width)), or -1. */
-/* Head-amp cells: three parameters per channel, over the 48-slot head-amp space
- * (0x00..0x2f). Both are protocol bounds, so they live with the records that
- * carry them rather than in one caller's header. */
+/* Three head-amp parameters per channel. A protocol bound, so it lives with the
+ * records that carry it rather than in one caller's header.
+ * (REAC_HEADAMP_MAX_CH is defined once, above, with the head-amp CH space.) */
 #define REAC_HEADAMP_NPARAMS    3
-#define REAC_HEADAMP_MAX_CH     48
 
 #define REAC_GRANT_GROUPB_LEN   6
 #define REAC_GRANT_SWEEP_LEN(w) (8 + (w) * 3)
