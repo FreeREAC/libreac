@@ -330,6 +330,37 @@ enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
 	return out->kind;
 }
 
+/* See the header. The SysEx runs block[9 .. 9+block[8]); its last two bytes are
+ * the Roland checksum and 0xf7. For an identity record the command is at
+ * block[15], the register page (0x0500) at block[16:18], the address low half at
+ * block[18:20], and the payload from block[20] up to the checksum. */
+int reac_ctrl_identity_reply(const uint8_t *frame, size_t len, uint16_t *addr_lo,
+                             const uint8_t **payload, size_t *payload_len)
+{
+	if (!frame || !addr_lo || !payload || !payload_len)
+		return -1;
+	struct reac_ctrl_parsed p;
+	if (reac_ctrl_parse(frame, len, &p) != REAC_CTRL_GRANT)
+		return 0;                       /* not a single DT1 record container */
+	if (p.dt1_tag != REAC_DT1_TAG_IDENTITY)
+		return 0;
+	const uint8_t *block = frame + REAC_CTRL_BLOCK_OFF;
+	if (block[14] != REAC_DT1_MODEL_LO || block[15] != REAC_DT1_CMD_DT1)
+		return 0;                       /* an RQ1 poll (0x11), or not a DT1 */
+	unsigned sysex_len = block[8];
+	/* Preamble(6)+cmd(1)+tag(2)+addr(2)+cksum(1)+f7(1) = 13 with no payload; a
+	 * real reply carries at least one payload byte, and the SysEx must fit the
+	 * 32-byte block starting at block[9]. */
+	if (sysex_len < 14 || (unsigned)(9 + sysex_len) > REAC_CTRL_BLOCK_LEN)
+		return 0;
+	if (block[9] != 0xf0 || block[9 + sysex_len - 1] != 0xf7)
+		return 0;
+	*addr_lo = (uint16_t)((block[18] << 8) | block[19]);
+	*payload = &block[20];
+	*payload_len = (size_t)sysex_len - 13;
+	return 1;
+}
+
 /* box-width frame length for n_ch inputs */
 size_t reac_ctrl_box_frame_len(int n_ch)
 {
