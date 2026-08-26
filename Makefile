@@ -20,7 +20,7 @@ AR      ?= ar
 CFLAGS  ?= -O2 -std=c11 -Wall -Wextra
 INC     := -Iinclude
 
-OBJS = reac.o reac_ctrlblk.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o
+OBJS = reac.o reac_ctrlblk.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o
 
 # tests/reac_facts_assert.h binds libreac's own macros to reac-protocol's
 # spec/protocol-facts.yaml (see the header for what it checks). Two builds:
@@ -92,7 +92,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -111,6 +111,8 @@ test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstr
 	./test_ctrl
 	$(CC) $(CFLAGS) -I$(dir $(FACTS_ASSERT_H)) $(INC) tests/test_facts.c libreac.a -lm -o test_facts
 	./test_facts
+	$(CC) $(CFLAGS) $(INC) tests/test_identity.c libreac.a -lm -o test_identity
+	./test_identity
 	# A SOURCE-SHAPE ARM, not a value arm. The head-amp base must have exactly
 	# one source in the code — the announced strap. A per-width table agrees
 	# with the announce on every chassis we own, so no test built from our own
@@ -158,7 +160,7 @@ $(WIRE_TOOLS): %: tools/%.c libreac.a
 	$(CC) $(CFLAGS) $(INC) $< libreac.a -lm -o $@
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_facts corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_facts test_identity corpus_check $(WIRE_TOOLS)
 	rm -rf $(BUILD_DIR)
 
 .PHONY: all test conformance corpus wire-tools clean
