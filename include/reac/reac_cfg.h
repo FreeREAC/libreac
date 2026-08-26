@@ -82,7 +82,11 @@
  * below. */
 #define REAC_RATE_SOURCE_PROP         "reac.rate.source"
 #define REAC_RATE_SOURCE_ASSERTED     "asserted"  /* an operator's own write stands */
-#define REAC_RATE_SOURCE_DEFAULT      "default"   /* no assertion — best drivable   */
+/* Operator, 2026-08-26: "default is not a valid value — we make the best the default, it
+ * is a convention." No assertion standing means the daemon runs the best drivable rate BY
+ * CONVENTION; any rate the operator gave (a flag, a conf file, a console assertion over
+ * the graph) is ASSERTED. */
+#define REAC_RATE_SOURCE_CONVENTION   "convention" /* no assertion — best drivable   */
 
 /* ---- the CLOSED pace list: REAC has three rates by definition -------------- */
 
