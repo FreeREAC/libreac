@@ -128,4 +128,13 @@
 #define REAC_CFG_RATE_STATE_PENDING         "pending"
 #define REAC_CFG_RATE_STATE_APPLIED         "applied"
 
+/* The role answer, published beside reac.cfg.role. A same-role assertion is applied
+ * immediately; a role CHANGE (master<->slave) tears down one engine and builds the
+ * other, which cannot complete without a live re-attach, so it is answered
+ * "role_reestablish_pending" and never a fake "applied". */
+#define REAC_CFG_ROLE_STATE_PROP            "reac.cfg.role.state"
+#define REAC_CFG_ROLE_REFUSED_PROP          "reac.cfg.role.refused"
+#define REAC_CFG_ROLE_STATE_APPLIED         "applied"
+#define REAC_CFG_ROLE_STATE_PENDING         "role_reestablish_pending"
+
 #endif /* REAC_CFG_H */
