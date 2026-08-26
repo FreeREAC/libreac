@@ -9,6 +9,8 @@
  * these are not self-referential goldens. Every negative arm proves a malformed
  * or unanswered address stays a FACT (has_* clear), never a guess. */
 #include <reac/reac_identity.h>
+#include <reac/reac_ctrlblk.h>
+#include <reac/reac.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -28,6 +30,39 @@ static const uint8_t NAME_S0808[11] = {
 static const uint8_t HW_S0808[8]  = { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
 static const uint8_t HW_S1608[8]  = { 0x00, 0x00, 0x00, 0x02, 0x00, 0x03, 0x00, 0x02 };
 static const uint8_t HW_S4000S[8] = { 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x02 };
+
+
+/* Lay a single-record DT1 identity REPLY into a raw frame the way the wire
+ * carries it: dst/src macs, 0x8819, type cd ea, then the control block whose
+ * SysEx is f0 41 0a 00 00 12 12 <tag> <addr_lo> <payload> <cksum> f7. The block
+ * checksum is not stamped — reac_ctrl_parse does not verify it, and the
+ * extractor reads structure, not the outer checksum. Returns the frame length. */
+static size_t build_identity_reply(uint8_t *frame, uint16_t addr_lo,
+                                   const uint8_t *payload, size_t plen)
+{
+	memset(frame, 0, REAC_FRAME_BYTES);
+	static const uint8_t OURS[6] = { 0x00, 0x40, 0xab, 0x11, 0x22, 0x33 };
+	static const uint8_t BOX[6]  = { 0x00, 0x40, 0xab, 0xc4, 0x80, 0xf6 };
+	memcpy(frame, OURS, 6);
+	memcpy(frame + 6, BOX, 6);
+	frame[12] = 0x88; frame[13] = 0x19;
+	frame[16] = 0xcd; frame[17] = 0xea;                 /* type: control */
+	uint8_t *b = frame + REAC_CTRL_BLOCK_OFF;
+	unsigned sysex_len = (unsigned)(13 + plen);         /* preamble..f7 + payload */
+	b[0] = 0x04; b[1] = 0x03;                            /* link 4, seg SINGLE */
+	b[2] = 0x00; b[3] = (uint8_t)(sysex_len + 5);        /* a length; unread here */
+	b[4] = 0x00; b[5] = 0x02; b[6] = 0x00; b[7] = 0xfe;
+	b[8] = (uint8_t)sysex_len;
+	b[9]  = 0xf0; b[10] = 0x41; b[11] = 0x0a; b[12] = 0x00; b[13] = 0x00;
+	b[14] = 0x12; b[15] = 0x12;                          /* DT model-lo, DT1 set */
+	b[16] = 0x05; b[17] = 0x00;                          /* tag 0x0500 */
+	b[18] = (uint8_t)(addr_lo >> 8); b[19] = (uint8_t)(addr_lo & 0xff);
+	for (size_t i = 0; i < plen; i++)
+		b[20 + i] = payload[i];
+	b[20 + plen] = 0x7f;                                 /* stand-in SysEx cksum */
+	b[21 + plen] = 0xf7;
+	return REAC_FRAME_BYTES;
+}
 
 int main(void)
 {
@@ -101,6 +136,43 @@ int main(void)
 	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE, FW_S0808, 4) == 1);
 	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE, FW_S0808, 4) == 1);
 	CHK(id.fw_milli == 1003);
+
+
+	/* ---- the wire extractor: a received DT1 reply -> addr_lo + payload ---- */
+	{
+		uint8_t frame[REAC_FRAME_BYTES];
+		uint16_t got_addr;
+		const uint8_t *pl;
+		size_t pll;
+
+		/* S-0808 firmware reply: addr 0x0000, payload 01 00 00 03. */
+		build_identity_reply(frame, REAC_IDENTITY_ADDR_FIRMWARE, FW_S0808, 4);
+		CHK(reac_ctrl_identity_reply(frame, sizeof frame, &got_addr, &pl, &pll) == 1);
+		CHK(got_addr == REAC_IDENTITY_ADDR_FIRMWARE && pll == 4);
+		reac_identity_init(&id);
+		CHK(reac_identity_ingest(&id, got_addr, pl, pll) == 1);
+		CHK(id.fw_milli == 1003);
+
+		/* S-1608 hardware block reply: addr 0x0600, eight bytes. */
+		build_identity_reply(frame, REAC_IDENTITY_ADDR_HW_BLOCK, HW_S1608, 8);
+		CHK(reac_ctrl_identity_reply(frame, sizeof frame, &got_addr, &pl, &pll) == 1);
+		CHK(got_addr == REAC_IDENTITY_ADDR_HW_BLOCK && pll == 8);
+		CHK(reac_identity_ingest(&id, got_addr, pl, pll) == 1);
+		CHK(memcmp(id.hw_block, HW_S1608, 8) == 0);
+
+		/* An RQ1 POLL (command 0x11), not a reply, is not extracted. */
+		build_identity_reply(frame, REAC_IDENTITY_ADDR_FIRMWARE, FW_S0808, 4);
+		frame[REAC_CTRL_BLOCK_OFF + 15] = REAC_DT1_CMD_RQ1;   /* 0x12 -> 0x11 */
+		CHK(reac_ctrl_identity_reply(frame, sizeof frame, &got_addr, &pl, &pll) == 0);
+
+		/* A non-identity frame (a FILLER) is not extracted. */
+		memset(frame, 0, sizeof frame);
+		frame[12] = 0x88; frame[13] = 0x19;   /* type 00 00 = filler */
+		CHK(reac_ctrl_identity_reply(frame, sizeof frame, &got_addr, &pl, &pll) == 0);
+
+		/* NULL arguments. */
+		CHK(reac_ctrl_identity_reply(NULL, sizeof frame, &got_addr, &pl, &pll) == -1);
+	}
 
 	printf("test_identity: all checks passed\n");
 	return 0;

@@ -438,6 +438,23 @@ size_t reac_ctrl_build_identity_first(uint8_t *out, const uint8_t master[6],
                                       const uint8_t src[6], uint16_t counter, int in_ch);
 size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
                                      const uint8_t src[6], uint16_t counter, int in_ch);
+
+/* Extract ONE single-record DT1 identity reply (register page 0x0500) from a
+ * received frame — the box's answer to the identity poll the grant sweep's
+ * group B sends. On success sets *addr_lo (the low half of the Roland address,
+ * REAC_IDENTITY_ADDR_*), and points *payload / *payload_len at the record's
+ * contents inside `frame` (no copy; valid while `frame` lives). Feed the pair
+ * straight to reac_identity_ingest.
+ *
+ * Returns 1 when the frame is such a reply, 0 when it is not (any other frame,
+ * an RQ1 poll rather than a DT1 reply, or a malformed record), and <0 on a NULL
+ * argument. It handles ONLY single-record replies — the firmware (0x0000) and
+ * the hardware block (0x0600), which fit one control block. The model NAME
+ * arrives as TWO link-4 fragments (REAC_CTRL_RECORD_FRAGMENT) and is not
+ * reassembled here; a consumer that wants the name text reads it from the
+ * config-announce width/model instead. */
+int reac_ctrl_identity_reply(const uint8_t *frame, size_t len, uint16_t *addr_lo,
+                             const uint8_t **payload, size_t *payload_len);
 /* The box cold-connect (cdea 04 03): the 32-byte control block over LIVE audio
  * [50:626] (the [38:66] region is per-frame audio, NOT device inventory). Audio is
  * planar float [ch][s], as build_upstream_filler; NULL planar -> silent. The master
