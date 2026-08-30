@@ -167,7 +167,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * `undefined symbol`. A removed symbol needs BOTH numbers below to move. */
 #define LIBREAC_VERSION_MAJOR 0
 #define LIBREAC_VERSION_MINOR 7
-#define LIBREAC_VERSION_PATCH 0
+#define LIBREAC_VERSION_PATCH 1
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
