@@ -53,6 +53,35 @@ extern "C" {
 #define REAC_UPSTREAM_OVERHEAD     52  /* 50 B header + 2 B end marker */
 #define REAC_UPSTREAM_BYTES_PER_CH 36  /* 12 samples x 3 B */
 
+/* THE GEOMETRY IS THE ROLE. A master's downstream is always the 40-channel
+ * solution (1492 B); a stagebox's upstream is its own, smaller, declared width.
+ * Frame length therefore decides which side of the protocol a peer is, with
+ * nothing to decode and no heuristic.
+ *
+ * This outranks the control frames: a stagebox switched to master mode
+ * broadcasts and classifies as `master` by every control-frame rule while still
+ * emitting a box geometry. A master never joins another master, so such a peer
+ * is a misconfigured box to report, not a master to follow.
+ *
+ * Pass a CLEAN length (reac_frame_clean_len() first); an FCS residue reads as
+ * non-geometric. */
+static inline int reac_frame_is_master_downstream(size_t len)
+{
+	return len == REAC_FRAME_BYTES;
+}
+
+/* The channel width a clean REAC frame carries; 0 if `len` is not a legal
+ * geometry. The wire declares the width, so nothing configures or remembers it. */
+static inline unsigned reac_frame_channels(size_t len)
+{
+	if (len < REAC_UPSTREAM_OVERHEAD)
+		return 0;
+	len -= REAC_UPSTREAM_OVERHEAD;
+	if (len % REAC_UPSTREAM_BYTES_PER_CH)
+		return 0;
+	return (unsigned)(len / REAC_UPSTREAM_BYTES_PER_CH);
+}
+
 /* A sample-rate descriptor for the master's DOWNSTREAM broadcast (the program the
  * console sends out). That frame is rate-invariant: always 40 ch x 12 samples x 3 B
  * = 1440 B audio, with the sample rate carried by the PACKET RATE (pps =
