@@ -127,5 +127,24 @@ int main(void)
 
 	if (fails == 0) printf("OK: all libreac tests passed\n");
 	else printf("%d libreac test(s) failed\n", fails);
+
+	/* THE GEOMETRY IS THE ROLE: 1492 is the only master downstream; every legal
+	 * smaller geometry is a box upstream of that width. A stagebox in master mode
+	 * still emits its box width, which is what keeps a misconfigured box from
+	 * being followed as a master. */
+	CHECK(reac_frame_is_master_downstream(REAC_FRAME_BYTES), "1492 is the master downstream");
+	CHECK(!reac_frame_is_master_downstream(1204), "1204 (S-4000S 32ch) is a box upstream, not a master");   /* S-4000S, 32 ch */
+	CHECK(!reac_frame_is_master_downstream(628), "628 (S-1608 16ch) is a box upstream");    /* S-1608, 16 ch */
+	CHECK(!reac_frame_is_master_downstream(340), "340 (S-0808 8ch) is a box upstream");    /* S-0808, 8 ch  */
+	CHECK(!reac_frame_is_master_downstream(REAC_FRAME_BYTES_OHRCA), "FCS residue is not a geometry"); /* residue is not a geometry */
+
+	CHECK(reac_frame_channels(REAC_FRAME_BYTES) == 40, "width of 1492 is 40");
+	CHECK(reac_frame_channels(1204) == 32, "width of 1204 is 32");
+	CHECK(reac_frame_channels(628) == 16, "width of 628 is 16");
+	CHECK(reac_frame_channels(340) == 8, "width of 340 is 8");
+	CHECK(reac_frame_channels(REAC_FRAME_BYTES_OHRCA) == 0, "1494 is not 52 + n*36"); /* 1494: not 52 + n*36 */
+	CHECK(reac_frame_channels(51) == 0, "below the header is no geometry");                     /* below the header */
+	CHECK(reac_frame_channels(REAC_UPSTREAM_OVERHEAD) == 0, "a zero-width frame is no geometry"); /* a zero-width frame */
+
 	return fails ? 1 : 0;
 }
