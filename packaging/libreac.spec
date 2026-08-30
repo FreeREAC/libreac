@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.7.0
+Version:        0.7.1
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -101,6 +101,15 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Sun Aug 30 2026 Pau Aliagas <linuxnow@gmail.com> - 0.7.1-1
+- The geometry is the role. reac_frame_is_master_downstream() and
+  reac_frame_channels() answer, from a frame's length alone, which side of the
+  protocol a peer is and how wide it is. Header-only static inlines, so the ABI
+  and SONAME are unchanged.
+- Why it matters: a stagebox strapped to master mode broadcasts and classifies
+  as a master by every control-frame rule while still emitting a box geometry.
+  A master never joins another master, so that peer is a misconfigured box to
+  report rather than a master to follow, and only the length can tell.
 * Sun Aug 23 2026 Pau Aliagas <linuxnow@gmail.com> - 0.7.0-1
 - API BREAK, and this is the release that admits it. The identity record is one
   message built by the identity-first surface; reac_ctrl_build_name_frame() and
