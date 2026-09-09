@@ -24,12 +24,11 @@
  * -1 when the fallback was used. */
 int reac_mac_compose(int hw_family, const uint8_t hwaddr[6], uint8_t out[6]);
 
-/* Fill `out` with the default source MAC for `ifname` (reads SIOCGIFHWADDR and
- * calls reac_mac_compose). Returns 0 when `out` is the NIC's address, -1 on any
- * failure (ifname NULL/empty, no such device, not an ethernet address), in
- * which case `out` holds the locally-administered fallback. `out` is ALWAYS
- * filled with a usable MAC regardless of the return value. */
-int reac_mac_default_src(const char *ifname, uint8_t out[6]);
+/* Fill `out` with that same locally-administered fallback and return -1, for a caller who
+ * could not read a hardware address at all. READING ONE OFF A NAMED INTERFACE IS NOT HERE:
+ * it is an ioctl on a socket, and this library opens none — the daemon does that (reac-pw's
+ * reac_mac_default_src) and hands the bytes in. */
+int reac_mac_fallback(uint8_t out[6]);
 
 /* THE ONE EXCEPTION, AND THE RIG THAT FORCED IT (0.5.6, 2026-09-09). The law above is a
  * decision with rig evidence behind it and it still holds everywhere it was made for: a
