@@ -465,6 +465,82 @@ size_t reac_ctrl_build_coldconnect(uint8_t *out, const uint8_t master[6],
 
 /* The cdea 04 03 0013 cold-connect variant, interleaved with the 0014 by a real
  * box. Emitted raw (the 0013 block is not sum-to-0). */
+/* THE CONFIG-ANNOUNCE A BOX SENDS WHEN IT JOINS A STAGEBOX ON M (added 0.7.2).
+ *
+ * `reac_ctrl_build_config_announce` emits the matrix row's own `config_block`, which is what
+ * that model declares TO A DESK and is byte-verified against M-200/M-5000 establishes. A real
+ * S-1608 joining a real S-0808 in master mode declares something DIFFERENT, and both blocks
+ * are 32 bytes with the same `01 01` and six `03` tail:
+ *
+ *     to a desk (matrix)  01 03 00 10 82 00 00 02 02 02 02 02 01 01 03 03 03 03 03 03 … 4c
+ *     to a box master     01 03 00 10 80 00 00 00 02 02 02 02 01 01 03 03 03 03 03 03 … 50
+ *
+ * Two fields move: the model-family SELECTOR (0x82 -> 0x80) and one entry of the port-type
+ * table (five `02` become four, with a `00` ahead of them). The matrix row is NOT wrong and is
+ * not touched — it is the declaration that was verified against a desk. This is a second
+ * declaration for a second peer, and it is the one that gets granted by a box on M.
+ *
+ * EVIDENCE, and its limits: one capture, `box-to-box-enroll.pcap` 2026-09-09 t=6.619, in which
+ * the S-0808 granted 4 ms after the burst that followed it. Replaying that same capture with
+ * this block replaced by the matrix row's has not been tried, so which of the two moving fields
+ * matters — or whether either does — is NOT settled. What is settled is that this block was
+ * granted and the daemon's width-derived one was refused four times.
+ *
+ * THE `board_config_code` BYTE IS 0x00, confirmed on the wire (block[5], the byte after the
+ * selector) and confirmed independently by the reader: the S-1608 firmware's 0x80 arm
+ * hard-codes it to zero. The block below carries that byte as captured.
+ *
+ * The block is carried rather than generated because nothing in the corpus says how a box
+ * chooses a selector or fills the table; a builder invented from one sample would be a guess
+ * with a function around it. It belongs here beside the matrix, which is made of exactly this
+ * kind of captured block, and not in a caller. */
+size_t reac_ctrl_build_config_announce_box_master(uint8_t *out, const uint8_t master[6],
+                                                  const uint8_t src[6], uint16_t counter,
+                                                  int n_ch);
+
+/* THE SECOND RECORD OF THE BOX'S JOIN BURST — DT1 TAG 0x0000 (added 0.7.2).
+ *
+ * `spec/reac.ksy` states the burst as "op 04 03 tags 0100 / 0000 / 0302, then heartbeat",
+ * and until now only two of the three had a builder: `_coldconnect` emits the matrix's
+ * cc0014 (tag 0x0100, REAC_DT1_TAG_JOIN) and `_coldconnect_0013` the cc0013 (tag 0x0302,
+ * REAC_DT1_TAG_BOX_READY). The middle one had none, so a caller sending "the burst" sent
+ * the first record twice.
+ *
+ * IT IS GENERATED, NOT CAPTURED. The container is the one `dt1_record` describes and this
+ * file already builds — wrapper `00 02 00 fe`, SysEx `f0 41 0a`, model `00 00 12`, command
+ * `12` (DT1) — and the record it encloses is TAG `00 00` with data `03 00 00 00` and the
+ * ordinary Roland record checksum, `0x80 - sum`. That arithmetic gives 0x7d, which is the
+ * byte a real S-1608 put on the wire; the same arithmetic gives 0x78 for the JOIN record
+ * and 0x7a for BOX_READY, and both match their captures too. So the three records are one
+ * construction with three tags, and none of them is a magic block.
+ *
+ * EVIDENCE: a real S-1608 in slave mode enrolling with a real S-0808 in master mode,
+ * 2026-09-09, `box-to-box-enroll.pcap` t=6.833: the three records go out back to back and
+ * the master echoes ONE `cdea 04 03` per DISTINCT record — three for three. A burst that
+ * repeats a record draws two echoes, measured by replaying the same capture with its second
+ * record replaced by a copy of the first.
+ *
+ * WHAT THE DATA MEANS IS NOT CLAIMED. `spec/reac.ksy` names the tags — 0x0100 `join_grant`,
+ * 0x0000 `head_mark`, 0x0302 `box_ready`, which are REAC_DT1_TAG_JOIN, _HEAD_MARK and
+ * _BOX_READY above — but the data words are AS CAPTURED and nothing more: the 0x0403
+ * dispatcher is unresolved in every decompile searched (S-1608, S-4000 and M-400 images,
+ * zero hits for the tags as immediates or as a switch), so `06 00 01 00`, `03 00 00 00` and
+ * `00 01 00` are bytes a real box sent, not fields anybody has read.
+ *
+ * TWO ENVELOPE BYTES, CHECKED AGAINST THE RAW CAPTURE because a note in flight said they
+ * disagreed with the byte-verified tables. They do not:
+ *
+ *     rec_len 0x14 (tags 0100 and 0000)   len_echo 0x0f
+ *     rec_len 0x13 (tag 0302)             len_echo 0x0e
+ *
+ * so the S-1608 pairs 0x0f with 0x14 and 0x0e with 0x13, which is exactly what the matrix
+ * blocks here already carry — the 0x0e belongs to the SHORTER record and reading it as rec1's
+ * is an off-by-one between the two. This builder copies the 0x14 container and therefore
+ * carries 0x0f, and the whole 34-byte result is byte-identical to what that box emitted. */
+size_t reac_ctrl_build_coldconnect_head(uint8_t *out, const uint8_t master[6],
+                                        const uint8_t src[6], uint16_t counter,
+                                        int n_ch, float *const *planar, int ns);
+
 size_t reac_ctrl_build_coldconnect_0013(uint8_t *out, const uint8_t master[6],
                                         const uint8_t src[6], uint16_t counter,
                                         int n_ch, float *const *planar, int ns);

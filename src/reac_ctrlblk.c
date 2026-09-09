@@ -914,6 +914,51 @@ size_t reac_ctrl_build_coldconnect(uint8_t *out, const uint8_t master[6],
 	                 counter, n_ch, NULL, planar, ns);
 }
 
+/* The declaration a box sends to a stagebox on M. See the header: a captured block, kept
+ * beside the matrix it differs from rather than in a caller. */
+size_t reac_ctrl_build_config_announce_box_master(uint8_t *out, const uint8_t master[6],
+                                                  const uint8_t src[6], uint16_t counter,
+                                                  int n_ch)
+{
+	static const uint8_t BLK[32] = {
+		0x01, 0x03, 0x00, 0x10, 0x80, 0x00, 0x00, 0x00,
+		0x02, 0x02, 0x02, 0x02, 0x01, 0x01, 0x03, 0x03,
+		0x03, 0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50,
+	};
+	size_t len = ctrl_emit(out, &CTRL_FRAMES[CTRL_CONFIG_ANNOUNCE], master, src,
+	                       counter, n_ch, NULL, NULL, 0);
+	if (len == 0)
+		return 0;
+	memcpy(out + REAC_CTRL_BLOCK_OFF, BLK, sizeof BLK);
+	return len;
+}
+
+/* The burst's middle record: the JOIN container with TAG 0x0000 and its own data, and
+ * the record checksum recomputed over it. See the header for the evidence and for why
+ * this is generated rather than carried as a block. */
+size_t reac_ctrl_build_coldconnect_head(uint8_t *out, const uint8_t master[6],
+                                        const uint8_t src[6], uint16_t counter,
+                                        int n_ch, float *const *planar, int ns)
+{
+	size_t len = ctrl_emit(out, &CTRL_FRAMES[CTRL_COLDCONNECT], master, src,
+	                       counter, n_ch, NULL, planar, ns);
+	if (len == 0)
+		return 0;
+	/* The record the two checksums enclose runs frame[34..39], with its own checksum at
+	 * frame[40] (see REAC_DT1_* in the header). REAC_DT1_TAG_HEAD_MARK, then the data
+	 * word AS CAPTURED — the tag is named by spec/reac.ksy, the data is not read by
+	 * anybody. */
+	static const uint8_t REC[6] = {
+		(uint8_t)(REAC_DT1_TAG_HEAD_MARK >> 8), (uint8_t)(REAC_DT1_TAG_HEAD_MARK & 0xff),
+		0x03, 0x00, 0x00, 0x00,
+	};
+	memcpy(out + REAC_CTRL_BLOCK_OFF + 16, REC, sizeof REC);
+	reac_ctrl_record_cksum_stamp(out + REAC_CTRL_BLOCK_OFF + 16, sizeof REC + 1);
+	reac_ctrl_checksum_apply(out);
+	return len;
+}
+
 size_t reac_ctrl_build_coldconnect_0013(uint8_t *out, const uint8_t master[6],
                                         const uint8_t src[6], uint16_t counter,
                                         int n_ch, float *const *planar, int ns)
