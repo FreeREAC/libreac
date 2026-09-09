@@ -259,8 +259,22 @@ int main(void)
 		CHK(reac_ctrl_build_coldconnect(g, M, S, 0, 8, NULL, 0) == 340);
 		CHK(memcmp(f + 16, g + 16, 34) != 0);
 
+		/* THE DECLARER'S OWN INVENTORY, both captured and both granted: an 8-input
+		 * box announces one table and a 16-input box another, and a caller must send
+		 * the one that describes ITSELF. */
 		n = reac_ctrl_build_config_announce_box_master(f, M, S, 0, 8);
 		CHK(n == 340);
+		for (int i = 0; i < 34; i++)
+			sprintf(got + i * 2, "%02x", f[16 + i]);
+		CHK(strcmp(got, "cdea010300108000000001010101"
+		                  "0202030303030303000000000000000000000052") == 0);
+		CHK(reac_ctrl_checksum_verify(f) == 0);
+		/* The frame's LENGTH follows the width argument, as every builder here does;
+		 * a caller that rides its own carrier (reac-pw stamps the block onto the frame
+		 * it is already sending) takes the 34 bytes and not the length. Both real boxes
+		 * announced inside their 340 B unicast carrier whatever they declared. */
+		n = reac_ctrl_build_config_announce_box_master(f, M, S, 0, 16);
+		CHK(n == 628);
 		for (int i = 0; i < 34; i++)
 			sprintf(got + i * 2, "%02x", f[16 + i]);
 		CHK(strcmp(got, "cdea010300108000000002020202"

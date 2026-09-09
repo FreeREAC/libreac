@@ -486,6 +486,13 @@ size_t reac_ctrl_build_coldconnect(uint8_t *out, const uint8_t master[6],
  * matters — or whether either does — is NOT settled. What is settled is that this block was
  * granted and the daemon's width-derived one was refused four times.
  *
+ * `n_ch` PICKS THE DECLARER'S OWN INVENTORY, and two are captured: an 8-input box declares
+ * `01 01 01 01 02 02` and a 16-input one `02 02 02 02 01 01`, both with selector 0x80 and
+ * six trailing 0x03s, each granted by the other box. A caller announces what IT is; sending
+ * a peer the peer's own table is what reac-pw did to an S-1608 master, twice, and was
+ * refused. A width with no captured table gets the 8-input one — the smaller claim, and the
+ * one a peer with eight outputs was granted for.
+ *
  * THE `board_config_code` BYTE IS 0x00, confirmed on the wire (block[5], the byte after the
  * selector) and confirmed independently by the reader: the S-1608 firmware's 0x80 arm
  * hard-codes it to zero. The block below carries that byte as captured.
