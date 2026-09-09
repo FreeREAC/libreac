@@ -32,3 +32,5 @@ seq_gaps
 
 # reac_facts_assert.h generated fresh from a reachable reac-protocol checkout
 /build/
+test_link
+test_identity
