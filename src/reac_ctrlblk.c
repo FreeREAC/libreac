@@ -920,17 +920,35 @@ size_t reac_ctrl_build_config_announce_box_master(uint8_t *out, const uint8_t ma
                                                   const uint8_t src[6], uint16_t counter,
                                                   int n_ch)
 {
-	static const uint8_t BLK[32] = {
+	/* THE DECLARER'S OWN INVENTORY, and there are two of them captured. Both boxes
+	 * announce selector 0x80 with board_config_code 0 and six 0x03 entries; what differs
+	 * is the port table, and each box sends ITS OWN:
+	 *
+	 *   8 in  (S-0808 -> S-1608, granted)   01 01 01 01 02 02
+	 *   16 in (S-1608 -> S-0808, granted)   02 02 02 02 01 01
+	 *
+	 * The block's last byte carries the checksum that closes it, which is why the two
+	 * differ there too. A width with no captured table gets the 8-in one and the caller
+	 * is not told a story about it: it is the smaller claim, and it is the one a peer
+	 * with eight outputs was granted for. */
+	static const uint8_t BLK8[32] = {
+		0x01, 0x03, 0x00, 0x10, 0x80, 0x00, 0x00, 0x00,
+		0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x03, 0x03,
+		0x03, 0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x52,
+	};
+	static const uint8_t BLK16[32] = {
 		0x01, 0x03, 0x00, 0x10, 0x80, 0x00, 0x00, 0x00,
 		0x02, 0x02, 0x02, 0x02, 0x01, 0x01, 0x03, 0x03,
 		0x03, 0x03, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50,
 	};
+	const uint8_t *BLK = (n_ch >= 16) ? BLK16 : BLK8;
 	size_t len = ctrl_emit(out, &CTRL_FRAMES[CTRL_CONFIG_ANNOUNCE], master, src,
 	                       counter, n_ch, NULL, NULL, 0);
 	if (len == 0)
 		return 0;
-	memcpy(out + REAC_CTRL_BLOCK_OFF, BLK, sizeof BLK);
+	memcpy(out + REAC_CTRL_BLOCK_OFF, BLK, 32);
 	return len;
 }
 
