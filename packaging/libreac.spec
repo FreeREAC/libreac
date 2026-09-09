@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.7.2
+Version:        0.8.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -101,6 +101,21 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Wed Sep 09 2026 Pau Aliagas <linuxnow@gmail.com> - 0.8.0-1
+- THE CONTROL PLANE LIVES HERE NOW. Operator ruling: a daemon is sockets and PipeWire, it
+  does not speak REAC control. The slave JOIN/HOLD table, the master establishment and grant
+  sweep, the hunt and arbitration, the box registry, the clock discipline and the
+  virtual-stagebox builders all moved from reac-pw unchanged - every one of them was already
+  written pure, with no socket, thread or clock of its own, which is what made the move a
+  move rather than a rewrite. <reac/reac_link.h> is the one header a daemon needs.
+- With them, the rules the 2026-09-09 captures proved: the join burst is TWO records and then
+  the heartbeat on the very next frame, before any grant; the 0000 head_mark belongs to the
+  master's grant, not the slave's join; the config-announce declares the caller's own
+  inventory; and a filler's control area carries zero, then 0x52 while requesting, then 0x7a
+  once granted. tests/test_link.c asserts all of it against the bytes two real boxes were
+  granted for.
+- See docs/REAC-CONTROL-PLANE.md.
+
 * Wed Sep 09 2026 Pau Aliagas <linuxnow@gmail.com> - 0.7.2-1
 - The third record of the box's JOIN burst. spec/reac.ksy has always stated the burst as
   tags 0100 / 0000 / 0302, and only two of the three had a builder, so a caller sending "the

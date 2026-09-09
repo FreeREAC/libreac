@@ -20,7 +20,14 @@ AR      ?= ar
 CFLAGS  ?= -O2 -std=c11 -Wall -Wextra
 INC     := -Iinclude
 
-OBJS = reac.o reac_ctrlblk.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o
+# The wire layer, and since 0.8.0 the CONTROL PLANE beside it (docs/REAC-CONTROL-PLANE.md).
+# The operator's ruling: a daemon is sockets and PipeWire, it does not speak REAC control.
+# Every file in the second list is PURE - no socket, no thread, no clock - which is what let
+# them move here unchanged from reac-pw, where they had already been written that way.
+OBJS = reac.o reac_ctrlblk.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o \
+       reac_fsm.o reac_master.o reac_master_fsm.o reac_hunt.o reac_arbitration.o \
+       reac_grant.o reac_headamp_tx.o reac_ctrl.o reac_scene_body.o \
+       reac_link_state.o reac_disco.o reac_boxreg.o reac_clock.o reac_link.o
 
 # tests/reac_facts_assert.h binds libreac's own macros to reac-protocol's
 # spec/protocol-facts.yaml (see the header for what it checks). Two builds:
@@ -92,7 +99,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -109,6 +116,8 @@ test: tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstr
 	./test_ports
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_ctrl.c libreac.a -lm -o test_ctrl
 	./test_ctrl
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_link.c libreac.a -lm -o test_link
+	./test_link
 	$(CC) $(CFLAGS) -I$(dir $(FACTS_ASSERT_H)) $(INC) tests/test_facts.c libreac.a -lm -o test_facts
 	./test_facts
 	$(CC) $(CFLAGS) $(INC) tests/test_identity.c libreac.a -lm -o test_identity
@@ -160,7 +169,7 @@ $(WIRE_TOOLS): %: tools/%.c libreac.a
 	$(CC) $(CFLAGS) $(INC) $< libreac.a -lm -o $@
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_facts test_identity corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity corpus_check $(WIRE_TOOLS)
 	rm -rf $(BUILD_DIR)
 
 .PHONY: all test conformance corpus wire-tools clean
