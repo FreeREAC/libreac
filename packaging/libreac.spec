@@ -54,8 +54,16 @@ done
 # %%build_ldflags carries the Fedora link flags incl. --build-id, which the
 # debuginfo extraction requires (%%optflags already gave the objects -g).
 # -lm: reac_encode's float->s24 rounds with lrintf.
-cc %{build_ldflags} -shared -Wl,-soname,libreac.so.%{abi} -o libreac.so.%{version} \
-  *.o -lm
+#
+# --no-undefined IS THE GATE FOR THE PARAGRAPH ABOVE. The glob fixed the drift it
+# describes but nothing MEASURED the result, and 0.8.0 shipped the same defect in a new
+# shape: reac_macaddr.h declared reac_mac48_unpack, reac_link_state.c called it, and the
+# definition was still in reac-pw -- so this link succeeded and every consumer's did not
+# (`/usr/lib64/libreac.so: undefined reference`, nine reac-pw targets, in its %%build).
+# A shared object is allowed unresolved symbols by default; this refuses them, here,
+# where the missing file is.
+cc %{build_ldflags} -shared -Wl,-soname,libreac.so.%{abi} -Wl,--no-undefined \
+  -o libreac.so.%{version} *.o -lm
 
 %install
 install -Dm0755 libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{version}
