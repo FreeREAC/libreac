@@ -110,3 +110,24 @@ task #108 + the S-4000 OHRCA captures):
   bits of the frame's own CRC-32 (verified on 100% of frames checked across five
   rigs, both directions), left by a capture that mirrors RX and TX of one port.
   `reac_frame_clean_len()` is the one home for stripping it — never emit it.
+
+## Releasing
+
+`.github/workflows/release-rpm.yml` builds the libreac RPM in a `fedora:44`
+container from `packaging/libreac.spec` and publishes it into the same shared
+dnf tree FreeMixer/openmixer's own release publishes into, alongside reac-pw's
+(one repo, one `openmixer.repo`, one GPG key). It is `workflow_dispatch` only,
+never on push:
+
+```
+gh workflow run release-rpm.yml -f tag=v0.7.1 -f sign=false   # dry run, publishes nothing
+gh workflow run release-rpm.yml -f tag=v0.7.1 -f sign=true    # signs and pushes to the shared R2 bucket
+```
+
+`tag` must already exist and match `v[0-9]*`. `sign` defaults to `false`, which
+runs `packaging/publish-repo.sh --no-sign` and stops before the push step — the
+assembled tree is still attached to the run as an artifact for inspection.
+libreac has no build-time dependency on the shared tree itself — it is the
+package that FILLS `pkgconfig(libreac)` for reac-pw's own build, so publish
+libreac here before dispatching reac-pw's equivalent workflow, or its
+`dnf builddep` fails on `pkgconfig(libreac)` by name.
