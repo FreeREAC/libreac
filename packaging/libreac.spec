@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.7.1
+Version:        0.7.2
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -101,6 +101,21 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Wed Sep 09 2026 Pau Aliagas <linuxnow@gmail.com> - 0.7.2-1
+- The third record of the box's JOIN burst. spec/reac.ksy has always stated the burst as
+  tags 0100 / 0000 / 0302, and only two of the three had a builder, so a caller sending "the
+  burst" sent the first record twice. A real S-0808 echoes one cdea 04 03 per DISTINCT record
+  - three for three, two when the second is a copy of the first - so a repeated record asks
+  for a two-record answer. reac_ctrl_build_coldconnect_head generates the middle one from the
+  container, REAC_DT1_TAG_HEAD_MARK and the Roland record checksum; the arithmetic gives the
+  0x7d a real S-1608 put on the wire, as it gives 0x78 and 0x7a for the other two.
+- reac_ctrl_build_config_announce_box_master: the declaration a box sends to a stagebox in
+  master mode, which is not the one it sends a desk - selector 0x80 against the matrix row's
+  0x82, and one entry of the port-type table. Carried as a captured block beside the matrix;
+  the matrix row is verified against a desk and is not touched.
+- Both from box-to-box-enroll.pcap, 2026-09-09, a real S-1608 enrolling with a real S-0808,
+  granted 4 ms after the burst. Unit-tested on the exact captured bytes.
+
 * Sun Aug 30 2026 Pau Aliagas <linuxnow@gmail.com> - 0.7.1-1
 - The geometry is the role. reac_frame_is_master_downstream() and
   reac_frame_channels() answer, from a frame's length alone, which side of the
