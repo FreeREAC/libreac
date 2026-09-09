@@ -235,6 +235,39 @@ int main(void)
 	frame_of(f, FX_L1_BOX_HB);
 	CHK(reac_ctrl_parse(f, REAC_CTRL_BLOCK_END - 1, &p) == REAC_CTRL_NONE);
 
+	/* 0.7.2: the two frames a box sends a stagebox on M, against the bytes a real
+	 * S-1608 sent a real S-0808 on 2026-09-09 (box-to-box-enroll.pcap), four
+	 * milliseconds before it was granted. The middle burst record is GENERATED — the
+	 * DT1 container with tag 0x0000, data 03 00 00 00 and the ordinary Roland record
+	 * checksum, which computes to the 0x7d that box put on the wire. */
+	{
+		static const uint8_t M[6] = { 0x00, 0x40, 0xab, 0xc4, 0xdc, 0x9c };
+		static const uint8_t S[6] = { 0x00, 0x40, 0xab, 0xc4, 0x80, 0x41 };
+		uint8_t f[2048];
+		char got[80];
+		size_t n = reac_ctrl_build_coldconnect_head(f, M, S, 0, 8, NULL, 0);
+		CHK(n == 340);
+		for (int i = 0; i < 34; i++)
+			sprintf(got + i * 2, "%02x", f[16 + i]);
+		CHK(strcmp(got, "cdea04030014000200fe0ff0410a0000"
+		                  "12120000030000007df70000000000000000") == 0);
+		CHK(reac_ctrl_record_cksum_verify(f + REAC_CTRL_BLOCK_OFF + 16, 7) == 0);
+		CHK(reac_ctrl_checksum_verify(f) == 0);
+		/* and it is NOT the JOIN record: a burst that repeats one draws one fewer
+		 * echo from the master, measured by replay. */
+		uint8_t g[2048];
+		CHK(reac_ctrl_build_coldconnect(g, M, S, 0, 8, NULL, 0) == 340);
+		CHK(memcmp(f + 16, g + 16, 34) != 0);
+
+		n = reac_ctrl_build_config_announce_box_master(f, M, S, 0, 8);
+		CHK(n == 340);
+		for (int i = 0; i < 34; i++)
+			sprintf(got + i * 2, "%02x", f[16 + i]);
+		CHK(strcmp(got, "cdea010300108000000002020202"
+		                  "0101030303030303000000000000000000000050") == 0);
+		CHK(reac_ctrl_checksum_verify(f) == 0);
+	}
+
 	printf("OK: reac_ctrl_parse over every control shape the corpus carries — "
 	       "link/segment/opcode, not length; a split record's checksum closes "
 	       "only across both fragments\n");
