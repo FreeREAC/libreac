@@ -10,6 +10,7 @@
  * without this going red.
  */
 #include <reac/reac_link.h>
+#include <reac/reac_macaddr.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -61,6 +62,21 @@ int main(void)
 	}
 	reac_link_fill_descriptor(f, REAC_LINK_DESC_NONE);
 	for (int i = 0; i < 32; i++) CHK(f[REAC_CTRL_BLOCK_OFF + i] == 0x00);
+
+	/* THE LIBRARY CARRIES THE MAC PACKING ITS OWN reac_link_state.c CALLS. Declaring
+	 * reac_mac48_unpack in a header libreac ships, and leaving the definition behind in
+	 * the daemon, built a libreac.so with an undefined symbol: every reac-pw test target
+	 * that linked it failed `ld returned 1` in the RPM's %build, for a function whose
+	 * caller is INSIDE this library. A round trip here is what refuses that shape. */
+	{
+		const uint8_t in[6] = { 0x00, 0x40, 0xab, 0x12, 0x34, 0x56 };
+		uint8_t out[6];
+		CHK(reac_mac48_pack(in) == 0x0040ab123456ull);
+		reac_mac48_unpack(reac_mac48_pack(in), out);
+		CHK(memcmp(in, out, 6) == 0);
+		reac_mac48_unpack(0, out);
+		for (int i = 0; i < 6; i++) CHK(out[i] == 0);
+	}
 
 	printf("OK: reac_link — the join burst, the declaration and the descriptor are the bytes"
 	       " two real boxes were granted for\n");
