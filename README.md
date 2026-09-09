@@ -131,3 +131,34 @@ libreac has no build-time dependency on the shared tree itself — it is the
 package that FILLS `pkgconfig(libreac)` for reac-pw's own build, so publish
 libreac here before dispatching reac-pw's equivalent workflow, or its
 `dnf builddep` fails on `pkgconfig(libreac)` by name.
+## Install
+
+**From a release.** Every tagged release attaches the built RPMs and the source tarball:
+
+```
+gh release download v0.8.0 -R FreeREAC/libreac -p 'libreac-*.rpm'
+sudo dnf install ./libreac-*.rpm ./libreac-devel-*.rpm
+```
+
+**From source.** A hand Makefile, no build system to configure:
+
+```
+make            # libreac.a and libreac.so
+make test       # the unit tests, including the capture-backed control-plane ones
+sudo make install
+```
+
+## Licence
+
+GPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+## The protocol
+
+REAC is not a published protocol and nothing here is guessed: every rule is measured, and
+where a document and a capture disagree the capture wins and the document is amended with the
+date and the evidence.
+
+- [`docs/REAC-CONTROL-PLANE.md`](docs/REAC-CONTROL-PLANE.md) — how two REAC endpoints pair,
+  what `reac_link` does about it, and what is still unsettled.
+- [`docs/layering.md`](docs/layering.md) — what belongs in this library and what does not.
+- `reac-protocol`'s `spec/reac.ksy` and `wire-format.md` — the frames themselves.
