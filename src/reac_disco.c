@@ -260,8 +260,27 @@ int reac_disco_table_observe(struct reac_disco_table *t,
 		/* …but only a real upgrade is a CHANGE. A re-sighting that bumped seq would
 		 * have openmixer re-reading an identical list at wire rate. Facts only ever
 		 * sharpen: an ambiguous role or an unidentified model is replaced once it is
-		 * known, never downgraded back by a later ambiguous frame. */
-		if (s->role != REAC_DISCO_ROLE_UNKNOWN && e->role != s->role) {
+		 * known, never downgraded back by a later ambiguous frame.
+		 *
+		 * A BOX DOES NOT UN-PROVE ITSELF (misheard-as-master, S-1608
+		 * 00:40:ab:c4:80:41, 2026-09-10 10:22:23): a box already proven BOX by
+		 * unambiguous evidence (a heartbeat, a config-announce, a cold-connect
+		 * JOIN/BOX_READY/IDENTITY) does not reclassify to MASTER on a single later
+		 * frame from the SAME MAC. The concrete case measured on the rig: a box
+		 * that has lost its master gives up and sends its own BYE — link 1,
+		 * SINGLE, opcode 0x00 (REAC_OP_BULK) — which is byte-identical in shape to
+		 * a master's SCENE_TRANSFER bulk push (reac_ctrl.c's own documented
+		 * residue: "a link-1 SINGLE bulk frame arriving... is its disconnect...
+		 * anything that widens this function's input... must re-derive it" — the
+		 * discovery path IS that wider, promiscuous input, and role_of() does not
+		 * re-derive it). role_of() has no state to tell a box's BYE from a
+		 * master's push; this table does, and a peer already known BOX is a fact
+		 * about the wire's PHYSICAL wiring that one ambiguous frame cannot revoke.
+		 * A box that genuinely goes to M announces distinctly (config-announce at
+		 * its own width, a fresh heartbeat cadence) rather than through this one
+		 * shape collision, so refusing this single flip costs nothing real. */
+		if (s->role != REAC_DISCO_ROLE_UNKNOWN && e->role != s->role &&
+		    !(e->role == REAC_DISCO_ROLE_BOX && s->role == REAC_DISCO_ROLE_MASTER)) {
 			e->role = s->role;
 			changed = 1;
 		}
