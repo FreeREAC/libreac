@@ -609,10 +609,21 @@ size_t reac_ctrl_build_headamp(uint8_t *out, const uint8_t master[6],
                                uint8_t ch, uint8_t param, uint8_t value);
 
 /* Stamp a head-amp record over the type [16:18] + control block [18:50] of an
- * ALREADY-BUILT downstream frame, preserving its audio [50:], counter and tail.
- * The MASTER emit path (reac_headamp_tx + the pacer) uses this to overlay a
- * head-amp command onto a FILLER slot without rebuilding the frame. Returns 0, or
- * -1 on a bad param/value (the frame is left untouched). */
+ * ALREADY-BUILT frame, preserving its audio [50:], counter and tail. An emit path
+ * (reac_headamp_tx + whatever paces it) uses this to overlay a head-amp command onto
+ * a FILLER slot without rebuilding the frame. Returns 0, or -1 on a bad param/value
+ * (the frame is left untouched).
+ *
+ * ANY CARRIER, ANY ROLE. Every offset above is absolute and every one of them lies
+ * inside the 50-byte header `spec/reac.ksy` gives EVERY 0x8819 frame ("control,
+ * size: 34, i.e. frame[16:50]"); a width changes only the LENGTH of the audio region
+ * that follows. So the 1492 B / 40-slot downstream a desk broadcasts and the
+ * 52 + n*36 box-width return an endpoint sends carry a head-amp SET in exactly the
+ * same bytes — which is the operator's 2026-09-10 ruling ("there is no change in the
+ * protocol once we exchange frames") stated where the code reads it. Asserted against
+ * the rig's own captured SET blocks in tests/test_link.c. It says nothing about
+ * whether the RECEIVER acts on one: a box with its Mode switch on M was measured
+ * ignoring a byte-identical SET on 2026-09-09, and that is a fact about the box. */
 int reac_ctrl_stamp_headamp(uint8_t *frame, uint8_t ch, uint8_t param, uint8_t value);
 
 /* Human-readable head-amp parameter name ("phantom" / "pad" / "SENS", or "?"

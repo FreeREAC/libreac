@@ -10,6 +10,8 @@
  * without this going red.
  */
 #include <reac/reac_link.h>
+#include <reac/reac.h>          /* REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT */
+#include <reac/reac_encode.h>   /* reac_downstream_build — the desk-side carrier */
 #include <reac/reac_macaddr.h>
 #include <stdio.h>
 #include <string.h>
@@ -78,7 +80,89 @@ int main(void)
 		for (int i = 0; i < 6; i++) CHK(out[i] == 0);
 	}
 
+	/* ---- THE HEAD-AMP RECORD IS ROLE-BLIND (operator ruling, 2026-09-10) ----
+	 *
+	 * "libreac should allow preamp control in any mode (m, s or SP)" and "there is no
+	 * change in the protocol once we exchange frames, it is exactly the same". This is
+	 * the byte proof of both, and it needed no new builder: `reac_ctrl_stamp_headamp`
+	 * writes frame[16] through frame[49] and nothing else — the REAC type word plus the
+	 * 32-byte control block — and `spec/reac.ksy` gives that window the SAME absolute
+	 * offsets in every 0x8819 frame ("control, size: 34, i.e. frame[16:50]", ahead of an
+	 * `audio` region whose LENGTH is the only thing a width changes). So the 1492 B
+	 * downstream a desk broadcasts and the 628 B upstream a box returns carry a head-amp
+	 * SET in the same bytes, and which end of the wire holds the clock never enters it.
+	 *
+	 * THE GOLDEN IS THE RIG'S OWN. These 34 bytes are what reac-pw put on enp131s0 at the
+	 * S-1608 on 2026-09-09 (ha-write-s1608.pcap, four distinct cdea 04 03 blocks: ch 0x20
+	 * = the box's input 1 at the S-1608 head-amp base, param 00/01/02 = phantom/pad/SENS,
+	 * the DT1 record checksum, f7, and the block checksum 0x02). Asserting against the
+	 * capture rather than against our own second call is what makes this a conformance
+	 * test and not a tautology. */
+	{
+		static const struct { uint8_t ch, param, value; const char *want; } HA[] = {
+			{ 0x20, 0, 0, "cdea04030013000200fe0ef0410a0000121201012000005ef7"
+			              "000000000000000002" },
+			{ 0x20, 0, 1, "cdea04030013000200fe0ef0410a0000121201012000015df7"
+			              "000000000000000002" },
+			{ 0x20, 1, 0, "cdea04030013000200fe0ef0410a0000121201012001005df7"
+			              "000000000000000002" },
+			{ 0x20, 2, 0x34, "cdea04030013000200fe0ef0410a00001212010120023428f7"
+			                 "000000000000000002" },
+		};
+		/* One frame of each geometry, built by the builders that own them, with audio
+		 * the stamp must not touch: a distinct constant per channel. */
+		float pcm[REAC_MAX_CHANNELS][REAC_SAMPLES_PER_PKT];
+		float *planar[REAC_MAX_CHANNELS];
+		for (int c = 0; c < REAC_MAX_CHANNELS; c++) {
+			planar[c] = pcm[c];
+			for (int s = 0; s < REAC_SAMPLES_PER_PKT; s++)
+				pcm[c][s] = (float)(c + 1) / 64.0f;
+		}
+		uint8_t down[2048], up[2048], down0[2048], up0[2048];
+		int dn = reac_downstream_build(down, (float *const *)planar,
+		                               REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT, 0x1234, S);
+		size_t un = reac_ctrl_build_upstream_filler(up, M, S, 0x1234, 16, planar,
+		                                            REAC_SAMPLES_PER_PKT);
+		CHK(dn == 1492);            /* the master's downstream broadcast   */
+		CHK(un == 628);             /* an S-1608's own 16-channel return   */
+		memcpy(down0, down, (size_t)dn);
+		memcpy(up0, up, un);
+
+		for (size_t k = 0; k < sizeof HA / sizeof HA[0]; k++) {
+			CHK(reac_ctrl_stamp_headamp(down, HA[k].ch, HA[k].param,
+			                            HA[k].value) == 0);
+			CHK(reac_ctrl_stamp_headamp(up, HA[k].ch, HA[k].param,
+			                            HA[k].value) == 0);
+			/* 1. the rig's bytes, on the desk's frame */
+			for (int i = 0; i < 34; i++) sprintf(got + i * 2, "%02x", down[16 + i]);
+			CHK(strcmp(got, HA[k].want) == 0);
+			/* 2. and BYTE-IDENTICALLY on the box-width frame — the ruling */
+			CHK(memcmp(down + 16, up + 16, 34) == 0);
+			/* 3. the record's own DT1 checksum verifies in either carrier */
+			CHK(reac_ctrl_headamp_record_verify(down) == 0);
+			CHK(reac_ctrl_headamp_record_verify(up) == 0);
+			/* 4. and NOTHING ELSE MOVED: the counter, both audio regions and both
+			 *    end markers are the bytes their builders wrote. A stamp that
+			 *    reached into the audio would land here, not on a rig. */
+			CHK(memcmp(down, down0, 16) == 0);
+			CHK(memcmp(down + 50, down0 + 50, (size_t)dn - 50) == 0);
+			CHK(memcmp(up, up0, 16) == 0);
+			CHK(memcmp(up + 50, up0 + 50, un - 50) == 0);
+		}
+		/* THE COMPARE CAN SEE A DIFFERENCE. Without this, a stamp that wrote nothing
+		 * at all would pass every equality above. */
+		CHK(reac_ctrl_stamp_headamp(up, 0x21, 2, 0x10) == 0);
+		CHK(memcmp(down + 16, up + 16, 34) != 0);
+		/* AND A BAD CELL IS REFUSED IN EITHER CARRIER, leaving the frame untouched —
+		 * the same contract, not a role-dependent one. */
+		memcpy(up0, up, un);
+		CHK(reac_ctrl_stamp_headamp(up, 0x20, 0, 0x02) == -1);   /* phantom is 0/1 */
+		CHK(reac_ctrl_stamp_headamp(up, 0x20, 9, 0x00) == -1);   /* no such param  */
+		CHK(memcmp(up, up0, un) == 0);
+	}
+
 	printf("OK: reac_link — the join burst, the declaration and the descriptor are the bytes"
-	       " two real boxes were granted for\n");
+	       " two real boxes were granted for, and a head-amp SET is the same 34 bytes"
+	       " whichever end of the wire carries it\n");
 	return 0;
 }

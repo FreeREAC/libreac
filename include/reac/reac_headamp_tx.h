@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* reac_headamp_tx — the MASTER-role head-amp SEND model (task #155 reac-pw half).
+/* reac_headamp_tx — the head-amp SEND model, in ANY role (task #155 reac-pw half).
+ *
+ * ROLE-BLIND SINCE 2026-09-10, by operator ruling: "we sync it and we should be able
+ * to set the pre-amp params as usual, no changes"; "there is no change in the protocol
+ * once we exchange frames, it is exactly the same"; "libreac should allow preamp control
+ * in any mode (m, s or SP)". Nothing in this scheduler was ever role-shaped — it is a
+ * table and a cursor — and neither is the record it schedules: reac_ctrl_stamp_headamp
+ * writes frame[16:50], the type word plus the control block, which spec/reac.ksy gives
+ * the SAME absolute offsets in every 0x8819 frame whatever its width. So the sender may
+ * be a desk stamping its 1492 B downstream or an endpoint stamping the frames it puts on
+ * a wire a stagebox masters; the 34 bytes are identical either way, and libreac's own
+ * tests/test_link.c asserts that against the rig's captured SET blocks. What used to say
+ * MASTER here was a statement about the only CALLER at the time, not about the protocol.
  *
  * The protocol, as the committed captures show it (HEADAMP-PROTOCOL-AUDIT-2026-07-22
  * in reac-firmware-re; pcaps m200-s1608-BIDIR-reboot, matrix-m200-s1608 and
