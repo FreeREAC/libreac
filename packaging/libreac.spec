@@ -21,15 +21,13 @@ BuildRequires:  gcc
 BuildRequires:  make
 
 %description
-libreac is the shared byte-layout core of the REAC tools: recognise a REAC frame
-(EtherType 0x8819), read its sequence counter, detect the sample rate, decode the
-24-bit audio — the braided box upstream (reac_upstream) over the braid/sample
-oracles (reac_braid.h / reac_sample.h) plus the legacy plain-LE downstream path —
-ENCODE it back (reac_encode: the braided audio region in both directions and the
-40-channel downstream broadcast frame), strip the OHRCA +2 CRC trailer, and read
-frames from a live AF_PACKET capture or an offline pcap. It is consumed by
-reac-aes67 (the REAC->AES67 bridge) and reac-pw (the PipeWire-native endpoint),
-which link it dynamically.
+libreac is the REAC protocol library: it recognises a REAC frame (EtherType 0x8819),
+reads its sequence counter, detects the sample rate, and decodes and encodes the
+24-bit braided audio region in both directions — the 40-channel master broadcast
+and the box's upstream return — plus a legacy plain-LE diagnostic path. It also
+implements the REAC control plane: control-block layout and checksums, head-amp
+records, box identity, and the master/slave establishment state machines, and it
+reads frames from a live AF_PACKET capture or an offline pcap.
 
 %package devel
 Summary:        Development files for libreac
