@@ -51,7 +51,8 @@ capability itself, since a library cannot — the binding process keeps `CAP_NET
 `CAP_NET_ADMIN` and this library runs inside it. See
 [`docs/design/specs/2026-09-11-reac-transport-library.md`](docs/design/specs/2026-09-11-reac-transport-library.md)
 for what moved here from where, and what is still open (two headers still vendored from their
-prior home, five structs that still expose a raw `fd`).
+prior home). Since 0.9.1 every transport object reaches the OS through one opaque
+`struct reac_handle` (`<reac/transport/reac_handle.h>`); no installed header names a socket.
 
 ## Who links these
 
