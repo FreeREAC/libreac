@@ -52,6 +52,8 @@
 #ifndef REAC_TOPO_H
 #define REAC_TOPO_H
 
+#include <reac/transport/reac_handle.h>
+
 #include <net/if.h>   /* IFNAMSIZ */
 #include <stddef.h>
 #include <stdint.h>
@@ -206,16 +208,24 @@ int reac_topo_is_stacked(const char *root, const char *ifname);
 
 /* ---- the socket shell ------------------------------------------------------------- */
 
-/* An ETH_P_ALL tap on `parent`, BPF-filtered to 0x8819 (tagged or not) and asking the
- * kernel for PACKET_AUXDATA. Read-only: nothing is ever sent on it. Returns the fd, or -1
- * with errno set (CAP_NET_RAW missing, the interface gone). Non-blocking. */
-int reac_topo_tap_open(const char *parent);
+/* A read-only tap on `parent` that sees every 0x8819 frame, tagged or not, together with
+ * the tag the kernel stripped (the userspace backend asks for PACKET_AUXDATA). Nothing is
+ * ever sent on it. The handle is the backend's (reac_handle.h); NULL means not open. */
+struct reac_topo_tap {
+	struct reac_handle *handle;
+};
+
+/* 0 on success, -1 with errno set (CAP_NET_RAW missing, the interface gone). Non-blocking. */
+int reac_topo_tap_open(struct reac_topo_tap *t, const char *parent);
+
+/* The pollable descriptor for the caller's event loop (spec §7); -1 when not open. */
+int reac_topo_tap_fd(const struct reac_topo_tap *t);
 
 /* Read ONE frame from the tap and classify it. Returns 1 with `*kind`/`*vid` filled, 0 when
  * the socket is dry (EAGAIN), -1 on error. The VID comes from PACKET_AUXDATA when the kernel
  * supplies it, from the buffer when the driver left the tag in it. */
-int reac_topo_tap_next(int fd, enum reac_topo_kind *kind, uint16_t *vid);
+int reac_topo_tap_next(struct reac_topo_tap *t, enum reac_topo_kind *kind, uint16_t *vid);
 
-void reac_topo_tap_close(int fd);
+void reac_topo_tap_close(struct reac_topo_tap *t);
 
 #endif /* REAC_TOPO_H */

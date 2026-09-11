@@ -5,6 +5,7 @@
 #define _GNU_SOURCE
 #endif
 #include <reac/transport/reac_slave.h>
+#include "reac_handle_priv.h"
 #include <reac/transport/reac_rt.h>
 #include <reac/reac_ctrl.h>
 #include <reac/transport/reac_mac.h>
@@ -66,7 +67,7 @@ static struct reac_slave_decision map_action(const struct reac_fsm_out *o)
 void reac_slave_fsm_init(struct reac_slave *s, const struct reac_slave_cfg *cfg)
 {
 	memset(s, 0, sizeof *s);
-	s->fd = -1;
+	s->handle = NULL;
 	reac_fsm_init(&s->fsm);
 	s->box_channels = (cfg && cfg->box_channels > 0)
 		? (cfg->box_channels > REAC_MAX_CHANNELS ? REAC_MAX_CHANNELS : cfg->box_channels)
@@ -636,7 +637,7 @@ static void emit_decision(struct reac_slave *s, const struct reac_slave_decision
 		if (cl && bm_stamp(frame, ctl, cl, s->fsm.master_mac))
 			sll = uni_sll;      /* the control frames are the box's to answer */
 		if (len) {
-			ssize_t r = sendto(s->fd, frame, len, 0,
+			ssize_t r = sendto(reac_handle_fd(s->handle), frame, len, 0,
 			                   (struct sockaddr *)sll, sizeof *sll);
 			if (r < 0)
 				atomic_fetch_add_explicit(&s->tx_errors, 1, memory_order_relaxed);
@@ -804,7 +805,7 @@ static void emit_decision(struct reac_slave *s, const struct reac_slave_decision
 	if (len == 0)
 		return;
 
-	ssize_t r = sendto(s->fd, frame, len, 0, (struct sockaddr *)sll, sizeof *sll);
+	ssize_t r = sendto(reac_handle_fd(s->handle), frame, len, 0, (struct sockaddr *)sll, sizeof *sll);
 	if (r < 0)
 		atomic_fetch_add_explicit(&s->tx_errors, 1, memory_order_relaxed);
 	else
@@ -868,7 +869,7 @@ static void *slave_loop(void *arg)
 
 		/* Block (with a short timeout) for the next master frame. Frame-arrival is
 		 * the clock tick we lock to; a timeout services the flood/dwell self-clock. */
-		ssize_t n = recv(s->fd, rxbuf, sizeof rxbuf, 0);
+		ssize_t n = recv(reac_handle_fd(s->handle), rxbuf, sizeof rxbuf, 0);
 		if (n <= 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK) {
 				/* No master frame this window — self-clock the FSM one tick so the
@@ -1055,7 +1056,11 @@ int reac_slave_open(struct reac_slave *s, const struct reac_slave_cfg *cfg,
 			                "our announced address may not reach us\n");
 	}
 
-	s->fd = fd;
+	s->handle = reac_handle_adopt(fd);
+	if (!s->handle) {
+		close(fd);
+		return -1;
+	}
 	return 0;
 }
 
@@ -1084,7 +1089,5 @@ void reac_slave_stop(struct reac_slave *s)
 
 void reac_slave_close(struct reac_slave *s)
 {
-	if (s->fd >= 0)
-		close(s->fd);
-	s->fd = -1;
+	reac_handle_close(&s->handle);
 }
