@@ -19,15 +19,12 @@ BuildRequires:  pkgconfig(libreac) >= 0.9.0
 Requires:       libreac%{?_isa} >= 0.9.0
 
 %description
-libreac-transport is the userspace-backend transport layer reac-pw used to carry directly:
-AF_PACKET RX/TX, the lock-free SPSC ring, the SCHED_FIFO cadence pacer and its clock discipline,
-the slave/master establishment orchestration (driven by libreac's protocol FSMs), interface
-enumeration, VLAN sub-interface mint/adopt/release on a trunk port, the segment lock, and the
-layered-config precedence + one-door-to-SCHED_FIFO rules. No socket type or AF_PACKET reference
-appears in the public headers' call shapes for lifecycle purposes, so a future kernel-module
-backend (reac-kmod) may implement the same API. It holds no Linux capability itself — a library
-cannot; the binding process (reac-pw) keeps CAP_NET_RAW/CAP_NET_ADMIN and this library runs
-inside that already-capable process.
+libreac-transport is the REAC transport layer: AF_PACKET frame RX/TX over a lock-free
+ring, a SCHED_FIFO cadence pacer with clock discipline, network interface and VLAN
+scanning, segment locking, and slave/master establishment orchestration built on
+libreac's protocol state machines. The public API carries no socket type, so an
+alternate backend can implement the same shape; the library holds no Linux capability
+itself, that belongs to the process that links it.
 
 %package devel
 Summary:        Development files for libreac-transport
