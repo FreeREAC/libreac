@@ -172,8 +172,8 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * ABI break for libreac.so itself (no symbol here moves or is removed, so
  * LIBREAC_ABI stays put); the minor bump is the one middle-digit increment a
  * new build product beside the existing one deserves. */
-#define LIBREAC_VERSION_MAJOR 0
-#define LIBREAC_VERSION_MINOR 9
+#define LIBREAC_VERSION_MAJOR 1
+#define LIBREAC_VERSION_MINOR 0
 #define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
