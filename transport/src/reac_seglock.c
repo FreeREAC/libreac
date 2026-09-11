@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 #include <reac/transport/reac_seglock.h>
+#include "reac_handle_priv.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -12,12 +13,24 @@
 #include <net/if.h>
 #include <unistd.h>
 
+void reac_seglock_init(struct reac_seglock *l)
+{
+	if (!l)
+		return;
+	l->handle = NULL;
+	l->name[0] = '\0';
+}
+
+int reac_seglock_held(const struct reac_seglock *l)
+{
+	return l && l->handle != NULL;
+}
+
 int reac_seglock_claim(struct reac_seglock *l, const char *ifname)
 {
 	if (!l || !ifname)
 		return -2;
-	l->fd = -1;
-	l->name[0] = '\0';
+	reac_seglock_init(l);
 
 	unsigned idx = if_nametoindex(ifname);
 	if (idx == 0)
@@ -53,14 +66,16 @@ int reac_seglock_claim(struct reac_seglock *l, const char *ifname)
 		return held ? -1 : -2;
 	}
 
-	l->fd = fd;
+	l->handle = reac_handle_adopt(fd);
+	if (!l->handle) {
+		close(fd);
+		return -2;
+	}
 	return 0;
 }
 
 void reac_seglock_release(struct reac_seglock *l)
 {
-	if (l && l->fd >= 0) {
-		close(l->fd);
-		l->fd = -1;
-	}
+	if (l)
+		reac_handle_close(&l->handle);
 }

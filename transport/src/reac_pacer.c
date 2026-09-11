@@ -5,6 +5,7 @@
 #define _GNU_SOURCE   /* clock_nanosleep / TIMER_ABSTIME, sched_setscheduler */
 #endif
 #include <reac/transport/reac_pacer.h>
+#include "reac_handle_priv.h"
 #include <reac/transport/reac_rt.h>
 #include <reac/transport/reac_carrier.h>   /* the wire before the protocol */
 #include <reac/reac_ctrl.h>     /* reac_ctrl_classify_box_frame */
@@ -1467,7 +1468,7 @@ static void *pacer_loop(void *arg)
 		 * a kernel-queue overflow only costs box FILLER, and a dropped JOIN is
 		 * retried by the box on its ~100 ms grid. */
 		for (int i = 0; i < REAC_PACER_RX_BUDGET; i++) {
-			ssize_t rn = recv(p->fd, rxbuf, sizeof rxbuf, MSG_DONTWAIT);
+			ssize_t rn = recv(reac_handle_fd(p->handle), rxbuf, sizeof rxbuf, MSG_DONTWAIT);
 			if (rn <= 0)
 				break;                      /* EAGAIN = drained */
 			reac_pacer_rx_ingest(p, rxbuf, (size_t)rn);
@@ -1583,7 +1584,7 @@ static void *pacer_loop(void *arg)
 		 * THIS thread mid-period and smear the cadence the pacer exists to protect.
 		 * On EAGAIN/EWOULDBLOCK we drop this slot (bump tx_errors) and move on — the
 		 * absolute-deadline snap-forward below keeps the next slot on time. */
-		ssize_t r = sendto(p->fd, frame, REAC_FRAME_BYTES, MSG_DONTWAIT,
+		ssize_t r = sendto(reac_handle_fd(p->handle), frame, REAC_FRAME_BYTES, MSG_DONTWAIT,
 		                   (struct sockaddr *)&sll, sizeof sll);
 		if (r < 0)
 			atomic_fetch_add_explicit(&p->tx_errors, 1, memory_order_relaxed);
@@ -1658,7 +1659,7 @@ static void *pacer_loop(void *arg)
 int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 {
 	memset(p, 0, sizeof *p);
-	p->fd = -1;
+	p->handle = NULL;
 	/* No box yet, and 0 is a REAL base (the S-0808's), so the zeroed struct
 	 * would otherwise publish a base for a box that is not there. */
 	atomic_store_explicit(&p->recognized_headamp_base, -1, memory_order_relaxed);
@@ -1841,7 +1842,12 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 	}
 #endif
 
-	p->fd = fd;
+	p->handle = reac_handle_adopt(fd);
+	if (!p->handle) {
+		close(fd);
+		reac_frame_ring_free(&p->ring);
+		return -1;
+	}
 	return 0;
 }
 
@@ -1870,8 +1876,6 @@ void reac_pacer_stop(struct reac_pacer *p)
 
 void reac_pacer_close(struct reac_pacer *p)
 {
-	if (p->fd >= 0)
-		close(p->fd);
-	p->fd = -1;
+	reac_handle_close(&p->handle);
 	reac_frame_ring_free(&p->ring);
 }

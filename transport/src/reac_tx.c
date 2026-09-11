@@ -5,6 +5,7 @@
 #define _GNU_SOURCE
 #endif
 #include <reac/transport/reac_tx.h>
+#include "reac_handle_priv.h"
 #include <reac/transport/reac_mac.h>   /* the ONE source of an emitting role's address */
 
 #include <reac/reac.h>         /* REAC_FRAME_BYTES, REAC_ETHERTYPE */
@@ -45,7 +46,7 @@ uint32_t reac_eth_crc32(const uint8_t *buf, size_t len)
 
 int reac_tx_open(struct reac_tx *tx, const char *ifname)
 {
-	tx->fd = -1;
+	tx->handle = NULL;
 	tx->ifindex = 0;
 	tx->counter = 0;
 	/* THE SOURCE IS THIS NIC'S OWN ADDRESS, which is reac_mac.h's law for every
@@ -69,15 +70,17 @@ int reac_tx_open(struct reac_tx *tx, const char *ifname)
 		return -1;
 	}
 	tx->ifindex = ifr.ifr_ifindex;
-	tx->fd = fd;
+	tx->handle = reac_handle_adopt(fd);
+	if (!tx->handle) {
+		close(fd);
+		return -1;
+	}
 	return 0;
 }
 
 void reac_tx_close(struct reac_tx *tx)
 {
-	if (tx->fd >= 0)
-		close(tx->fd);
-	tx->fd = -1;
+	reac_handle_close(&tx->handle);
 }
 
 int reac_tx_emit(struct reac_tx *tx, float *const *planar, int nch, int ns)
@@ -92,7 +95,7 @@ int reac_tx_emit(struct reac_tx *tx, float *const *planar, int nch, int ns)
 	sll.sll_halen   = 6;
 	memset(sll.sll_addr, 0xFF, 6);  /* broadcast dst */
 
-	ssize_t r = sendto(tx->fd, frame, REAC_FRAME_BYTES, 0,
+	ssize_t r = sendto(reac_handle_fd(tx->handle), frame, REAC_FRAME_BYTES, 0,
 	                   (struct sockaddr *)&sll, sizeof sll);
 	tx->counter++;  /* free-running, wraps at 16 bits like the desk's */
 	return (int)r;
