@@ -5,7 +5,7 @@
 Name:           libreac-transport
 Version:        0.9.0
 %global abi 1
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
 
 License:        GPL-3.0-or-later
@@ -90,6 +90,9 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.0-2
+- cfea[19] is the pace code: 44.1 kHz announces 2 (was the 48 kHz code); an S-4000S
+  under a 44.1 kHz master now paces 44.1 kHz instead of 48 kHz.
 * Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.0-1
 - First release: reac_ifscan, reac_topo, reac_vlan, reac_slave, reac_pacer, reac_tx, reac_rx,
   reac_linkmon, reac_segment_ident, reac_seglock, reac_role_swap, reac_ring, reac_rt,
