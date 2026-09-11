@@ -215,7 +215,10 @@ static void gen_cfea(uint8_t out[34], const uint8_t src[6],
 	out[17] = 0x28;                 /* 40: the FIXED REAC downstream slot total   */
 	out[18] = cfg->out_channels;    /* box INPUT width (see note above); carried
 	                                 * in by reac_master_set_box on recognition */
-	out[19] = cfg->console_field;   /* console model (M-300 = 0, M-5000 = 1)      */
+	out[19] = cfg->console_field;   /* the PACE CODE the box follows (0 = 48 k, 1 = 96 k,
+	                                 * 2 = 44.1 k; measured 2026-09-11) — the pacer
+	                                 * derives it from the fps (reac_pace_code). The
+	                                 * field keeps its old "console" name for now.  */
 	/* [20:22] = the ENROLLED-BOX COUNT (big-endian). THE blink fix (2026-07-12):
 	 * a real M-200 announces 0x0001 here once a box is enrolled; reac-pw hard-wired
 	 * 0x0000 (the old out[21]=console_field was wrong — [19] and [21] are NOT the
