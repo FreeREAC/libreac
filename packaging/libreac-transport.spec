@@ -95,6 +95,9 @@ PC
   reac_seglock, reac_ifscan, reac_linkmon and the topo tap hold an opaque struct reac_handle
   the library allocates in open/claim and frees in close/release (spec §3). Struct layouts
   change, so the soname moves to .so.2. reac_seglock_init/_held and reac_topo_tap_fd added.
+* Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.0-2
+- cfea[19] is the pace code: 44.1 kHz announces 2 (was the 48 kHz code); an S-4000S
+  under a 44.1 kHz master now paces 44.1 kHz instead of 48 kHz.
 * Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.0-1
 - First release: reac_ifscan, reac_topo, reac_vlan, reac_slave, reac_pacer, reac_tx, reac_rx,
   reac_linkmon, reac_segment_ident, reac_seglock, reac_role_swap, reac_ring, reac_rt,
