@@ -3,9 +3,9 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        0.9.0
-%global abi 1
-Release:        2%{?dist}
+Version:        0.9.1
+%global abi 2
+Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
 
 License:        GPL-3.0-or-later
@@ -90,6 +90,11 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.1-1
+- The OS descriptor leaves every installed header: reac_tx, reac_pacer, reac_slave,
+  reac_seglock, reac_ifscan, reac_linkmon and the topo tap hold an opaque struct reac_handle
+  the library allocates in open/claim and frees in close/release (spec §3). Struct layouts
+  change, so the soname moves to .so.2. reac_seglock_init/_held and reac_topo_tap_fd added.
 * Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.0-2
 - cfea[19] is the pace code: 44.1 kHz announces 2 (was the 48 kHz code); an S-4000S
   under a 44.1 kHz master now paces 44.1 kHz instead of 48 kHz.

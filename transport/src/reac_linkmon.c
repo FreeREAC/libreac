@@ -4,6 +4,7 @@
 // reac_linkmon — see reac_linkmon.h for why this exists.
 
 #include <reac/transport/reac_linkmon.h>
+#include "reac_handle_priv.h"
 
 #include <errno.h>
 #include <poll.h>
@@ -29,7 +30,7 @@
 void reac_linkmon_init(struct reac_linkmon *m, const char *ifname)
 {
 	memset(m, 0, sizeof *m);
-	m->fd = -1;
+	m->handle = NULL;
 	m->carrier = -1;
 	m->acted = -1;
 	/* A name that does not FIT is not an interface name. Refusing it here (rather than
@@ -163,19 +164,17 @@ void reac_linkmon_feed(struct reac_linkmon *m, const void *buf, size_t len)
 
 int reac_linkmon_fd(const struct reac_linkmon *m)
 {
-	return m->fd;
+	return reac_handle_fd(m->handle);
 }
 
 void reac_linkmon_close(struct reac_linkmon *m)
 {
-	if (m->fd >= 0)
-		close(m->fd);
-	m->fd = -1;
+	reac_handle_close(&m->handle);
 }
 
 int reac_linkmon_resync(struct reac_linkmon *m)
 {
-	if (m->fd < 0)
+	if (!m->handle)
 		return -1;
 
 	struct {
@@ -188,7 +187,7 @@ int reac_linkmon_resync(struct reac_linkmon *m)
 	req.nh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
 	req.nh.nlmsg_seq = 1;
 	req.ifi.ifi_family = AF_UNSPEC;
-	if (send(m->fd, &req, req.nh.nlmsg_len, 0) < 0)
+	if (send(reac_handle_fd(m->handle), &req, req.nh.nlmsg_len, 0) < 0)
 		return -1;
 
 	/* Bounded: a dump that never terminates must not hold the main loop. Losing the seed
@@ -196,11 +195,11 @@ int reac_linkmon_resync(struct reac_linkmon *m)
 	char buf[LINKMON_BUF] __attribute__((aligned(8)));
 	int done = 0;
 	for (int i = 0; i < 64 && !done; i++) {
-		struct pollfd p = { .fd = m->fd, .events = POLLIN };
+		struct pollfd p = { .fd = reac_handle_fd(m->handle), .events = POLLIN };
 		int pr = poll(&p, 1, 200);
 		if (pr <= 0)
 			break;
-		ssize_t n = recv(m->fd, buf, sizeof buf, MSG_DONTWAIT);
+		ssize_t n = recv(reac_handle_fd(m->handle), buf, sizeof buf, MSG_DONTWAIT);
 		if (n <= 0)
 			break;
 		feed_ex(m, buf, (size_t)n, &done);
@@ -225,7 +224,11 @@ int reac_linkmon_open(struct reac_linkmon *m, const char *ifname)
 		close(fd);
 		return -1;
 	}
-	m->fd = fd;
+	m->handle = reac_handle_adopt(fd);
+	if (!m->handle) {
+		close(fd);
+		return -1;
+	}
 
 	/* Seed from the kernel through the SAME parser every later edge uses, so a broken
 	 * parse fails at startup rather than at the one moment a box is trying to enrol. */
@@ -238,12 +241,12 @@ int reac_linkmon_open(struct reac_linkmon *m, const char *ifname)
 
 enum reac_link_edge reac_linkmon_drain(struct reac_linkmon *m)
 {
-	if (m->fd < 0)
+	if (!m->handle)
 		return REAC_LINK_EDGE_NONE;
 
 	char buf[LINKMON_BUF] __attribute__((aligned(8)));
 	for (;;) {
-		ssize_t n = recv(m->fd, buf, sizeof buf, MSG_DONTWAIT);
+		ssize_t n = recv(reac_handle_fd(m->handle), buf, sizeof buf, MSG_DONTWAIT);
 		if (n > 0) {
 			feed_ex(m, buf, (size_t)n, NULL);
 			continue;

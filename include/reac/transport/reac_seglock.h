@@ -40,14 +40,23 @@
 #ifndef REAC_SEGLOCK_H
 #define REAC_SEGLOCK_H
 
+#include <reac/transport/reac_handle.h>
+
 struct reac_seglock {
-	int fd;          /* the bound socket, or -1 when we hold nothing */
+	struct reac_handle *handle;  /* the claim; NULL when we hold nothing (reac_handle.h) */
 	char name[128];  /* the abstract name, for messages (leading NUL shown as @) */
 };
 
 /* Claim `ifname` for DRIVING. 0 on success, -1 if another process (or the kernel
  * module) already holds it, -2 if the segment could not be identified at all.
  * On -1 the caller must refuse this segment by name and carry on with others. */
+/* A lock that holds nothing; what a zeroed struct also means. */
+void reac_seglock_init(struct reac_seglock *l);
+
+/* 1 while we hold the segment, 0 otherwise — the only question a caller may ask of
+ * the claim itself. */
+int  reac_seglock_held(const struct reac_seglock *l);
+
 int  reac_seglock_claim(struct reac_seglock *l, const char *ifname);
 
 /* Release. Safe on an unheld lock; exiting releases it anyway. */
