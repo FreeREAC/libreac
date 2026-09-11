@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.9.1
+Version:        1.0.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,9 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.0-1
+- 1.0: the protocol library as proven on real Roland desks and boxes at 44.1, 48 and
+  96 kHz. Same ABI as 0.9.1 (libreac.so.1).
 * Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.1-1
 - Version only: one tarball with libreac-transport 0.9.1; libreac.so itself is unchanged.
 * Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.0-1
