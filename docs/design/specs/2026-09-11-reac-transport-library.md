@@ -116,6 +116,17 @@ to the module instead). What today's move actually exposes, unchanged in signatu
 - **`reac_conf_*` / `reac_rt_*`** — the layered-config precedence law and the one door to
   `SCHED_FIFO`, unchanged.
 
+**Named seam, found at review (2026-09-11):** five installed headers still carry a raw `int fd`
+as a plain struct member — `reac_tx.h` (`struct reac_tx`), `reac_pacer.h` (`struct
+reac_pacer_cfg`), `reac_slave.h` (`struct reac_slave`), `reac_seglock.h` (`struct reac_seglock`)
+and `reac_ifscan.h` (`struct reac_ifscan`). The move carried them unchanged out of `reac-pw`'s
+private `src/`; installing them is the moment the socket leaks into the public ABI, and a kmod
+backend could not keep that layout without an ABI break. It is dormant today (no caller outside
+`reac-pw` reads the field) and is NOT a merge blocker, but the claim above is not fully true until
+those structs go opaque (allocate/free behind the library, the fd private to the backend). That is
+the same kind of seam as `reac_rate_cfg.h`/`reac_role_cfg.h` in §2 and is owed before the
+"backend-agnostic" wording is published as settled.
+
 No event-loop abstraction is introduced by this increment (§7) — everything above is called
 synchronously or from a caller-owned thread, exactly as `reac-pw` calls it today; only the
 `main.c` orchestration wiring these into `pw_loop` remains to be extracted.
