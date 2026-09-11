@@ -26,6 +26,8 @@
 #ifndef REAC_PACER_H
 #define REAC_PACER_H
 
+#include <reac/transport/reac_handle.h>
+
 #include <net/if.h>   /* IFNAMSIZ */
 #include <stdint.h>
 #include <stddef.h>
@@ -374,7 +376,7 @@ struct reac_pacer {
 	void  *session_ctx;
 	void (*on_session)(void *ctx, const uint8_t mac[6], unsigned session);
 	struct reac_headamp_tx headamp;  /* MASTER head-amp DMX send (off unless set) */
-	int fd;                          /* AF_PACKET socket */
+	struct reac_handle *handle;      /* the segment; NULL if not open (reac_handle.h) */
 	int ifindex;
 	long period_ns;                  /* 1e9 / fps */
 	uint32_t catchup_max_slots;      /* slot-debt budget; 0 = re-base always */

@@ -41,6 +41,8 @@
 #ifndef REAC_LINKMON_H
 #define REAC_LINKMON_H
 
+#include <reac/transport/reac_handle.h>
+
 #include <net/if.h>   /* IFNAMSIZ */
 #include <stddef.h>
 
@@ -56,7 +58,7 @@ enum reac_link_edge {
 
 struct reac_linkmon {
 	char ifname[IFNAMSIZ];   /* the interface watched, by NAME (see the header comment) */
-	int  fd;                 /* AF_NETLINK/NETLINK_ROUTE, RTNLGRP_LINK; -1 = not open */
+	struct reac_handle *handle;  /* the host's link watch; NULL = not open (reac_handle.h) */
 	int  carrier;            /* last OBSERVED: 1 up, 0 down, -1 UNKNOWN */
 	int  acted;              /* last state an edge was RETURNED for; -1 = none yet */
 	unsigned long ups;       /* edges reported, for the operator's line */

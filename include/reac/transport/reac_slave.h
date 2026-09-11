@@ -36,6 +36,8 @@
 #ifndef REAC_SLAVE_H
 #define REAC_SLAVE_H
 
+#include <reac/transport/reac_handle.h>
+
 #include <stdint.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -128,7 +130,7 @@ struct reac_slave {
 	int sample_rate;
 	uint8_t src[6];               /* our source MAC */
 
-	int fd;                       /* AF_PACKET RX+TX socket, -1 if not open */
+	struct reac_handle *handle;   /* the segment, RX+TX; NULL if not open (reac_handle.h) */
 	int ifindex;
 	int prio;                     /* the engine thread's SCHED_FIFO priority */
 	enum reac_rt_prio_source prio_src;  /* which layer chose it; reported when

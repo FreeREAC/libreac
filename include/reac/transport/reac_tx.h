@@ -34,9 +34,10 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <reac/transport/reac_handle.h>
 
 struct reac_tx {
-	int fd;            /* AF_PACKET socket, -1 if not open */
+	struct reac_handle *handle;  /* the segment; NULL if not open (reac_handle.h) */
 	int ifindex;
 	uint8_t src[6];    /* our source MAC (Roland OUI + stand-in) */
 	uint16_t counter;  /* free-running u16, +1 per emitted frame */
