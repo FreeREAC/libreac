@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        0.8.1
+Version:        0.9.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -109,6 +109,14 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 0.9.0-1
+- A SECOND LIBRARY, libreac-transport, is now built from this same tarball (see
+  packaging/libreac-transport.spec) -- reac-pw's sockets, SCHED_FIFO pacer, RT
+  threads, VLAN/topology scan and segment lock, moved unchanged, depending on
+  this package. libreac.so itself gains and loses no symbol, so its own ABI is
+  untouched; the minor moves because a new build product lands beside it. See
+  docs/design/specs/2026-09-11-reac-transport-library.md.
+
 * Wed Sep 09 2026 Pau Aliagas <linuxnow@gmail.com> - 0.8.0-1
 - THE CONTROL PLANE LIVES HERE NOW. Operator ruling: a daemon is sockets and PipeWire, it
   does not speak REAC control. The slave JOIN/HOLD table, the master establishment and grant

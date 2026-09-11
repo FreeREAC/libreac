@@ -13,9 +13,14 @@
 # and is not one.
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-SPEC=$(ls "$ROOT"/packaging/*.spec | head -1)
+# TWO SPECS SINCE 0.9.0 (libreac.spec, libreac-transport.spec), both built from the SAME
+# tarball -- `ls | head -1` picked exactly one alphabetically (libreac-transport.spec sorts
+# before libreac.spec, '-' < '.'), so a plain `build-rpm.sh` silently stopped building
+# libreac.so at all the moment the second spec landed. Build every *.spec found here.
 TOP=$(readlink -f "${RPM_TOPDIR:-$HOME/rpmbuild}")
 sh "$ROOT/packaging/make-tarball.sh" "$@"
 mkdir -p "$TOP/SOURCES"
 cp "$ROOT"/*.tar.gz "$TOP/SOURCES/"
-rpmbuild -ba --define "_topdir $TOP" "$SPEC"
+for SPEC in "$ROOT"/packaging/*.spec; do
+	rpmbuild -ba --define "_topdir $TOP" "$SPEC"
+done
