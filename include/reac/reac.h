@@ -164,10 +164,17 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * should have caught it was inert as a result: reac-pw's `>= 0.6.0` floor
  * accepted both libraries, rpm saw the same NEVRA and made `rpm -U` a no-op,
  * and the installed /usr/bin/reac-pw loaded the new libreac.so.0 and died on
- * `undefined symbol`. A removed symbol needs BOTH numbers below to move. */
+ * `undefined symbol`. A removed symbol needs BOTH numbers below to move.
+ *
+ * 0.9.0: a SECOND LIBRARY, libreac-transport, lands beside this one
+ * (docs/design/specs/2026-09-11-reac-transport-library.md) -- reac-pw's
+ * sockets/pacer/RT-thread/VLAN code, depending on libreac unchanged. Not an
+ * ABI break for libreac.so itself (no symbol here moves or is removed, so
+ * LIBREAC_ABI stays put); the minor bump is the one middle-digit increment a
+ * new build product beside the existing one deserves. */
 #define LIBREAC_VERSION_MAJOR 0
-#define LIBREAC_VERSION_MINOR 8
-#define LIBREAC_VERSION_PATCH 1
+#define LIBREAC_VERSION_MINOR 9
+#define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
