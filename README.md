@@ -1,164 +1,119 @@
 # libreac
 
-The shared **REAC protocol library** for the [FreeREAC](https://github.com/FreeREAC)
-C tools — *REAC Exposed Audio Communications*. One canonical home for the REAC
-(EtherType `0x8819`) facts and helpers that `reac-aes67`, `reac-repacer`, and future
-C tools all need, so they aren't duplicated or allowed to drift.
+Two C libraries for Roland REAC (*REAC Exposed Audio Communications*, EtherType `0x8819`):
+`libreac`, the protocol, and `libreac-transport`, the sockets and threads that carry it.
+Both build from this one repository and one release tarball.
 
-## What it provides
+## libreac — the protocol
 
-- **Mode descriptors** — `REAC_MODE_{44K1,48K,96K}` and `reac_mode_for(rate)`. The
-  frame is rate-invariant (40 ch × 12 samples × 3 B); the rate is the packet rate.
-- **Rate detection** — `reac_rate_snap(pps)` (pps → 44100 / 48000 / 96000) and
-  `reac_detect_rate_fd(fd, window_ms)` (measure the live packet rate on an AF_PACKET
-  capture and snap it).
-- **Frame helpers** — `reac_frame_is_reac()`, `reac_frame_counter()`,
-  `reac_counter_gap()` (16-bit wrap-aware loss).
-- **The braid layout oracle** — `reac_braid_pos()` (`<reac/reac_braid.h>`): the
-  channel-pair byte map of the audio region, the REAC wire format in **both**
-  directions. `static inline`, so real-time encode and decode both call it. Do not
-  copy this byte map anywhere; consumers call the oracle.
-- **The sample codec** — `reac_s24le_to_f32()` / `reac_f32_to_s24le()`
-  (`<reac/reac_sample.h>`): the one s24-LE ↔ float pair, exact inverses. Both
-  directions live together so the round-trip contract cannot drift.
-- **Downstream decode** — `reac_frame_inspect()` / `reac_decode()`
-  (`<reac/reac_decode.h>`): the master's 40-channel broadcast, un-braided through
-  the oracle — the exact inverse of `reac_downstream_build()`. Plus capture and
-  pcap sources for offline work.
-- **Upstream decode** — `reac_upstream_channels()` / `reac_upstream_decode()`
-  (`<reac/reac_upstream.h>`): the stagebox return, box-width sized.
-- **Encode** — `reac_braid_encode()` / `reac_downstream_build()`
-  (`<reac/reac_encode.h>`): audio *onto* the wire. The braided audio region in
-  both directions (the exact inverse of `reac_upstream_decode`), and the whole
-  1492-byte master downstream broadcast frame. Pure — caller's buffer, no
-  allocation, no IO, safe from a real-time thread.
-- **Constants** — EtherType, frame geometry, and the settled facts (96 kHz is
-  40 ch / 8000 pps, *not* channel-halving).
+libreac owns what the bytes mean, in both directions and for both roles.
 
-The wire-format reference these come from is
-[reac-protocol](https://github.com/FreeREAC/reac-protocol).
+**Wire format.** The REAC frame is rate-invariant: 40 channels × 12 samples × 3 bytes of
+24-bit audio, braided into a channel-pair byte layout that is the same on the wire whichever
+way it is read. `reac_braid_pos()` (`<reac/reac_braid.h>`) is the one oracle for that layout —
+`static inline`, so encode and decode both call it and cannot drift apart. `reac_s24le_to_f32()`
+/ `reac_f32_to_s24le()` (`<reac/reac_sample.h>`) are the exact-inverse sample codec.
+`reac_decode()` / `reac_frame_inspect()` (`<reac/reac_decode.h>`) read the master's 40-channel
+downstream broadcast; `reac_upstream_channels()` / `reac_upstream_decode()`
+(`<reac/reac_upstream.h>`) read a stagebox's narrower upstream return, sized to the box's own
+input count; `reac_braid_encode()` / `reac_downstream_build()` (`<reac/reac_encode.h>`) write
+audio back onto the wire in both directions. `reac_decode_plain_le()` reads the pre-0.5.0
+plain-LE layout; it is a diagnostic for historical captures, not a layout the wire ever carried.
+`reac_frame_is_reac()`, `reac_frame_counter()`, `reac_counter_gap()`, `reac_rate_snap()` and
+`reac_detect_rate_fd()` recognise a frame, read its sequence counter and detect its sample rate
+from live capture. `reac_frame_clean_len()` strips the +2-byte Ethernet FCS residue some
+captures carry after the end marker — not a protocol field, never emitted.
 
-## Behaviour change in 0.5.0 — `reac_decode()` reads the braid
+**Control plane.** The REAC conversation itself: how one endpoint pairs with another. The
+32-byte control block, its two nested checksums and the box-model matrix
+(`reac_ctrl_build_*`, `reac_master_stamp`), head-amp records (`reac_headamp_*`,
+`reac_ports_parse`), box identity, and the master/slave establishment, hunt and arbitration
+state machines (`<reac/reac_link.h>`, `reac_hunt`, `reac_master_fsm`, `reac_grant`). See
+[`docs/REAC-CONTROL-PLANE.md`](docs/REAC-CONTROL-PLANE.md) for the pairing sequence as measured
+on real boxes, and [`docs/layering.md`](docs/layering.md) for what belongs here and what does
+not.
 
-Up to 0.4.0 `reac_downstream_build()` wrote the channel-pair braid while
-`reac_decode()` read plain LE sample-major, so **libreac could not read back a
-frame it had just built**: on a 1492 B frame of its own making, 0 of 480 samples
-agreed ([#13](https://github.com/FreeREAC/libreac/issues/13)). `reac_decode()`
-now decodes the braid, through the same `reac_braid_pos()` oracle the encoder
-writes through.
+libreac is IO-free, allocation-free and clock-free: no socket, no thread, no `SCHED_FIFO`. That
+is `libreac-transport`'s job.
 
-The signature is unchanged, so **existing callers become correct without a source
-change** — but a same-call, different-audio change is exactly the kind that is
-easy to miss, hence the version bump and this section. Every downstream consumer
-wanted the braid; there is one downstream layout for every mixer generation, and
-the per-generation "M-5000 plain-LE vs M-200/M-300 braid" split that once kept
-plain LE the default here is refuted, not open.
+## libreac-transport — sockets, pacer, threads
 
-Plain LE stays *reachable*, under its own explicit name
-`reac_decode_plain_le()`, byte-identical to the pre-0.5.0 `reac_decode()` and
-pinned as such by the test suite. It is a **diagnostic**: it reads historical
-captures stored under that layout and reproduces the mid-byte lane shift behind
-the old "coherence 0.999" reading. It is not a layout the wire ever carried, and
-nothing should get it by accident.
+The pieces of a REAC endpoint that move frames but carry no opinion about their meaning:
+AF_PACKET RX/TX over a lock-free SPSC ring (`reac_rx`, `reac_tx`, `reac_ring`), the SCHED_FIFO
+cadence pacer and its clock discipline (`reac_pacer`), network interface enumeration and link
+state (`reac_ifscan`, `reac_linkmon`, `reac_ifname`), VLAN sub-interface mint/adopt/release on a
+trunk port (`reac_topo`, `reac_vlan`), a segment's identity and lock (`reac_segment_ident`,
+`reac_seglock`), the layered-config precedence and the one door to `SCHED_FIFO` (`reac_conf`,
+`reac_rt`), and the slave/master establishment orchestration that drives libreac's protocol
+state machines (`reac_slave` joining, `reac_pacer` mastering). Its public headers carry no socket type in a call shape, so a
+future backend other than userspace AF_PACKET could implement the same API; it holds no Linux
+capability itself, since a library cannot — the binding process keeps `CAP_NET_RAW` /
+`CAP_NET_ADMIN` and this library runs inside it. See
+[`docs/design/specs/2026-09-11-reac-transport-library.md`](docs/design/specs/2026-09-11-reac-transport-library.md)
+for what moved here from where, and what is still open (two headers still vendored from their
+prior home, five structs that still expose a raw `fd`).
 
-## Scope: the wire format in both directions; IO and handshake live in reac-pw
+## Who links these
 
-libreac owns **what the bytes mean**, in both directions and for both roles, and
-now in both *senses*: it validates and decodes frames, measures the wire (counter,
-loss, rate from cadence), and **builds** them. Encoding a frame is the same
-statement about the wire format that decoding makes, read backwards, so the two
-belong together — `reac_braid_encode()` is literally the inverse of
-`reac_upstream_decode()`, and `reac_downstream_build()` is the 40-channel master
-broadcast that `reac_decode()` reads back.
+`reac-pw`, the PipeWire-native REAC endpoint, links both: `libreac-transport` for the wire and
+`libreac` underneath it for what the frames mean. `reac-aes67`, the REAC→AES67 bridge, links
+`libreac` alone — it has no need of the transport layer's threads or pacer.
 
-What libreac does **not** do is touch a socket, a clock or a protocol state
-machine. Staying in reac-pw, deliberately:
+## The three paces
 
-- **AF_PACKET emission** (`reac_tx_emit`) and the SCHED_FIFO cadence pacer — IO
-  and timing; libreac is IO-free and allocation-free by design.
-- **The control-plane builders** `reac_ctrl_build_*` (cold-connect,
-  config-announce, upstream/flood FILLER, head-amp) and `reac_master_stamp` —
-  their 32-byte control block, its two nested checksums and the box-model matrix
-  are *handshake state* tied to the master/slave FSM, not layout. They call
-  `reac_braid_encode()` for their audio region and own everything else.
+REAC runs at exactly one of three packet rates, all carrying the same 40×12×3-byte frame
+shape: 44.1 kHz, 48 kHz and 96 kHz. A master announces which one it is running in the control
+block's `console_field` byte (`cfea` offset 19 in the wire spec) — 0 for 48 kHz, 1 for 96 kHz,
+2 for 44.1 kHz — and `reac_pace_code()` (`transport/src/reac_pacer.c`) is the one place that
+byte is derived, from the running rate in packets per second (≥ 8000 pps → 96 kHz, ≤ 3700 pps →
+44.1 kHz, otherwise 48 kHz). See `spec/reac.ksy` in the
+[reac-protocol](https://github.com/FreeREAC/reac-protocol) repository for the field itself.
 
-That split is also why there is **no whole-frame upstream builder here**: on a
-real stagebox every box → master frame that carries audio is *also* a control
-frame, so the only layout-pure, separable part of the upstream emit is its audio
-region — which is `reac_braid_encode()`, and which is the same braid the
-downstream uses. A `reac_upstream_build()` would have had to import the
-handshake, so it was deliberately not written.
+## Build
 
-The master's **downstream broadcast** is the fixed 40-channel program frame
-(1492 B = 50 + 1440 + 2), rate-invariant audio with the sample rate carried by the
-packet rate.
-
-A stagebox's **upstream return** (box → master) is a different, narrower frame,
-decoded here too (`<reac/reac_upstream.h>`, resolved on the rig — reac-pw
-task #108 + the S-4000 OHRCA captures):
-
-- It carries the box's own input count, not 40 — a **variable, even, box-dependent
-  channel count** (S-0808 → 8 ch/340 B, S-1608 → 16 ch/628 B, S-4000 → 32 ch/1204 B).
-- Audio is the **channel-pair byte braid** (`<reac/reac_braid.h>` — the single
-  layout oracle, with the full evidence trail; the braid is the wire format in
-  both directions, and since 0.5.0 both decoders read it). The plain-LE body is
-  retained unchanged as `reac_decode_plain_le()`, a diagnostic — see above.
-- The channel map is **plain ascending** (input N = wire channel N−1) — the once-
-  suspected FPGA permutation was disproved by the captures.
-- Some captures carry **+2 bytes of Ethernet FCS residue** after the end marker,
-  in either direction. It is NOT a protocol field: the two bytes are the low 16
-  bits of the frame's own CRC-32 (verified on 100% of frames checked across five
-  rigs, both directions), left by a capture that mirrors RX and TX of one port.
-  `reac_frame_clean_len()` is the one home for stripping it — never emit it.
-
-## Releasing
-
-`.github/workflows/release-rpm.yml` builds the libreac RPM in a `fedora:44`
-container from `packaging/libreac.spec` and publishes it into the same shared
-dnf tree FreeMixer/openmixer's own release publishes into, alongside reac-pw's
-(one repo, one `openmixer.repo`, one GPG key). It is `workflow_dispatch` only,
-never on push:
+A hand-kept Makefile, no build system to configure.
 
 ```
-gh workflow run release-rpm.yml -f tag=v0.7.1 -f sign=false   # dry run, publishes nothing
-gh workflow run release-rpm.yml -f tag=v0.7.1 -f sign=true    # signs and pushes to the shared R2 bucket
+make                                            # libreac.a
+make test                                       # libreac's own suite
+make transport REACPW_INCLUDE=<reac-pw>/src     # libreac-transport.a
 ```
 
-`tag` must already exist and match `v[0-9]*`. `sign` defaults to `false`, which
-runs `packaging/publish-repo.sh --no-sign` and stops before the push step — the
-assembled tree is still attached to the run as an artifact for inspection.
-libreac has no build-time dependency on the shared tree itself — it is the
-package that FILLS `pkgconfig(libreac)` for reac-pw's own build, so publish
-libreac here before dispatching reac-pw's equivalent workflow, or its
-`dnf builddep` fails on `pkgconfig(libreac)` by name.
-## Install
+`libreac-transport` builds standalone for everything except two headers
+(`reac_pacer.h`, `reac_role_swap.h`) that still `#include` two pure-declaration headers from
+`reac-pw`'s tree (`reac_rate_cfg.h`, `reac_role_cfg.h` — see the design spec above for why).
+`REACPW_INCLUDE` points the build at a `reac-pw` checkout's `src/` for those two; unset, every
+other object still builds and only those two fail, loudly, at compile time.
 
-**From a release.** Every tagged release attaches the built RPMs and the source tarball:
+## Packaging
 
-```
-gh release download v0.8.0 -R FreeREAC/libreac -p 'libreac-*.rpm'
-sudo dnf install ./libreac-*.rpm ./libreac-devel-*.rpm
-```
+`packaging/build-rpm.sh` builds every `*.spec` under `packaging/` — today `libreac.spec` and
+`libreac-transport.spec` — from the one tarball `packaging/make-tarball.sh` produces, so both
+RPMs always ship the same source snapshot. `packaging/publish-repo.sh` assembles the shared
+dnf tree; see `.github/workflows/release-rpm.yml` for how a tagged release runs that dispatch.
 
-**From source.** A hand Makefile, no build system to configure:
+## Tools
 
-```
-make            # libreac.a and libreac.so
-make test       # the unit tests, including the capture-backed control-plane ones
-sudo make install
-```
+Under `tools/`, built with `make wire-tools` (the six analysis tools) or named individually:
+
+- `corpus_check` — decode a capture corpus with this build and report what libreac made of it;
+  `--self-test` / `--self-test-audio` prove the corruption-detection arm can itself go red.
+- `headamp_trace FILE.pcap` — every head-amp record in a capture, in order, with source MAC and
+  truncation.
+- `wire_census FILE.pcap` — who talks on a segment and in what frame shapes.
+- `ctrl_delta FILE.pcap` — which control-block bytes change, per talker and message kind.
+- `upstream_watch FILE.pcap AA:BB:CC:DD:EE:FF` — every byte one box's own frames change, classed
+  by how often.
+- `slotmap_watch FILE.pcap` — the sliding slot-map window unrolled into per-slot state.
+- `seq_gaps FILE.pcap` — per-talker frame-counter holes, the control for any "nothing was sent"
+  claim.
+- `conformance-headamp-base.sh` — a source-shape gate: the head-amp base must have exactly one
+  derivation in the code (the announced strap), never a per-width table.
+- `run-corpus.sh` — decode the full FreeREAC capture corpus and diff the result against
+  `tests/corpus-baseline.txt`; the corpus itself is private and not in this repository.
+- `gen-facts-header.py` — regenerate `tests/reac_facts_assert.h` from a `reac-protocol`
+  checkout's `spec/protocol-facts.yaml`; run by the Makefile, not by hand.
 
 ## Licence
 
 GPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
-
-## The protocol
-
-REAC is not a published protocol and nothing here is guessed: every rule is measured, and
-where a document and a capture disagree the capture wins and the document is amended with the
-date and the evidence.
-
-- [`docs/REAC-CONTROL-PLANE.md`](docs/REAC-CONTROL-PLANE.md) — how two REAC endpoints pair,
-  what `reac_link` does about it, and what is still unsettled.
-- [`docs/layering.md`](docs/layering.md) — what belongs in this library and what does not.
-- `reac-protocol`'s `spec/reac.ksy` and `wire-format.md` — the frames themselves.
