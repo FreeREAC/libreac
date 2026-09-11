@@ -1112,7 +1112,7 @@ void reac_pacer_request_reestablish(struct reac_pacer *p, int cause)
  * 48 k and every OHRCA 96 k; a desk does not change family with its clock. The rig
  * proof of the box obeying the BYTE, not the cadence: an S-4000S under our 3675 pps
  * master with this byte at 0 returned 4000 pps (48 k). */
-static uint8_t reac_pace_code(int fps)
+uint8_t reac_pace_code(int fps)
 {
 	if (fps >= 8000) return 1;   /* 96 kHz */
 	if (fps <= 3700) return 2;   /* 44.1 kHz (3675 pps) */
