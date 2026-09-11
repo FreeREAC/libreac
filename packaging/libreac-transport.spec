@@ -49,8 +49,12 @@ for f in transport/src/*.c; do
   cc %{optflags} -fPIC -D_GNU_SOURCE -Iinclude -Ipackaging/vendor/reac-pw-headers \
      -c "$f" -o "$(basename "$f" .c).o"
 done
+# -lreac (via pkg-config, BuildRequires above) resolves every reac_ctrl_*/reac_hunt_*/
+# reac_master_*/... symbol the transport calls into libreac for. --no-undefined is the
+# same gate libreac.spec's own %build carries: a missing symbol fails HERE, at package
+# build, not at a consumer's exec.
 cc %{build_ldflags} -shared -Wl,-soname,libreac-transport.so.%{abi} -Wl,--no-undefined \
-  -o libreac-transport.so.%{version} *.o -lm -lpthread
+  -o libreac-transport.so.%{version} *.o $(pkg-config --libs libreac) -lm -lpthread
 
 %install
 install -Dm0755 libreac-transport.so.%{version} %{buildroot}%{_libdir}/libreac-transport.so.%{version}
