@@ -5,6 +5,7 @@
  * feeds them; see reac_topo.h for the measurements this is built on.
  */
 #include <reac/transport/reac_topo.h>
+#include "reac_handle_priv.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -353,8 +354,9 @@ static struct sock_filter reac_topo_bpf[] = {
 	{ BPF_RET | BPF_K,             0, 0, 0x40000 },       /* pass the whole frame */
 };
 
-int reac_topo_tap_open(const char *parent)
+int reac_topo_tap_open(struct reac_topo_tap *t, const char *parent)
 {
+	t->handle = NULL;
 	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, htons(ETH_P_ALL));
 	if (fd < 0)
 		return -1;
@@ -383,7 +385,10 @@ int reac_topo_tap_open(const char *parent)
 	sll.sll_ifindex = (int)idx;
 	if (bind(fd, (struct sockaddr *)&sll, sizeof sll) != 0)
 		goto fail;
-	return fd;
+	t->handle = reac_handle_adopt(fd);
+	if (!t->handle)
+		goto fail;
+	return 0;
 fail:
 	saved = errno;
 	close(fd);
@@ -391,7 +396,12 @@ fail:
 	return -1;
 }
 
-int reac_topo_tap_next(int fd, enum reac_topo_kind *kind, uint16_t *vid)
+int reac_topo_tap_fd(const struct reac_topo_tap *t)
+{
+	return reac_handle_fd(t->handle);
+}
+
+int reac_topo_tap_next(struct reac_topo_tap *t, enum reac_topo_kind *kind, uint16_t *vid)
 {
 	uint8_t frame[2048];
 	uint8_t control[CMSG_SPACE(sizeof(struct tpacket_auxdata))];
@@ -403,7 +413,7 @@ int reac_topo_tap_next(int fd, enum reac_topo_kind *kind, uint16_t *vid)
 	msg.msg_control = control;
 	msg.msg_controllen = sizeof control;
 
-	ssize_t n = recvmsg(fd, &msg, 0);
+	ssize_t n = recvmsg(reac_handle_fd(t->handle), &msg, 0);
 	if (n < 0)
 		return (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) ? 0 : -1;
 
@@ -428,8 +438,7 @@ int reac_topo_tap_next(int fd, enum reac_topo_kind *kind, uint16_t *vid)
 	return 1;
 }
 
-void reac_topo_tap_close(int fd)
+void reac_topo_tap_close(struct reac_topo_tap *t)
 {
-	if (fd >= 0)
-		close(fd);
+	reac_handle_close(&t->handle);
 }
