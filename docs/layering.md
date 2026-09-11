@@ -1,5 +1,13 @@
 # What belongs in libreac, and what does not
 
+Status: amended 2026-09-11 — the "Three layers" table's transport row and "The transport layer
+never moves" sentence below are **superseded** by
+[`docs/design/specs/2026-09-11-reac-transport-library.md`](design/specs/2026-09-11-reac-transport-library.md):
+the operator ruled a second library, `libreac-transport`, takes reac-pw's socket/pacer/RT-thread
+code. This note's readiness gates for the *control-plane conversation* (the establishment FSM,
+§"Readiness gates for moving the FSM") are untouched — that is a different seam (protocol meaning
+vs. transport plumbing) and still not ready by this note's own gates.
+
 libreac is the one home for REAC **wire knowledge**. This note records where the
 boundary runs, why the control plane is not simply "more of the same", and the
 concrete conditions under which the remaining piece — the establishment FSM —
