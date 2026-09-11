@@ -21,6 +21,22 @@ TOP=$(readlink -f "${RPM_TOPDIR:-$HOME/rpmbuild}")
 sh "$ROOT/packaging/make-tarball.sh" "$@"
 mkdir -p "$TOP/SOURCES"
 cp "$ROOT"/*.tar.gz "$TOP/SOURCES/"
-for SPEC in "$ROOT"/packaging/*.spec; do
-	rpmbuild -ba --define "_topdir $TOP" "$SPEC"
+# ORDER IS LOAD-BEARING. libreac-transport.spec BuildRequires pkgconfig(libreac) at this very
+# version, which nothing has installed yet when both are built from one tarball -- the release
+# workflow died on exactly that (v1.0.0, first dispatch). So: build libreac.spec first, stage
+# its freshly built runtime + devel RPMs into $TOP/stage (rpm2cpio, no root, nothing installed
+# on the host), point pkg-config at the stage and build the transport with the rpm-level
+# dependency check off. The transport's own Requires/autoreq stay intact; only rpmbuild's
+# BuildRequires gate is bypassed, and only because the thing it asks for is the sibling package
+# built ten seconds earlier.
+rpmbuild -ba --define "_topdir $TOP" "$ROOT/packaging/libreac.spec"
+V=$(sed -n 's/^Version: *//p' "$ROOT/packaging/libreac.spec" | head -1)
+STAGE="$TOP/stage-libreac-$V"
+rm -rf "$STAGE"; mkdir -p "$STAGE"
+for RPM in "$TOP"/RPMS/*/libreac-"$V"-*.rpm "$TOP"/RPMS/*/libreac-devel-"$V"-*.rpm; do
+	( cd "$STAGE" && rpm2cpio "$RPM" | cpio -idm --quiet )
 done
+PC=$(find "$STAGE" -name libreac.pc | head -1)
+[ -n "$PC" ] || { echo "build-rpm.sh: staged libreac-devel $V carries no libreac.pc"; exit 1; }
+sed -i "s|^prefix=.*|prefix=$STAGE/usr|" "$PC"
+PKG_CONFIG_PATH=$(dirname "$PC") rpmbuild -ba --nodeps --define "_topdir $TOP" "$ROOT/packaging/libreac-transport.spec"
