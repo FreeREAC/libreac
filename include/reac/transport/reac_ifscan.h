@@ -45,6 +45,8 @@
 #ifndef REAC_IFSCAN_H
 #define REAC_IFSCAN_H
 
+#include <reac/transport/reac_handle.h>
+
 #include <net/if.h>   /* IFNAMSIZ */
 #include <stddef.h>
 #include <stdint.h>
@@ -108,7 +110,7 @@ struct reac_ifscan {
 	struct reac_ifscan_entry ifs[REAC_IFSCAN_MAX];
 	struct reac_ifscan_event ev[REAC_IFSCAN_EVENTS];
 	int ev_head, ev_tail;
-	int fd;                   /* AF_NETLINK/NETLINK_ROUTE, RTNLGRP_LINK; -1 = not open */
+	struct reac_handle *handle;  /* the host's link watch; NULL = not open (reac_handle.h) */
 	unsigned long msgs;       /* RTM_NEWLINK/RTM_DELLINK accepted; zero after a known link
 	                           * change means the watch is not working */
 	unsigned long overruns;   /* ENOBUFS: the cache is suspect and gets re-dumped */

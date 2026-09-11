@@ -4,6 +4,7 @@
  * reac_ifscan — the interface table and its transitions; see reac_ifscan.h.
  */
 #include <reac/transport/reac_ifscan.h>
+#include "reac_handle_priv.h"
 
 #include <errno.h>
 #include <poll.h>
@@ -57,7 +58,7 @@ const char *reac_ifscan_verb_name(enum reac_ifscan_verb v)
 void reac_ifscan_init(struct reac_ifscan *s)
 {
 	memset(s, 0, sizeof *s);
-	s->fd = -1;
+	s->handle = NULL;
 }
 
 static void emit(struct reac_ifscan *s, enum reac_ifscan_verb v, const char *name)
@@ -359,7 +360,7 @@ void reac_ifscan_feed(struct reac_ifscan *s, const void *buf, size_t len, uint64
 
 int reac_ifscan_resync(struct reac_ifscan *s, uint64_t now_ns)
 {
-	if (s->fd < 0)
+	if (!s->handle)
 		return -1;
 
 	struct {
@@ -372,18 +373,18 @@ int reac_ifscan_resync(struct reac_ifscan *s, uint64_t now_ns)
 	req.nh.nlmsg_flags = NLM_F_REQUEST | NLM_F_DUMP;
 	req.nh.nlmsg_seq = 1;
 	req.ifi.ifi_family = AF_UNSPEC;
-	if (send(s->fd, &req, req.nh.nlmsg_len, 0) < 0)
+	if (send(reac_handle_fd(s->handle), &req, req.nh.nlmsg_len, 0) < 0)
 		return -1;
 
 	/* Bounded: a dump that never terminates must not hold the main loop. */
 	char buf[IFSCAN_BUF] __attribute__((aligned(8)));
 	int done = 0;
 	for (int i = 0; i < 64 && !done; i++) {
-		struct pollfd p = { .fd = s->fd, .events = POLLIN };
+		struct pollfd p = { .fd = reac_handle_fd(s->handle), .events = POLLIN };
 		int pr = poll(&p, 1, 200);
 		if (pr <= 0)
 			break;
-		ssize_t n = recv(s->fd, buf, sizeof buf, MSG_DONTWAIT);
+		ssize_t n = recv(reac_handle_fd(s->handle), buf, sizeof buf, MSG_DONTWAIT);
 		if (n <= 0)
 			break;
 		feed_ex(s, buf, (size_t)n, now_ns, &done);
@@ -405,11 +406,14 @@ int reac_ifscan_open(struct reac_ifscan *s, uint64_t now_ns)
 		close(fd);
 		return -1;
 	}
-	s->fd = fd;
+	s->handle = reac_handle_adopt(fd);
+	if (!s->handle) {
+		close(fd);
+		return -1;
+	}
 	/* Seed from the kernel through the SAME parser every later change uses. */
 	if (reac_ifscan_resync(s, now_ns) != 0) {
-		close(fd);
-		s->fd = -1;
+		reac_handle_close(&s->handle);
 		return -1;
 	}
 	return 0;
@@ -417,16 +421,16 @@ int reac_ifscan_open(struct reac_ifscan *s, uint64_t now_ns)
 
 int reac_ifscan_fd(const struct reac_ifscan *s)
 {
-	return s->fd;
+	return reac_handle_fd(s->handle);
 }
 
 void reac_ifscan_drain(struct reac_ifscan *s, uint64_t now_ns)
 {
-	if (s->fd < 0)
+	if (!s->handle)
 		return;
 	char buf[IFSCAN_BUF] __attribute__((aligned(8)));
 	for (;;) {
-		ssize_t n = recv(s->fd, buf, sizeof buf, MSG_DONTWAIT);
+		ssize_t n = recv(reac_handle_fd(s->handle), buf, sizeof buf, MSG_DONTWAIT);
 		if (n > 0) {
 			feed_ex(s, buf, (size_t)n, now_ns, NULL);
 			continue;
@@ -444,7 +448,5 @@ void reac_ifscan_drain(struct reac_ifscan *s, uint64_t now_ns)
 
 void reac_ifscan_close(struct reac_ifscan *s)
 {
-	if (s->fd >= 0)
-		close(s->fd);
-	s->fd = -1;
+	reac_handle_close(&s->handle);
 }

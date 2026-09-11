@@ -116,16 +116,19 @@ to the module instead). What today's move actually exposes, unchanged in signatu
 - **`reac_conf_*` / `reac_rt_*`** — the layered-config precedence law and the one door to
   `SCHED_FIFO`, unchanged.
 
-**Named seam, found at review (2026-09-11):** five installed headers still carry a raw `int fd`
-as a plain struct member — `reac_tx.h` (`struct reac_tx`), `reac_pacer.h` (`struct
-reac_pacer_cfg`), `reac_slave.h` (`struct reac_slave`), `reac_seglock.h` (`struct reac_seglock`)
-and `reac_ifscan.h` (`struct reac_ifscan`). The move carried them unchanged out of `reac-pw`'s
-private `src/`; installing them is the moment the socket leaks into the public ABI, and a kmod
-backend could not keep that layout without an ABI break. It is dormant today (no caller outside
-`reac-pw` reads the field) and is NOT a merge blocker, but the claim above is not fully true until
-those structs go opaque (allocate/free behind the library, the fd private to the backend). That is
-the same kind of seam as `reac_rate_cfg.h`/`reac_role_cfg.h` in §2 and is owed before the
-"backend-agnostic" wording is published as settled.
+**The OS handle is opaque (0.9.1, closing the seam a review found the same day):** review of
+the 0.9.0 move found a raw `int fd` struct member in five installed headers (`reac_tx`,
+`reac_pacer`, `reac_slave`, `reac_seglock`, `reac_ifscan`), and the fix found two more
+(`reac_linkmon`, and the topo tap's open/next/close signatures). All seven now hold ONE
+`struct reac_handle *` (`include/reac/transport/reac_handle.h`, an incomplete type; complete
+only in `transport/src/reac_handle_priv.h`), NULL meaning not open. The library allocates it
+in the object's own open/claim (control plane) and frees it in close/release; RT paths read
+the descriptor through a private inline accessor — one pointer read, no allocation. What a
+caller may still ask for is a POLLABLE descriptor for its event loop (`reac_ifscan_fd`,
+`reac_linkmon_fd`, `reac_topo_tap_fd`) — that is the reactor seam of §7, and on Linux any
+backend answers it. `reac_seglock_init`/`reac_seglock_held` replace the two things `reac-pw`
+and its tests did to the lock's descriptor by hand. Struct layouts changed, so
+`libreac-transport` moves to `.so.2`.
 
 No event-loop abstraction is introduced by this increment (§7) — everything above is called
 synchronously or from a caller-owned thread, exactly as `reac-pw` calls it today; only the
@@ -137,6 +140,11 @@ synchronously or from a caller-owned thread, exactly as `reac-pw` calls it today
   patch: `libreac-transport.so`/`.a` is a wholly new build product beside `libreac.so`, new
   headers under `include/reac/transport/`, a new `.spec` subpackage, and a floor every downstream
   consumer must declare explicitly rather than inherit for free.
+- `libreac` 0.9.0 → **0.9.1**, `libreac-transport` abi 1 → **2** — the opaque handle above
+  changes every transport struct's layout; a consumer built against 0.9.0 must rebuild, and
+  the soname says so. `libreac.so` itself is unchanged.
+- `reac-pw` 0.5.11 → **0.5.12** — follows the handle (the topo tap and the seglock init call
+  sites, four pacer tests, two seglock tests); floor `libreac-transport >= 0.9.1`.
 - `reac-pw` 0.5.10 → **0.5.11** — no behaviour change, sources removed in favour of a link
   dependency; a middle-digit bump is not warranted because nothing observable from outside the
   binary differs (§6's before/after test counts are the evidence for that claim, not an
