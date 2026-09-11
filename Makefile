@@ -168,8 +168,39 @@ wire-tools: $(WIRE_TOOLS)
 $(WIRE_TOOLS): %: tools/%.c libreac.a
 	$(CC) $(CFLAGS) $(INC) $< libreac.a -lm -o $@
 
+# --- libreac-transport: sockets, pacer, RT threads, VLAN/topology, ring, segment lock ---
+# The pieces of reac-pw that never touch PipeWire
+# (docs/design/specs/2026-09-11-reac-transport-library.md). A second, PARALLEL object
+# family -- never folded into the OBJS glob above, or every transport file becomes part
+# of libreac's own soname and the whole point of a second library is lost.
+#
+# REACPW_INCLUDE points at a reac-pw checkout's src/ for the two headers that stay there
+# (reac_rate_cfg.h, reac_role_cfg.h) but are #include-d by a moved header for their pure
+# declarations only (spec §2/§5 names the seam). Unset by default: every transport object
+# that does not reach those two headers still builds; the two that do fail loudly at
+# compile time rather than silently skipping.
+REACPW_INCLUDE ?=
+TRANSPORT_SRC_DIR := transport/src
+TRANSPORT_OBJS := $(patsubst $(TRANSPORT_SRC_DIR)/%.c,transport/%.o,$(wildcard $(TRANSPORT_SRC_DIR)/*.c))
+
+# -D_GNU_SOURCE: these files read IFNAMSIZ, sockaddr_ll, ETH_P_ALL and friends from
+# net/if.h et al., which glibc gates behind _DEFAULT_SOURCE/_GNU_SOURCE -- absent under
+# plain -std=c11. reac-pw's own meson.build sets this project-wide for the same reason
+# (SPA's inline string.h needs it too); libreac's own OBJS never needed it before now.
+transport/%.o: $(TRANSPORT_SRC_DIR)/%.c
+	@mkdir -p transport
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -MMD -MP -Iinclude -I$(TRANSPORT_SRC_DIR) $(if $(REACPW_INCLUDE),-I$(REACPW_INCLUDE)) -c $< -o $@
+
+-include $(TRANSPORT_OBJS:.o=.d)
+
+libreac-transport.a: $(TRANSPORT_OBJS)
+	$(AR) rcs $@ $(TRANSPORT_OBJS)
+
+transport: libreac-transport.a
+
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity corpus_check $(WIRE_TOOLS)
-	rm -rf $(BUILD_DIR)
+	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a
+	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
-.PHONY: all test conformance corpus wire-tools clean
+.PHONY: all test conformance corpus wire-tools clean transport
