@@ -618,6 +618,13 @@ long reac_pacer_period_ns(int fps);
 /* Open the TX socket + size the frame ring (~250 ms deep). Does NOT start the
  * thread, but DOES resolve its priority (reac_rt.h reads config files, which the
  * RT thread must never do). Returns 0 / -1. */
+/* The PACE CODE a master announces in cfea[19] and a box follows: 0 = 48 kHz,
+ * 1 = 96 kHz, 2 = 44.1 kHz (measured 2026-09-11: one M-200 writes 0x00 at 48 k and
+ * 0x02 at 44.1 k; the M-5000 corpus writes 0x01 at 96 k). Pure: `fps` is the frame
+ * rate (3675 / 4000 / 8000). The pacer stamps it into the console cfg at open and at
+ * every re-establishment; exposed so a test can pin the mapping without a socket. */
+uint8_t reac_pace_code(int fps);
+
 int  reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg);
 
 /* Spawn the pacer thread; it locks memory, pins itself and enters the wire-clock
