@@ -174,7 +174,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * new build product beside the existing one deserves. */
 #define LIBREAC_VERSION_MAJOR 1
 #define LIBREAC_VERSION_MINOR 0
-#define LIBREAC_VERSION_PATCH 0
+#define LIBREAC_VERSION_PATCH 1
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
@@ -186,7 +186,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
  * number; packaging/make-tarball.sh refuses a tarball whose spec disagrees. */
-#define LIBREAC_ABI 1
+#define LIBREAC_ABI 2
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)
