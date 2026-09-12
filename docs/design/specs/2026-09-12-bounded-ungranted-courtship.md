@@ -77,3 +77,26 @@ grant opens that window in the same step, before the check runs.
   pacing to within 15 % of the target — the bounds are frame periods, so a wire whose rate
   moved cannot answer a wall-clock question, and a measurement that could not be taken is not
   a pass.
+
+
+## Rig result 2026-09-12 (M-200 master at 44.1 kHz, S-1608, reac-pw 1.0.1 on the same VLAN)
+
+The change does what §2 says and not what §1 hoped. Live beside the desk the slave cycles
+COLDCONNECT → BACKOFF → FLOOD_ANNOUNCE exactly as measured offline (duty 100 % → 37 %). But the
+box-reboot case is NOT solved, twice over:
+
+- Trial 1 — our 16-input slave GRANTED beside the enrolled S-1608; the box rebooted; mute for
+  180 s. The courtship never engaged: a granted slave streams, and its stream of the box's
+  geometry keeps the desk's one box session alive.
+- Trial 2 — our slave announcing 8 inputs, refused by the desk while its box was present and
+  backing off as designed; the box rebooted; within the box's silence the desk GRANTED our
+  courting slave, and the returning box was blocked as in trial 1. A second power-cycle changed
+  nothing.
+- Control, both times — our slave off the segment: the box enrolled 9–12 s later.
+
+So a desk grants whichever slave courts while its box is away, and any granted slave of that
+geometry then blocks the box. Bounding the courtship reduces wire load and is kept; it is not a
+fix. The product rule stands (reac-pw README, Known issues): a desk's boxes enrol first,
+reac-pw joins last, and reac-pw leaves the segment while a box reboots. A real fix needs the
+slave to see the box's absence and drop itself, or a recording mode that never courts at all
+(passive on a mirror) — both open. Evidence: reac-captures `courtship-trial-2026-09-12/`.
