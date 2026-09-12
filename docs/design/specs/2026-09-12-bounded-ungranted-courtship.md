@@ -61,5 +61,19 @@ grant opens that window in the same step, before the check runs.
   of steps at 3 675 fps: COLDCONNECT ends within the budget, the following silence is a full
   `REAC_FSM_BACKOFF_S` and longer than 7.148 s, and it ends in a fresh `FSM_ACT_FLOOD_BCAST`.
   Red on the unpatched FSM at `cold_left > cold_entered`.
-- `reac-pw` `tests/test_reac_courtship_backoff.c` — the real `reac_slave_open/start` over a veth
-  pair against a non-granting master, TX timestamps recorded off the wire.
+- `reac-pw` `tests/courtship-backs-off.sh` + `tests/courtship_probe.c` — the real
+  `reac_slave_open`/`reac_slave_start` on an AF_PACKET socket over a veth pair, against a
+  master that broadcasts a desk-shaped downstream at 3 675 fps with a `cfea` announce 1/s and
+  never grants. The slave's frames are timestamped at the FAR END, which is the only place
+  "we are off the wire" is a measurement rather than a self-report. Measured on the desk over
+  a 40 s run, master pacing 3 675.0 fps:
+
+  | | frames heard | first burst | longest silence | bursts |
+  |---|---|---|---|---|
+  | patched | 60 480 | **5.485 s** (1.486 flood + 4.000 budget) | **10.000 s** | 3 |
+  | unpatched | 139 773 | never ends | 1.459 s (the run's own tail) | 1 |
+
+  It skips (77) where the namespaces are unavailable, and where the master could not hold its
+  pacing to within 15 % of the target — the bounds are frame periods, so a wire whose rate
+  moved cannot answer a wall-clock question, and a measurement that could not be taken is not
+  a pass.
