@@ -109,8 +109,12 @@ make test
 %changelog
 * Sat Sep 12 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.1-1
 - An ungranted slave courtship is bounded: 4 s of cold-connect, then 10 s off the wire, then
-  again (spec 2026-09-12-bounded-ungranted-courtship.md). struct reac_fsm grows two fields, so
-  the soname moves to libreac.so.2.
+  again (spec 2026-09-12-bounded-ungranted-courtship.md); wire duty 100 % -> 37 %. This does
+  NOT let a stagebox re-enrol beside a present reac-pw slave: measured 2026-09-12 with an
+  M-200, the desk grants whichever slave courts while its box is away, and a granted slave of
+  the box's geometry keeps the desk's session alive. The recorder rule stands: a desk's boxes
+  enrol first, reac-pw last, and reac-pw leaves the segment while a box reboots.
+  struct reac_fsm grows two fields, so the soname moves to libreac.so.2.
 * Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.0-1
 - 1.0: the protocol library as proven on real Roland desks and boxes at 44.1, 48 and
   96 kHz. Same ABI as 0.9.1 (libreac.so.1).
