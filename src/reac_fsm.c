@@ -20,6 +20,13 @@ static inline int hb_period(const struct reac_fsm *fsm)
 	return fsm->heartbeat_period > 0 ? fsm->heartbeat_period : HEARTBEAT_PERIOD;
 }
 
+/* Frame periods in one wall-clock second: the heartbeat period IS fps (see the
+ * field's doc), so every wall-clock bound below scales with the wire rate. */
+static inline int frames_per_s(const struct reac_fsm *fsm)
+{
+	return hb_period(fsm);
+}
+
 static int is_master_frame(const struct reac_ctrl_parsed *rx)
 {
 	/* HEADAMP is master EVIDENCE (only a console emits preamp records) but it
@@ -61,6 +68,7 @@ static void arm_flood(struct reac_fsm *fsm)
 static void arm_coldconnect(struct reac_fsm *fsm)
 {
 	fsm->join_retry_countdown = 0;
+	fsm->coldconnect_frames = 0;   /* fresh courtship: fresh ungranted budget */
 }
 
 /* One FLOOD_ANNOUNCE tick: emit ONE broadcast FILLER frame (no cold-connect
@@ -81,6 +89,7 @@ static struct reac_fsm_out flood_tick(struct reac_fsm *fsm)
 static struct reac_fsm_out coldconnect_tick(struct reac_fsm *fsm)
 {
 	fsm->counter++;
+	fsm->coldconnect_frames++;
 	if (--fsm->join_retry_countdown <= 0) {
 		fsm->emit_join = 1;
 		fsm->join_retry_countdown = REAC_FSM_JOIN_RETRY_PERIOD;
@@ -156,8 +165,28 @@ struct reac_fsm_out reac_fsm_step(struct reac_fsm *fsm, enum reac_fsm_event ev,
 			fsm->link_check = REAC_FSM_LINKCHECK_RELOAD;
 			return out(fsm, FSM_ACT_SILENCE);
 		}
+		/* NEVER GRANTED, BUDGET SPENT -> off the wire. A master keeps exactly one
+		 * box session and its liveness is fed by our upstream stream, so courting
+		 * forever locks a booting box out (see reac_fsm.h). Only when no grant has
+		 * been seen at all: a granted courtship is inside the grant_ack window. */
+		if (fsm->grant_ack == 0 &&
+		    fsm->coldconnect_frames >= REAC_FSM_COLDCONNECT_BUDGET_S * frames_per_s(fsm)) {
+			fsm->state = FSM_BACKOFF;
+			fsm->backoff = REAC_FSM_BACKOFF_S * frames_per_s(fsm);
+			return out(fsm, FSM_ACT_STOP);
+		}
 		/* tick or non-grant RX: unicast cold-connect on the grid, audio between */
 		return coldconnect_tick(fsm);
+
+	case FSM_BACKOFF:
+		/* The silent window. Nothing is emitted and the counter does not advance -
+		 * we are not on the wire - so the master's session hold expires and it
+		 * starts courting whatever real box is booting. Then try again. */
+		if (--fsm->backoff <= 0) {
+			arm_flood(fsm);
+			return flood_tick(fsm);
+		}
+		return out(fsm, FSM_ACT_STOP);
 
 	case FSM_TX_MUTE:
 		/* Frame-arrival IS the box's clock (it recovers word clock from the
