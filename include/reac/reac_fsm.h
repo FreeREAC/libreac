@@ -68,6 +68,23 @@
  * all 8 escalation phases (incl. 0016 + 001a) re-emit regardless of alignment. */
 #define REAC_FSM_GRANT_ACK_FRAMES  7200   /* 9 x JOIN_RETRY_PERIOD */
 
+/* THE UNGRANTED COURTSHIP IS BOUNDED (2026-09-11, m200-master-441k capture).
+ * FSM_COLDCONNECT used to retry forever while the PHY stayed up, streaming
+ * unicast FILLER to the master at wire rate between the join retries. Measured
+ * against a live M-200 at 44.1 k: an ungranted slave doing that for 93 s held
+ * the desk's ONE box session open - the desk's cfea kept announcing width 0x10 /
+ * enrolled 0x0001 for the whole 80.7 s the real S-1608 was away, and it emitted
+ * ZERO scene transfers, so the rebooting box never enrolled. With the slave
+ * absent the same desk declared the session over 7.148 s after the box's last
+ * frame (cfea -> 0x08 / 0x0000) and scene-transferred every ~2.7 s until the box
+ * joined. So an ungranted slave must GO SILENT for longer than that hold: court
+ * for COLDCONNECT_BUDGET_S, then emit NOTHING for BACKOFF_S, then re-flood.
+ * Seconds, not frames, because both bounds are wall-clock facts about the
+ * master; the step count is derived from the rate (heartbeat_period = fps).
+ * A real box is granted ~1.7 s after its flood stops, so 4 s is ~2x generous. */
+#define REAC_FSM_COLDCONNECT_BUDGET_S 4
+#define REAC_FSM_BACKOFF_S           10
+
 enum reac_fsm_state {
 	FSM_PHY_DOWN = 0,
 	FSM_FLOOD_ANNOUNCE,   /* hunting: BOUNDED broadcast FILLER flood, learn master */
@@ -75,6 +92,7 @@ enum reac_fsm_state {
 	FSM_TX_MUTE,          /* grant accepted, settle dwell */
 	FSM_ESTABLISHED,      /* linked: unicast audio + heartbeat */
 	FSM_DROP,             /* link lost / torn down */
+	FSM_BACKOFF,          /* courted, never granted: off the wire so a real box can join */
 };
 
 enum reac_fsm_action {
@@ -115,6 +133,8 @@ struct reac_fsm {
 	int      join_retry_countdown;  /* steps until the next cold-connect on the grid */
 	int      grant_ack;             /* >0: post-grant ACK window (frames left) — keep
 	                                 * cold-connecting so 0016/001a re-emit, then mute */
+	int      coldconnect_frames;    /* frames spent courting since the flood ended */
+	int      backoff;               /* >0: frames left off the wire before re-flooding */
 };
 
 struct reac_fsm_out {
