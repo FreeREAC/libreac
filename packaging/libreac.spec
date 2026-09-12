@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.0.0
+Version:        1.0.1
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -9,7 +9,7 @@ Version:        1.0.0
 # LIBREAC_ABI in include/reac/reac.h -- packaging/make-tarball.sh refuses to
 # build a tarball when this copy and the header disagree, which is the only
 # moment the copy can be caught.
-%global abi 1
+%global abi 2
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -107,6 +107,10 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Sat Sep 12 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.1-1
+- An ungranted slave courtship is bounded: 4 s of cold-connect, then 10 s off the wire, then
+  again (spec 2026-09-12-bounded-ungranted-courtship.md). struct reac_fsm grows two fields, so
+  the soname moves to libreac.so.2.
 * Fri Sep 11 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.0-1
 - 1.0: the protocol library as proven on real Roland desks and boxes at 44.1, 48 and
   96 kHz. Same ABI as 0.9.1 (libreac.so.1).
