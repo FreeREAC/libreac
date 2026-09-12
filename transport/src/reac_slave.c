@@ -841,7 +841,8 @@ static void *slave_loop(void *arg)
 	uint8_t rxbuf[2048];
 
 	static const char *const st_name[] = {
-		"PHY_DOWN", "FLOOD_ANNOUNCE", "COLDCONNECT", "TX_MUTE", "ESTABLISHED", "DROP"
+		"PHY_DOWN", "FLOOD_ANNOUNCE", "COLDCONNECT", "TX_MUTE", "ESTABLISHED", "DROP",
+		"BACKOFF"
 	};
 	enum reac_fsm_state prev_state = s->fsm.state;
 	fprintf(stderr, "reac_slave: %sSTATE %s\n", s->tag, st_name[prev_state]);
