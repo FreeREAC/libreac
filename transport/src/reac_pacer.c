@@ -1728,10 +1728,10 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 
 	/* A zero out_channels means the caller left the console cfg unset -> the
 	 * S-1608 default (reac_master_init(NULL)). */
-	/* cfea[19] is the CONSOLE FAMILY byte and, on this protocol, the RATE GATE: 0 =
-	 * V-Mixer (capped at 44.1/48 kHz), 1 = OHRCA (the only family that reaches 96 kHz).
-	 * The box follows it. We derive it from the pace (96 kHz -> OHRCA, else V-Mixer) so a
-	 * rate change flips the gate and the box re-paces. Tool+rig verified 2026-08-26. */
+	/* cfea[19] is the PACE CODE (reac_pace_code, <reac/reac.h>): 0 = 48 kHz,
+	 * 1 = 96 kHz, 2 = 44.1 kHz. The box follows it, so a rate change re-stamps
+	 * it here and the box re-paces. Tool+rig verified at 48/96 kHz 2026-08-26;
+	 * 44.1 kHz measured 2026-09-11. */
 	struct reac_console_cfg ccfg_buf =
 		cfg->console.out_channels ? cfg->console : REAC_CONSOLE_CFG_IDLE;
 	ccfg_buf.console_field = reac_pace_code(cfg->fps);

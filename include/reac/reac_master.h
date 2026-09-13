@@ -186,16 +186,13 @@ struct reac_console_cfg {
 	                         * console byte, the chanmap section marker and the
 	                         * scene body's `revision` — so a caller setting it by
 	                         * hand sets all four. The pacer derives it from the
-	                         * frame rate. The NAME is historical: the byte read as
-	                         * a console family until 2026-09-11, when one M-200 was
-	                         * measured writing 0x00 while mastering at 48 kHz and
-	                         * 0x02 at 44.1 kHz.                               */
+	                         * frame rate. The field NAME is historical.        */
 };
 
 /* The IDLE console: what the master announces about itself before any box has
  * declared itself on the wire. out_channels is the cfea width byte's placeholder
  * (0x08, the value every captured desk announces while unlinked); console_field 0
- * is the V-Mixer identity. reac_master_init(cfg == NULL) uses this.
+ * is the 48 kHz pace code. reac_master_init(cfg == NULL) uses this.
  *
  * It declares NO BOX. There is deliberately no in_channels here any more: a box
  * width in a compile-time constant is a box we have never seen, and it used to
@@ -204,19 +201,21 @@ struct reac_console_cfg {
 #define REAC_CONSOLE_CFG_IDLE \
 	((struct reac_console_cfg){ .out_channels = 8, .console_field = 0 })
 
-/* A MIXER PROFILE — the desk generation reac-pw speaks as. The grant burst is
- * box-defined (a box locks to any valid grant), so the only per-mixer identity
- * is the console-model byte (0 = V-Mixer M-200/M-300, 1 = OHRCA M-5000), which
- * drives BOTH the cfea [19] and the ENROLL console byte (the same 0/1
- * indicator, measured across matrix-m{200,300,5000}-*). The source MAC is NOT
- * a profile field: the master emits from THIS NIC's own address (reac_mac.h;
- * the conformance suite pins identity == the L2 source). Probe specials +
- * cadence are currently the V-Mixer (M-200) set for every profile — a box
- * still locks, but that is the remaining per-mixer fidelity item. */
+/* A MIXER PROFILE — which desk reac-pw impersonates, by name and by the
+ * console_field value that name's REAC menu would show at its default rate.
+ * The grant burst is box-defined (a box locks to any valid grant), so name,
+ * display string and this default are the only per-profile data; the pacer
+ * overwrites console_field with reac_pace_code(--rate) on every open and
+ * re-establishment (transport/reac_pacer.c), so this field never reaches the
+ * wire unchanged. The source MAC is NOT a profile field: the master emits
+ * from THIS NIC's own address (reac_mac.h; the conformance suite pins
+ * identity == the L2 source). Probe specials + cadence are currently the
+ * M-200 set for every profile — a box still locks, but that is the
+ * remaining per-mixer fidelity item. */
 struct reac_mixer_profile {
 	const char *name;        /* CLI token: "m200" | "m300" | "m5000"          */
 	const char *display;     /* "M-200" ...                                   */
-	uint8_t     console_field; /* cfea [19] + ENROLL console byte: 0=V-Mixer,1=OHRCA */
+	uint8_t     console_field; /* this profile's default pace code; see above */
 };
 
 /* Look up a profile by CLI token; NULL if unknown. */
@@ -229,76 +228,42 @@ const struct reac_mixer_profile *reac_mixer_profile_at(int i);
  * state diagram, doubled frequency" — parameterizing the existing 48k path by
  * mixer profile rather than re-engineering the FSM).
  *
- * THE FAMILY IS DETACHED FROM THE PACE (operator, 2026-08-21). A Roland desk —
- * V-Mixer or OHRCA alike — offers 44.1, 48 and 96 kHz in its REAC menu and
- * drives the segment at whichever the operator chose; the identity byte says
- * which desk we impersonate, nothing about the rate. So the pace is a
- * CONFIGURED SETTING THAT MUST BE OBEYED, for every profile, and only those
- * three values are legal — anything else needs re-pacing between the rig clock
- * and the wire, which reac-pw cannot do.
- *
- * This comment used to claim the opposite: that a V-Mixer identity pinned the
- * segment to 48 kHz and OHRCA was natively 96. reac_mixer_resolve_rate stopped
- * believing that some time ago (it ignores `mixer` entirely) and the comment was
- * never corrected, so the header and the code have been contradicting each other
- * — the header describing a rule the function does not implement.
+ * THE RATE IS INDEPENDENT OF WHICH DESK WE IMPERSONATE (operator, 2026-08-21).
+ * A Roland desk offers 44.1, 48 and 96 kHz in its REAC menu regardless of
+ * model, and drives the segment at whichever the operator chose. So the pace
+ * is a CONFIGURED SETTING THAT MUST BE OBEYED, for every profile, and only
+ * those three values are legal — anything else needs re-pacing between the
+ * rig clock and the wire, which reac-pw cannot do. This function ignores
+ * `mixer` entirely, for exactly that reason.
  *
  * A DIVERGENCE IS OPEN AGAINST THIS LAW, measured 2026-08-21 and reproducible:
  * with `--rate 96000` our TX paced 8001 fps under both profiles, and the S-0808
- * returned 8006 fps (96 k) as an OHRCA master but 4002 fps (48 k) as a V-Mixer
- * one — the box halved its return, and the resulting two-pace mismatch is
- * audible as granulated, saturated audio. Our side obeys the setting; the box
- * does not follow it. Unexplained, and NOT a licence to re-derive the old
- * identity-selects-rate rule: it is filed as a divergence, not a design.
+ * returned 8006 fps (96 kHz) with console_field 0x01 but 4002 fps (48 kHz)
+ * with console_field 0x00 — the box halved its return, and the resulting
+ * two-pace mismatch is audible as granulated, saturated audio. Our side obeys
+ * the setting; the box does not follow it. Unexplained, and NOT a licence to
+ * re-derive a rule where --mixer or console_field alone selects the rate: it
+ * is filed as a divergence, not a design.
  *
  * `requested` is the --rate value (0 = unset/auto). Returns the rate reac-pw
  * should actually emit at. If `clamped` is non-NULL, sets *clamped to 1 when
  * `requested` was non-zero and got overridden (the caller should warn), else 0. */
 int reac_mixer_resolve_rate(const struct reac_mixer_profile *mixer, int requested, int *clamped);
 
-/* The cfea[19] "console" byte is the segment's RATE CLASS, not the desk's name.
+/* The cfea[19] "console" byte is the segment's PACE CODE, not the desk's
+ * name — see reac_pace_code() in <reac/reac.h> for the derivation and the
+ * wire evidence (0x00 at 48 kHz, 0x01 at 96 kHz, 0x02 at 44.1 kHz).
+ * Emitting m5000 vs m200 at the same --rate changes exactly this one byte on
+ * the wire, plus its checksum; probe, sub01, sub02, chanmap, ENROLL and the
+ * grant burst stay byte-identical. And the box's pace follows the byte, not
+ * our TX cadence: 0x01 -> the box returns 8004 fps (96 kHz), 0x00 -> 4002 fps
+ * (48 kHz), regardless of what we actually send.
  *
- * MEASURED 2026-08-21, and it is the whole story: emitting m5000 vs m200 at the
- * same --rate 96000 changes exactly ONE byte on the wire — cfea block[19], 0x01
- * vs 0x00, plus its checksum. Probe, sub01, sub02, chanmap, ENROLL and the grant
- * burst are byte-identical. And the box's pace follows that byte: 0x01 -> it
- * returns 8004 fps (96 kHz), 0x00 -> 4002 fps (48 kHz), with our own TX pacing
- * 8001 fps in both cases.
- *
- * MIXER FAMILY AND CLOCK PACE MUST BE DETACHED (operator, 2026-08-21). Neither
- * may determine the other. This byte carries the FAMILY, exactly as --mixer names
- * it, and --rate sets the pace; both are obeyed as configured and neither is
- * inferred from the other.
- *
- * Deriving this byte from the rate was tried and is WRONG for the same reason the
- * old rule was: it merely reversed the coupling, so asking for 96 kHz silently
- * announced us as an OHRCA desk whatever --mixer said. Detached means detached.
- *
- * But the byte's MEANING is not settled, and this comment does not pretend it is.
- * Across the capture corpus it is CONSTANT PER DESK MAC (M-200i 0x00, M-300 0x00,
- * M-5000 0x01), and every desk in the corpus only ever ran ONE rate — the V-Mixers
- * at 48 kHz, the M-5000 at 96 — so "rate class" and "family" predict the corpus
- * identically and it cannot separate them.
- *
- * A CORRECTION WORTH KEEPING: the corpus first appeared to show M-200i frames at
- * 8000 fps carrying 0x00, which would have refuted the rate-class reading outright.
- * It is the MIRROR-TAP ARTIFACT (see the correction in reac-captures and libreac
- * reac.h:35): those captures were taken through a port mirroring both directions,
- * and counting frames without collapsing same-counter pairs doubles the apparent
- * rate. Measured properly, 50% of the desk frames are duplicates and the real rate
- * is 4000 fps = 48 kHz. ALWAYS dedupe by the counter at frame[14:16] before
- * calling a capture's rate.
- *
- * TO SETTLE IT: an unambiguous capture of a REAL desk at a rate its family does
- * not usually run — an M-300 (c9:d8:5b, never impersonated) at 96 kHz, or an
- * M-5000 (ca:15:4c) at 48 kHz. The corpus has neither. Until then this is a
- * rig-determined behaviour that satisfies the law, not a decoded field. Two
- * alternatives ARE excluded: the box's pace does not follow our source MAC (a
- * Roland-OUI --src-mac with 0x00 still returned 48 kHz), and it does not follow
- * our TX cadence alone (we paced 8007 fps and it answered 4004).
- *
- * What the box does with 44.1 vs 48 (both class 0) is not established here —
- * no capture separates them, and this returns 0 for both rather than guess. */
+ * --mixer selects which desk's OTHER identity reac-pw impersonates (its name,
+ * its MAC pattern); it never sets this byte directly. The pacer stamps
+ * reac_pace_code(fps) into cfg.console_field on every open and
+ * re-establishment, driven by --rate alone (reac_pacer_open,
+ * transport/reac_pacer.c). */
 
 struct reac_master {
 	enum reac_master_state state;
@@ -462,8 +427,8 @@ struct reac_master {
 	 * slave-disconnect trigger). */
 	uint8_t  announce_blk[34];
 
-	/* Per-instance ENROLL (cdea 01 03 000d), built from the mixer profile: the
-	 * console-model byte [8] = cfg.console_field (0 = V-Mixer, 1 = OHRCA). */
+	/* Per-instance ENROLL (cdea 01 03 000d): the pace-code byte [8] =
+	 * cfg.console_field (0 = 48 kHz, 1 = 96 kHz, 2 = 44.1 kHz). */
 	uint8_t  enroll_blk[34];
 };
 

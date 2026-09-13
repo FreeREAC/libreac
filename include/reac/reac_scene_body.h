@@ -16,11 +16,12 @@
  * exactly that work.
  *
  * ONE BYTE IS NOT THE M-200i's: `revision` (u2le at +0x14) is 0x0001 here, not the
- * 0x0000 this body was recovered with. reac.ksy: revision is 0 on a V-Mixer desk and
- * 1 on an M-5000, and the box CACHES it and compares before it will re-read the
- * scene's three sub-objects — a body whose revision differs is treated as changed
- * with no further comparison (evidenced in the firmware image and across the corpus).
- * We announce OHRCA in cfea[19]; sending a V-Mixer revision underneath that is a
+ * 0x0000 this body was recovered with. reac.ksy: `revision` carries the pace code,
+ * the same value as cfea[19] — 0 at 48 kHz, 1 at 96 kHz, 2 at 44.1 kHz — and the box
+ * CACHES it and compares before it will re-read the scene's three sub-objects — a
+ * body whose revision differs is treated as changed with no further comparison
+ * (evidenced in the firmware image and across the corpus). We announce pace code 1
+ * (96 kHz) in cfea[19]; sending a scene revision of 0 underneath that is a
  * contradiction the box can see. The other two bytes that differ from an M-5000's
  * body (+0x366..367 and +0x22c6..7) are deliberately NOT copied: the ksy records
  * them as M-5000-only UNINITIALISED padding that changes between that desk's own
