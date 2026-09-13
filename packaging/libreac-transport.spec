@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.0.1
+Version:        1.0.2
 %global abi 3
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -14,9 +14,9 @@ Source0:        libreac-%{version}.tar.gz
 
 BuildRequires:  gcc
 BuildRequires:  make
-BuildRequires:  pkgconfig(libreac) >= 1.0.1
+BuildRequires:  pkgconfig(libreac) >= 1.0.2
 
-Requires:       libreac%{?_isa} >= 1.0.1
+Requires:       libreac%{?_isa} >= 1.0.2
 
 %description
 libreac-transport is the REAC transport layer: AF_PACKET frame RX/TX over a lock-free
@@ -29,7 +29,7 @@ itself, that belongs to the process that links it.
 %package devel
 Summary:        Development files for libreac-transport
 Requires:       %{name}%{?_isa} = %{version}-%{release}
-Requires:       pkgconfig(libreac) >= 1.0.1
+Requires:       pkgconfig(libreac) >= 1.0.2
 
 %description devel
 Headers and pkg-config for building against libreac-transport.
@@ -70,7 +70,7 @@ includedir=\${prefix}/include
 Name: libreac-transport
 Description: The REAC transport layer (sockets, pacer, RT threads, VLAN scan)
 Version: %{version}
-Requires: libreac >= 1.0.1
+Requires: libreac >= 1.0.2
 Libs: -L\${libdir} -lreac-transport -lpthread -lm
 Cflags: -I\${includedir}
 PC
@@ -87,6 +87,8 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Sat Sep 13 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.2-1
+- Follows libreac 1.0.2 (the pace code is shared with the core). Same ABI.
 * Sat Sep 12 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.1-1
 - Follows libreac 1.0.1: the slave state carries the bounded courtship (struct reac_slave
   embeds struct reac_fsm), so the soname moves to libreac-transport.so.3.
