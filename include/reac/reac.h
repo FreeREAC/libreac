@@ -112,14 +112,11 @@ const struct reac_mode *reac_mode_for(int sample_rate);
  * `revision` (REAC_SCENE_REVISION_OFF) — and they are one value, not three
  * settings: the announce proposes the class and the scene records it, so a master
  * whose scene disagrees with its announce declares one rate and records another.
- * Measured 2026-09-11 on one M-200 (c9:cc:03): 0x00 while mastering at 48 kHz,
- * 0x02 at 44.1 kHz; the M-5000 corpus writes 0x01 at 96 kHz.
- *
- * Until that measurement the byte was read as the console GENERATION (V-Mixer 0 /
- * OHRCA 1) — a coincidence of a corpus in which every V-Mixer session ran 48 kHz
- * and every OHRCA session 96 kHz. A desk does not change generation with its
- * clock. A box obeys the BYTE, not the cadence: an S-4000S driven at 3675 frames/s
- * with this byte at 0x00 returned 4000 frames/s.
+ * One M-200 (c9:cc:03) writes 0x00 while mastering at 48 kHz and 0x02 at
+ * 44.1 kHz on the same console; the M-5000 corpus writes 0x01 at 96 kHz. The
+ * byte tracks the pace chosen, not the console model. A box obeys the BYTE,
+ * not the cadence: an S-4000S driven at 3675 frames/s with this byte at 0x00
+ * returned 4000 frames/s.
  *
  * It lives in the core library, beside the rate helpers, because both of its users
  * need it: the pacer stamps it into the console cfg at open and at every

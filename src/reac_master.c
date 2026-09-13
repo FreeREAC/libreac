@@ -142,10 +142,10 @@ static void set_enroll_width(uint8_t blk[34], int in_ch)
 	stamp_block_cksum(blk);
 }
 
-/* The mixer profiles reac-pw can impersonate. console_field is the only
- * per-mixer identity (the grants are box-defined, and the source MAC is this
- * NIC's own — see reac_mac.h). M-200/M-300 are V-Mixer (console 0); M-5000 is
- * OHRCA (console 1). */
+/* The mixer profiles reac-pw can impersonate. console_field here is each
+ * profile's default pace code — the pacer overwrites it from --rate before
+ * anything reaches the wire (see reac_master.h). M-200 and M-300 default to
+ * 0 (48 kHz); M-5000 defaults to 1 (96 kHz). */
 static const struct reac_mixer_profile MIXER_PROFILES[] = {
 	{ "m200",  "M-200",  0 },
 	{ "m300",  "M-300",  0 },
@@ -178,18 +178,13 @@ int reac_mixer_resolve_rate(const struct reac_mixer_profile *mixer, int requeste
 	 * cadence it is given. reac-pw IS the master, so `--rate` is our equivalent of
 	 * that menu, and there is nothing to clamp it against.
 	 *
-	 * This function used to force a V-Mixer-identified master to 48 kHz and report
-	 * `--rate 96000` as clamped, on the theory that the console identity byte
-	 * selects the rate (00 = V-Mixer => 48k only, 01 = OHRCA => 96k). That was an
-	 * inference, never demonstrated, and it is wrong: the identity byte says which
-	 * desk we are impersonating, not which rate the operator chose. Likewise the
-	 * old "OHRCA is natively 96 kHz" default — an M-5000 runs at whatever its REAC
-	 * menu is set to, so a profile-dependent default was equally unfounded.
+	 * Which desk we impersonate does not gate which rate is legal: an M-5000
+	 * runs at whatever its REAC menu is set to, same as an M-200 or an M-300.
 	 *
 	 * So: honour the request, and default to 48 kHz (the working standard for live
 	 * work) for every profile. Kept as a function rather than deleted so that a
 	 * real, demonstrated rule would have one obvious home. See issue #73. */
-	(void)mixer;   /* LAW: the mixer FAMILY is detached from the clock pace. */
+	(void)mixer;   /* LAW: which desk we impersonate is detached from the clock pace. */
 	if (clamped)
 		*clamped = 0;
 	if (!requested)
@@ -292,8 +287,8 @@ static void gen_cfea(uint8_t out[34], const uint8_t src[6],
  * capture too SHORT to hold the whole rotation; the live M-200 shows the true 49.
  * The master advertises the FABRIC, never the console width: cfg is unused.
  *
- * Slot encoding: the 0xfe marker -> (fe <family> 00), family 0 for V-Mixer and 1
- * for OHRCA (see gen_chanmap); a channel ch -> (ch, val, 00) with
+ * Slot encoding: the 0xfe marker -> (fe <pace_code> 00) (see gen_chanmap);
+ * a channel ch -> (ch, val, 00) with
  * val 0x28 for ch <= 0x27 and 0x38 for the high bank 0x28..0x2f. apply_block
  * re-checksums at emit time, so only the slot bytes matter here; stamp_block_cksum
  * keeps the stored template self-consistent too. This generator reproduces the
@@ -334,13 +329,13 @@ static int chanmap_start(int f)
  * 3 133 marker slots while mastering at 48 kHz and `fe 02 00` in 18 while mastering
  * at 44.1 kHz; an M-5000 at 96 kHz writes `fe 01 00`, and so does an S-1608 in
  * master mode pacing 96 kHz — which is not a console at all, so the byte cannot be
- * a console family.
+ * a console identifier.
  *
- * It was read as the family (V-Mixer 0 / OHRCA 1) while every V-Mixer capture ran
- * 48 kHz and every OHRCA one 96 kHz, and stamped `console_field ? 1 : 0`. That
- * squash put the 96 kHz marker on a 44.1 kHz map. Codes 0 and 1 are unchanged, so
- * the captured V-Mixer and OHRCA windows still pin byte for byte
- * (tests/test_reac_s1608.c). §4's recognition path (FUN_0c003548) reads this map. */
+ * THE OLD CODE SQUASHED THIS BYTE: `console_field ? 1 : 0` turned the 44.1 kHz
+ * code (2) into the 96 kHz one, putting a 96 kHz marker on a 44.1 kHz map.
+ * Codes 0 and 1 are unchanged by the squash, so the pre-existing golden
+ * windows still pin byte for byte (tests/test_reac_s1608.c). §4's recognition
+ * path (FUN_0c003548) reads this map. */
 static int gen_chanmap(uint8_t frames[][34], const struct reac_console_cfg *cfg)
 {
 	const uint8_t marker_family = pace_code(cfg);
