@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.0.1
+Version:        1.0.2
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,10 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Sat Sep 13 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.2-1
+- The pace code reaches all four rate carriers a desk writes (cfea[19], the ENROLL console
+  byte, the chanmap section marker, the scene revision). A 16-input box is enrolled with the
+  8-input group map, as a Roland desk does. Same ABI.
 * Sat Sep 12 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.1-1
 - An ungranted slave courtship is bounded: 4 s of cold-connect, then 10 s off the wire, then
   again (spec 2026-09-12-bounded-ungranted-courtship.md); wire duty 100 % -> 37 %. This does
