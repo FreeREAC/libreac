@@ -62,7 +62,24 @@ enum reac_role_intent {
 	REAC_ROLE_INTENT_AUTO = 0,   /* the default: the wire decides (reac_hunt.h) */
 	REAC_ROLE_INTENT_MASTER,
 	REAC_ROLE_INTENT_SLAVE,
+	/* tap — SERVE WHAT IS HEARD AND TRANSMIT NOTHING. Not an end of the pairing at
+	 * all: no announce, no join, no grant, no seglock, no TX socket. It is the only
+	 * intent that has no wire role even after the wire has answered, which is why it
+	 * cannot be spelled as a value of `enum reac_role` above. See
+	 * <reac/transport/reac_tap.h>, and openmixer's master-arbitration spec, eighth
+	 * amendment (2026-09-13): beside a real desk, a courting slave of ours kept that
+	 * desk's own box from enrolling for 180 s and a granted one blocked it outright.
+	 * EXPLICIT ONLY — `auto` never resolves to it. */
+	REAC_ROLE_INTENT_TAP,
 };
+
+/* Does this intent put ANYTHING on the wire? A caller that opens a socket, claims a
+ * segment lock or starts an engine asks this first; `tap` is the one answer that is 0,
+ * and it is 0 whatever the wire turns out to be carrying. */
+static inline int reac_role_intent_transmits(enum reac_role_intent i)
+{
+	return i != REAC_ROLE_INTENT_TAP;
+}
 
 /* Parse a REAC_ROLE value. Returns 0 + sets *out on success, -1 on an unknown value
  * (caller reports it). NULL/"" is unknown, never `auto`: an absent key is resolved by
@@ -75,6 +92,7 @@ static inline int reac_role_intent_parse(const char *s, enum reac_role_intent *o
 	if (!strcmp(s, "auto"))   { *out = REAC_ROLE_INTENT_AUTO;   return 0; }
 	if (!strcmp(s, "master")) { *out = REAC_ROLE_INTENT_MASTER; return 0; }
 	if (!strcmp(s, "slave"))  { *out = REAC_ROLE_INTENT_SLAVE;  return 0; }
+	if (!strcmp(s, "tap"))    { *out = REAC_ROLE_INTENT_TAP;    return 0; }
 	return -1;
 }
 
@@ -83,6 +101,7 @@ static inline const char *reac_role_intent_name(enum reac_role_intent i)
 	switch (i) {
 	case REAC_ROLE_INTENT_MASTER: return "master";
 	case REAC_ROLE_INTENT_SLAVE:  return "slave";
+	case REAC_ROLE_INTENT_TAP:    return "tap";
 	case REAC_ROLE_INTENT_AUTO:
 	default:                      return "auto";
 	}
@@ -90,7 +109,12 @@ static inline const char *reac_role_intent_name(enum reac_role_intent i)
 
 /* The wire role an intent LAUNCHES in before the wire has answered. `auto` launches as
  * master only because a role field must hold one of two values; nothing is transmitted
- * on it — the hunt gates the actual open (reac_hunt.h). */
+ * on it — the hunt gates the actual open (reac_hunt.h).
+ *
+ * `tap` HAS NO ANSWER HERE and the caller must not need one: it is gated by
+ * reac_role_intent_transmits before any engine is chosen, and it reads master here for
+ * the same reason `auto` does — the field holds one of two values — while nothing is
+ * ever transmitted on it. */
 static inline enum reac_role reac_role_from_intent(enum reac_role_intent i)
 {
 	return i == REAC_ROLE_INTENT_SLAVE ? REAC_ROLE_SLAVE : REAC_ROLE_MASTER;
