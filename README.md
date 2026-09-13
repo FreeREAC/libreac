@@ -28,10 +28,7 @@ captures carry after the end marker — not a protocol field, never emitted.
 32-byte control block, its two nested checksums and the box-model matrix
 (`reac_ctrl_build_*`, `reac_master_stamp`), head-amp records (`reac_headamp_*`,
 `reac_ports_parse`), box identity, and the master/slave establishment, hunt and arbitration
-state machines (`<reac/reac_link.h>`, `reac_hunt`, `reac_master_fsm`, `reac_grant`). See
-[`docs/REAC-CONTROL-PLANE.md`](docs/REAC-CONTROL-PLANE.md) for the pairing sequence as measured
-on real boxes, and [`docs/layering.md`](docs/layering.md) for what belongs here and what does
-not.
+state machines (`<reac/reac_link.h>`, `reac_hunt`, `reac_master_fsm`, `reac_grant`).
 
 libreac is IO-free, allocation-free and clock-free: no socket, no thread, no `SCHED_FIFO`. That
 is `libreac-transport`'s job.
@@ -50,8 +47,7 @@ future backend other than userspace AF_PACKET could implement the same API; it h
 capability itself, since a library cannot — the binding process keeps `CAP_NET_RAW` /
 `CAP_NET_ADMIN` and this library runs inside it. See
 [`docs/design/specs/2026-09-11-reac-transport-library.md`](docs/design/specs/2026-09-11-reac-transport-library.md)
-for what moved here from where, and what is still open (two headers still vendored from their
-prior home). Since 0.9.1 every transport object reaches the OS through one opaque
+for the design behind the split. Since 0.9.1 every transport object reaches the OS through one opaque
 `struct reac_handle` (`<reac/transport/reac_handle.h>`); no installed header names a socket.
 
 ## Who links these
