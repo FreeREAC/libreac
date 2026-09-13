@@ -29,6 +29,17 @@ struct pcap_source {
 	                          * reader kept only caplen, so a caller could not
 	                          * tell the two apart. Compare this against the
 	                          * return value: greater means truncated.        */
+	int last_vlan_tagged;     /* 1 if the record pcap_source_next just returned
+	                          * carried an 802.1Q tag (already stripped from
+	                          * buf — see pcap_source_next), 0 if it was plain
+	                          * Ethernet. A mirror port on a trunk hands every
+	                          * REAC frame back tagged; without stripping it
+	                          * here, reac_frame_is_reac and every fixed offset
+	                          * downstream (14 = payload, 16 = ctrl type word)
+	                          * see 0x8100 where they expect 0x8819 and reject
+	                          * every frame, silently.                        */
+	uint16_t last_vlan_id;    /* VID of that tag (TCI & 0x0fff), valid only
+	                          * when last_vlan_tagged is 1.                   */
 };
 
 /* Open a pcap file. Returns 0 on success, -1 on error. */

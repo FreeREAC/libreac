@@ -25,6 +25,8 @@ struct talker {
 	unsigned long kind[REAC_CTRL_UNKNOWN_CTRL + 1];
 	unsigned lens[16]; unsigned long lenc[16]; int nlen;
 	uint64_t first_us, last_us;
+	unsigned long vlan_frames;   /* frames from this talker that arrived tagged */
+	uint16_t vlan_id;            /* its VID (0 if never seen tagged)           */
 };
 static struct talker t[NT];
 static int nt;
@@ -67,6 +69,7 @@ int main(int argc, char **argv)
 		if (!k->frames) k->first_us = ts;
 		k->last_us = ts;
 		k->frames++;
+		if (ps.last_vlan_tagged) { k->vlan_frames++; k->vlan_id = ps.last_vlan_id; }
 		addlen(k, ps.last_orig_len);
 		if ((size_t)n >= 18) {
 			if (buf[16] == 0xcd && buf[17] == 0xea) k->marker[0]++;
@@ -82,11 +85,14 @@ int main(int argc, char **argv)
 	printf("records=%lu reac=%lu talkers=%d span=%.3fs\n", records, reac, nt,
 	       nt ? 0.0 : 0.0);
 	for (int i = 0; i < nt; i++) {
+		char vid[16] = "";
+		if (t[i].vlan_frames) snprintf(vid, sizeof vid, " vid=%u", t[i].vlan_id);
 		printf("src=%02x:%02x:%02x:%02x:%02x:%02x frames=%lu t=[%.3f..%.3f] "
-		       "cdea=%lu cfea=%lu filler=%lu other=%lu\n  origlens:",
+		       "cdea=%lu cfea=%lu filler=%lu other=%lu vlan=%lu%s\n  origlens:",
 		       t[i].mac[0], t[i].mac[1], t[i].mac[2], t[i].mac[3], t[i].mac[4], t[i].mac[5],
 		       t[i].frames, (double)(t[i].first_us - t0)/1e6, (double)(t[i].last_us - t0)/1e6,
-		       t[i].marker[0], t[i].marker[1], t[i].marker[2], t[i].marker[3]);
+		       t[i].marker[0], t[i].marker[1], t[i].marker[2], t[i].marker[3],
+		       t[i].vlan_frames, vid);
 		for (int l = 0; l < t[i].nlen; l++) printf(" %u(%lu)", t[i].lens[l], t[i].lenc[l]);
 		printf("\n  kinds:");
 		for (int b = 0; b <= REAC_CTRL_UNKNOWN_CTRL; b++)

@@ -149,6 +149,49 @@ int main(void)
 		pcap_source_close(&ps);
 	}
 
+	/* 3b. 802.1Q: a tagged frame built by inserting 81 00 00 0c into the
+	 * untagged golden (VID 12, low 12 bits of the TCI) must read back as
+	 * the SAME payload the untagged golden gives, plus the VID exposed on
+	 * the source. Red on main: pcap_source hands the tag through untouched,
+	 * so reac_frame_is_reac sees 0x8100 at [12:14] and calls it not-REAC. */
+	{
+		uint8_t want[FRAME_LEN];
+		mk_frame(want, 0);
+		uint8_t tagged[FRAME_LEN + 4];
+		memcpy(tagged, want, 12);            /* dst + src, unchanged */
+		tagged[12] = 0x81; tagged[13] = 0x00; /* 802.1Q EtherType */
+		tagged[14] = 0x00; tagged[15] = 0x0c; /* TCI: prio 0, VID 12 */
+		memcpy(tagged + 16, want + 12, FRAME_LEN - 12); /* inner ethertype + rest */
+
+		char pv[256];
+		snprintf(pv, sizeof pv, "%s/vlan.pcap", dir);
+		FILE *f = fopen(pv, "wb");
+		wr_u32(f, 0xA1B2C3D4u, 0);
+		wr_u32(f, 0x00040002u, 0);
+		wr_u32(f, 0, 0); wr_u32(f, 0, 0);
+		wr_u32(f, 65535, 0);
+		wr_u32(f, 1, 0);
+		wr_u32(f, 500, 0); wr_u32(f, 0, 0);       /* ts */
+		wr_u32(f, FRAME_LEN + 4, 0);               /* incl_len */
+		wr_u32(f, FRAME_LEN + 4, 0);               /* orig_len */
+		fwrite(tagged, 1, FRAME_LEN + 4, f);
+		fclose(f);
+
+		struct pcap_source ps;
+		CHECK(pcap_source_open(&ps, pv) == 0, "vlan: open");
+		uint8_t buf[2048];
+		long n = pcap_source_next(&ps, buf, sizeof buf, NULL);
+		CHECK(n == FRAME_LEN, "vlan: tag stripped, length == untagged golden");
+		CHECK(n == FRAME_LEN && memcmp(buf, want, FRAME_LEN) == 0,
+		      "vlan: payload byte-equal to the untagged golden once stripped");
+		CHECK(ps.last_vlan_tagged == 1, "vlan: last_vlan_tagged set");
+		CHECK(ps.last_vlan_id == 12, "vlan: VID == 12");
+		CHECK(reac_frame_is_reac(buf, (size_t)n) == 1,
+		      "vlan: stripped frame reads as REAC");
+		pcap_source_close(&ps);
+		unlink(pv);
+	}
+
 	/* 4. malformed: bad magic refuses to open */
 	{
 		FILE *f = fopen(p3, "wb");
