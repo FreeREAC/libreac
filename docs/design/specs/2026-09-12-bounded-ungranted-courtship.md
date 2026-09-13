@@ -1,6 +1,6 @@
 # An ungranted courtship is BOUNDED: court, then get off the wire
 
-Status: measured and ruled 2026-09-12; implemented in `src/reac_fsm.c` this lane. Supersedes
+Status: measured and ruled 2026-09-12; implemented in `src/reac_fsm.c`; RULED 2026-09-14 — option C, the tap role, is the fix (see the last section). Supersedes
 `include/reac/reac_fsm.h`'s standing sentence "until the master's grant lands (no hard give-up
 while PHY stays up)" — that sentence described `FSM_COLDCONNECT` correctly and was wrong about
 what it costs a segment.
@@ -100,3 +100,17 @@ fix. The product rule stands (reac-pw README, Known issues): a desk's boxes enro
 reac-pw joins last, and reac-pw leaves the segment while a box reboots. A real fix needs the
 slave to see the box's absence and drop itself, or a recording mode that never courts at all
 (passive on a mirror) — both open. Evidence: reac-captures `courtship-trial-2026-09-12/`.
+
+## Ruling 2026-09-14 (operator): option C — a mode that never courts
+
+Of the three ways out named above — (A) the product rule, boxes first and reac-pw last;
+(B) a slave that sees the box's absence and drops itself; (C) a recording mode that never
+courts at all — the operator rules **C**. It exists since libreac 1.0.3 / reac-pw 1.0.2 as
+the tap role (`reac_tap`, `REAC_ROLE_<segment>=tap`): on a segment a desk masters, reac-pw
+transmits nothing — no announce, no join, no grant — and serves what it hears. Measured on
+the rig the same night: 0 frames from our MAC on the tapped VLAN over 60 s against ~496 000
+on each mixer VLAN. Consequences: the product rule in (A) is retired for recording; a
+segment whose role resolves automatically and that hears a desk becomes a **tap**, never a
+courting slave (`recorder` stays an explicit choice); and a tap hears a box's upstream only
+on a mirror of the desk's port, since a switch forwards that unicast to the desk alone.
+The bounded courtship of §2 stays for the explicit `recorder` role.
