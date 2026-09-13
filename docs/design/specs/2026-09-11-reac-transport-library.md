@@ -4,7 +4,7 @@ Status: ruled by the operator, 2026-09-11; partly implemented (see §6 for what 
 and what is still open).
 
 - **Author:** Pau Aliagas <linuxnow@gmail.com>
-- **Supersedes:** [`docs/layering.md`](../../layering.md)'s "Three layers" table, the row
+- **Supersedes:** `docs/layering.md` (retired)'s "Three layers" table, the row
   `transport | sockets, the SCHED_FIFO pacer, RT threads, PipeWire nodes | reac-pw, permanently`
   and the sentence "The transport layer never moves." That note is about the *control-plane
   conversation* (the FSM) — its readiness gates and sequencing for THAT question still hold — but

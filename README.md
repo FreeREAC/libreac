@@ -27,10 +27,7 @@ captures carry after the end marker — not a protocol field, never emitted.
 32-byte control block, its two nested checksums and the box-model matrix
 (`reac_ctrl_build_*`, `reac_master_stamp`), head-amp records (`reac_headamp_*`,
 `reac_ports_parse`), box identity, and the master/slave establishment, hunt and arbitration
-state machines (`<reac/reac_link.h>`, `reac_hunt`, `reac_master_fsm`, `reac_grant`). See
-[`docs/REAC-CONTROL-PLANE.md`](docs/REAC-CONTROL-PLANE.md) for the pairing sequence as measured
-on real boxes, and [`docs/layering.md`](docs/layering.md) for what belongs here and what does
-not.
+state machines (`<reac/reac_link.h>`, `reac_hunt`, `reac_master_fsm`, `reac_grant`).
 
 libreac is IO-free, allocation-free and clock-free: no socket, no thread, no `SCHED_FIFO`. That
 is `libreac-transport`'s job.
