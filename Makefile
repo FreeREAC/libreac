@@ -202,9 +202,25 @@ libreac-transport.a: $(TRANSPORT_OBJS)
 
 transport: libreac-transport.a
 
+# The transport tier's own harness (spec 2026-09-11-reac-transport-library §8 leaves
+# room for one; before this there was none and transport ran only under reac-pw's
+# meson test). It needs libreac-transport.a, so it is NOT part of `make test`:
+# building the transport tier needs REACPW_INCLUDE pointed at a reac-pw checkout for
+# the two headers that stay there, and a release tarball has none.
+#
+# THE CORPUS ARM IS OPT-IN AND SAYS SO. REAC_TAP_CAPTURE names a VLAN-STRIPPED pcap of
+# a REAC segment (`tcprewrite --enet-vlan=del`, because nothing in libreac parses an
+# 802.1Q tag). Absent, the test prints CORPUS ARM NOT RUN rather than passing quietly.
+REAC_TAP_CAPTURE ?=
+
+test-transport: tests/test_tap.c libreac-transport.a libreac.a
+	$(CC) $(CFLAGS) $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
+	./test_tap $(REAC_TAP_CAPTURE)
+	tools/conformance-tap-silent.sh
+
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity test_master_carriers corpus_check $(WIRE_TOOLS)
-	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a
+	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
-.PHONY: all test conformance corpus wire-tools clean transport
+.PHONY: all test test-transport conformance corpus wire-tools clean transport
