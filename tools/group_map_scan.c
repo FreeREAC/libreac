@@ -15,8 +15,8 @@
  * is usually that a shape is MISSING. A missing shape and an unread file look the
  * same, so every run prints three controls in the same pass:
  *   - records / reac / vlan counts (a tag-aware read: since 2026-09 the corpus is
- *     802.1Q VLAN 12 and libreac's own pcap_source hands those frames back with the
- *     tag still on, so reac_frame_is_reac rejects every one of them);
+ *     802.1Q VLAN 12; pcap_source_next strips the tag before handing a frame back,
+ *     so reac_frame_is_reac sees plain Ethernet, and vlan_tagged just counts it);
  *   - a per-talker census (who was on the wire at all);
  *   - the OTHER control opcodes each talker sent (so "no group map from this desk"
  *     is separated from "this desk was silent").
@@ -139,14 +139,11 @@ int main(int argc, char **argv)
 			long n = pcap_source_next(&ps, buf, sizeof buf, &ts);
 			if (n <= 0) break;
 			records++;
-			/* 802.1Q: strip the tag in place so the rest reads plain Ethernet.
-			 * The corpus since 2026-09 is tagged; without this every frame below
-			 * is invisible and the scan reports a clean, empty, WRONG result. */
-			if (n > 18 && buf[12] == 0x81 && buf[13] == 0x00) {
-				memmove(buf + 12, buf + 16, (size_t)n - 16);
-				n -= 4;
-				vlan++;
-			}
+			/* 802.1Q: pcap_source_next already strips the tag before handing
+			 * the frame back (the corpus since 2026-09 is tagged; without that
+			 * every frame below would be invisible and the scan would report a
+			 * clean, empty, WRONG result) — this just counts what it did. */
+			if (ps.last_vlan_tagged) vlan++;
 			if (!reac_frame_is_reac(buf, (size_t)n)) continue;
 			if (n < BLK_OFF + REAC_CTRL_BLOCK_LEN) continue;
 			reac++;

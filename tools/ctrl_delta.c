@@ -104,11 +104,13 @@ int main(int argc, char **argv)
 		if (!s->seen) {
 			s->seen = 1;
 			memcpy(s->block, blk, REAC_CTRL_BLOCK_LEN);
+			char vid[16] = "";
+			if (ps.last_vlan_tagged) snprintf(vid, sizeof vid, " vid=%u", ps.last_vlan_id);
 			printf("%10.6f FIRST %s src=%02x:%02x:%02x:%02x:%02x:%02x "
-			       "L%u.%u op=%02x len=%u block=",
+			       "L%u.%u op=%02x len=%u%s block=",
 			       (double)(ts - t0) / 1e6, reac_ctrl_kind_name(k),
 			       p.src[0], p.src[1], p.src[2], p.src[3], p.src[4], p.src[5],
-			       p.link, p.seg, p.opcode, p.blk_len);
+			       p.link, p.seg, p.opcode, p.blk_len, vid);
 			for (int i = 0; i < REAC_CTRL_BLOCK_LEN; i++)
 				printf("%02x", blk[i]);
 			printf("\n");

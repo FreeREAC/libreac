@@ -85,10 +85,12 @@ int main(int argc, char **argv)
 		if (ck != 0)
 			ha_badck++;
 
+		char vid[16] = "";
+		if (ps.last_vlan_tagged) snprintf(vid, sizeof vid, " vid=%u", ps.last_vlan_id);
 		printf("%10.6f src=%02x:%02x:%02x:%02x:%02x:%02x "
 		       "dst=%02x:%02x:%02x:%02x:%02x:%02x "
 		       "ch=0x%02x param=%-7s value=0x%02x "
-		       "seg=%u ctr=%u cap=%ld orig=%u%s%s%s\n",
+		       "seg=%u ctr=%u cap=%ld orig=%u%s%s%s%s\n",
 		       (double)(ts - t0) / 1e6,
 		       p.src[0], p.src[1], p.src[2], p.src[3], p.src[4], p.src[5],
 		       p.dst[0], p.dst[1], p.dst[2], p.dst[3], p.dst[4], p.dst[5],
@@ -96,7 +98,7 @@ int main(int argc, char **argv)
 		       p.seg, p.counter, n, ps.last_orig_len,
 		       truncated ? " TRUNC" : "",
 		       short_of_block ? " SHORT-OF-BLOCK" : "",
-		       ck ? " REC-CKSUM-BAD" : "");
+		       ck ? " REC-CKSUM-BAD" : "", vid);
 	}
 	pcap_source_close(&ps);
 
