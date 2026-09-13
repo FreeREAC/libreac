@@ -36,3 +36,4 @@ test_link
 test_identity
 test_master_carriers
 group_map_scan
+test_tap
