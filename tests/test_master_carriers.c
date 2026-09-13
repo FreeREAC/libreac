@@ -90,6 +90,106 @@ static int carriers(int fps, uint8_t code)
 	return 0;
 }
 
+/* The announce's enrolled-box count: u2 BIG-endian at block[18:20], template
+ * [20:22] (2026-09-13 corpus pass, 17 040 announces — the high byte has never
+ * been non-zero, so reading only the low one would pass on a master that had
+ * stopped writing the field's other half). */
+static uint16_t ann_box_count(const struct reac_master *m)
+{
+	return (uint16_t)((m->announce_blk[20] << 8) | m->announce_blk[21]);
+}
+
+/* THE ANNOUNCE'S WIDTH AND COUNT, AGAINST A REAL DESK'S OWN TIMELINE.
+ *
+ * Measured off an M-200 driving an S-1608 at 44.1 kHz, bouncing the box
+ * (reac-captures m200-enrol-441k-2026-09-13/analysis.md, timeline):
+ *
+ *   box absent          cfea width 0x08
+ *   box's commit report cfea width back to 0x10, box_count STILL 0
+ *   the grant burst
+ *   +0.5 s              box_count 0 -> 1
+ *
+ * So the width tracks RECOGNITION and the count tracks the GRANT, and they are
+ * two different instants ~2 s apart. A master that raises the count when the box
+ * declares itself announces a granted box through the whole recognized-but-
+ * ungranted dwell, which is the window a real desk holds open — that is the
+ * defect this drive exists to catch, and it is invisible to any assertion taken
+ * only at the end state, where both readings agree.
+ *
+ * Drives the FSM exactly as reac_pacer does: one reac_master_next per emitted
+ * frame, RX events fed in. No socket, no thread, no rig. */
+static int announce_width_and_count(void)
+{
+	static const uint8_t BOX[6] = { 0x00, 0x40, 0xab, 0xc4, 0x80, 0x3b };
+	uint8_t join[32];
+	struct reac_console_cfg cfg = { .out_channels = 8,
+	                                .console_field = reac_pace_code(4000) };
+	struct reac_master m;
+	uint16_t c;
+	int ix;
+	long guard;
+
+	memset(join, 0, sizeof join);
+	reac_master_init(&m, OUR, &cfg, 4000);
+
+	/* NO BOX: the idle width every captured desk announces while unlinked. */
+	CHK(m.announce_blk[18] == 0x08);
+	CHK(ann_box_count(&m) == 0);
+	CHK(block_closes(m.announce_blk));
+
+	/* The JOIN is held until the scene transfer completes; then GRANTING opens
+	 * the dwell. The guard is checked, not assumed: a drive that never reached
+	 * GRANTING would otherwise assert the idle state all the way down. */
+	CHK(reac_master_rx(&m, REAC_M_RX_BOX_JOIN, BOX, join) == 0);
+	for (guard = 0; m.state != REAC_M_GRANTING && guard < 8L * m.cycle_len; guard++)
+		(void)reac_master_next(&m, &c, &ix);
+	CHK(m.state == REAC_M_GRANTING);
+	CHK(m.announce_blk[18] == 0x08);   /* a cold JOIN carries no width */
+	CHK(ann_box_count(&m) == 0);
+
+	/* The box's commit report: the width moves, the count does NOT. */
+	reac_master_set_box(&m, 16, 8, 0x20);
+	CHK(reac_master_has_box(&m) == 1);
+	CHK(m.announce_blk[18] == 0x10);
+	CHK(ann_box_count(&m) == 0);
+	CHK(m.announce_blk[19] == reac_pace_code(4000));   /* the pace survives it */
+	CHK(block_closes(m.announce_blk));
+
+	/* The burst goes out and the box heartbeats: GRANTED. */
+	for (guard = 0; m.state == REAC_M_GRANTING && guard < 400000L; guard++) {
+		(void)reac_master_next(&m, &c, &ix);
+		if (guard % 500 == 0)
+			(void)reac_master_rx(&m, REAC_M_RX_BOX_HEARTBEAT, BOX, NULL);
+	}
+	CHK(m.state == REAC_M_ESTABLISHED);
+	CHK(ann_box_count(&m) == 1);       /* 0 -> 1 at the grant, and only there */
+	CHK(m.announce_blk[18] == 0x10);   /* no width collapse at latch */
+	CHK(block_closes(m.announce_blk));
+
+	/* The box goes away: the peer-gone budget drains, and everything we advertise
+	 * about "the box" goes with it. */
+	for (guard = 0; m.state == REAC_M_ESTABLISHED && guard < 400000L; guard++)
+		(void)reac_master_next(&m, &c, &ix);
+	CHK(m.state == REAC_M_PROBING);
+	CHK(ann_box_count(&m) == 0);       /* 1 -> 0 on the drop */
+	CHK(m.announce_blk[18] == 0x08);
+	CHK(block_closes(m.announce_blk));
+
+	/* The width is the ENROLLED BOX's declared input width, whatever it is —
+	 * a constant 0x10 would pass everything above. */
+	{
+		static const uint8_t W[] = { 8, 16, 32 };
+		for (size_t i = 0; i < sizeof W / sizeof W[0]; i++) {
+			struct reac_master mw;
+			reac_master_init(&mw, OUR, &cfg, 4000);
+			reac_master_set_box(&mw, W[i], 8, 0x00);
+			CHK(mw.announce_blk[18] == W[i]);
+			CHK(block_closes(mw.announce_blk));
+		}
+	}
+	return 0;
+}
+
 int main(void)
 {
 	/* The pace code is derived from the frame rate in ONE place. Pin the mapping
@@ -102,6 +202,32 @@ int main(void)
 	if (carriers(4000, reac_pace_code(4000))) return 1;   /* 48 kHz   */
 	if (carriers(8000, reac_pace_code(8000))) return 1;   /* 96 kHz   */
 	if (carriers(3675, reac_pace_code(3675))) return 1;   /* 44.1 kHz */
+
+	/* THE PACE CODE THE WIRE CARRIES, per rate, as literals — the assertions above
+	 * compare the announce against reac_pace_code's own answer, so all three would
+	 * still agree if that one function drifted. These are the measured values:
+	 * 0x00 at 48 kHz and 0x02 at 44.1 kHz off one M-200 MAC, 0x01 at a measured
+	 * 8005 pps off an S-1608 and an S-4000S (17 040 announces, 105 capture files,
+	 * reac-captures analysis/2026-09-13-announce-bytes-and-headamp-base.md). */
+	{
+		static const struct { int fps; uint8_t code; } RATE[] = {
+			{ 4000, 0x00 },   /* 48 kHz   */
+			{ 8000, 0x01 },   /* 96 kHz   */
+			{ 3675, 0x02 },   /* 44.1 kHz */
+		};
+		for (size_t i = 0; i < sizeof RATE / sizeof RATE[0]; i++) {
+			struct reac_console_cfg cfg = {
+				.out_channels  = 8,
+				.console_field = reac_pace_code(RATE[i].fps),
+			};
+			struct reac_master m;
+			reac_master_init(&m, OUR, &cfg, RATE[i].fps);
+			CHK(m.announce_blk[19] == RATE[i].code);
+			CHK(block_closes(m.announce_blk));
+		}
+	}
+
+	if (announce_width_and_count()) return 1;
 
 	/* NEGATIVE CONTROL: the bytes MOVE with the code. Asserts that all read a
 	 * constant would pass on a generator that had stopped reading the pace code at
@@ -162,8 +288,11 @@ int main(void)
 	}
 
 	printf("OK: the pace code reaches all four carriers (cfea[19], ENROLL[8], the "
-	       "chanmap section marker and the scene revision) at 44.1/48/96 kHz, and the "
-	       "ENROLL group map is byte-identical to the M-200 enrols captured for 8-, 16- "
-	       "and 32-input boxes\n");
+	       "chanmap section marker and the scene revision) at 44.1/48/96 kHz and reads "
+	       "0x00/0x01/0x02 there; the announce width tracks the recognized box (0x08 "
+	       "idle, 8/16/32) and the box count rises 0->1 only at the grant and falls "
+	       "back on the drop, as the M-200 bounce timeline has it; and the ENROLL group "
+	       "map is byte-identical to the M-200 enrols captured for 8-, 16- and 32-input "
+	       "boxes\n");
 	return 0;
 }
