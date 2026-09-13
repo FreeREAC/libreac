@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.0.2
+Version:        1.0.3
 %global abi 3
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,7 +87,10 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
-* Sat Sep 13 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.2-1
+* Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.3-1
+- The tap role: reac_tap survey and serve (listen, never transmit) for a segment another
+  master owns — one stream for the desk downstream, one per box. Same ABI, new symbols.
+* Sun Sep 13 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.2-1
 - Follows libreac 1.0.2 (the pace code is shared with the core). Same ABI.
 * Sat Sep 12 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.1-1
 - Follows libreac 1.0.1: the slave state carries the bounded courtship (struct reac_slave
