@@ -21,6 +21,8 @@ int pcap_source_open(struct pcap_source *ps, const char *path)
 {
 	ps->f = fopen(path, "rb");
 	ps->last_orig_len = 0;
+	ps->last_vlan_tagged = 0;
+	ps->last_vlan_id = 0;
 	if (!ps->f)
 		return -1;
 	uint8_t gh[24];
@@ -71,6 +73,20 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
 		}
 		if (fread(buf, 1, incl, ps->f) != incl)
 			return -1;
+		/* 802.1Q: a mirror port on a trunk hands every REAC frame back
+		 * tagged. Strip the tag here, once, so every caller — the live
+		 * reac_frame_is_reac check and every fixed offset after it —
+		 * keeps reading plain Ethernet, exactly as it does today. The
+		 * VID is not lost, only moved: it lands on the source struct
+		 * for a caller that wants it (wire_census and friends). */
+		ps->last_vlan_tagged = 0;
+		ps->last_vlan_id = 0;
+		if (incl >= 18 && buf[12] == 0x81 && buf[13] == 0x00) {
+			ps->last_vlan_tagged = 1;
+			ps->last_vlan_id = (uint16_t)(((buf[14] << 8) | buf[15]) & 0x0fff);
+			memmove(buf + 12, buf + 16, incl - 16);
+			incl -= 4;
+		}
 		if (ts_usec)
 			*ts_usec = (uint64_t)sec * 1000000ull + usec;
 		return (long)incl;
