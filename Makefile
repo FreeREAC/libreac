@@ -99,7 +99,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -122,6 +122,8 @@ test: tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.
 	./test_facts
 	$(CC) $(CFLAGS) $(INC) tests/test_identity.c libreac.a -lm -o test_identity
 	./test_identity
+	$(CC) $(CFLAGS) $(INC) tests/test_master_carriers.c libreac.a -lm -o test_master_carriers
+	./test_master_carriers
 	# A SOURCE-SHAPE ARM, not a value arm. The head-amp base must have exactly
 	# one source in the code — the announced strap. A per-width table agrees
 	# with the announce on every chassis we own, so no test built from our own
@@ -201,7 +203,7 @@ libreac-transport.a: $(TRANSPORT_OBJS)
 transport: libreac-transport.a
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity test_master_carriers corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 

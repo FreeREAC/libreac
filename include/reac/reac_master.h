@@ -179,8 +179,17 @@ struct reac_console_cfg {
 	                         * console width, #130 — that ring is the HEAD-AMP
 	                         * space, not the 40-slot audio fabric, see
 	                         * reac_slots.h.)                                 */
-	uint8_t console_field;  /* cfea [19] and [21] (move together): the emulated
-	                         * MASTER model. M-300 = 0x00, M-5000 = 0x01.     */
+	uint8_t console_field;  /* THE PACE CODE (reac_pace_code, <reac/reac.h>):
+	                         * 0 = 48 kHz, 1 = 96 kHz, 2 = 44.1 kHz. The master
+	                         * writes this ONE value into all four of its rate
+	                         * carriers — the cfea announce byte [19], the ENROLL
+	                         * console byte, the chanmap section marker and the
+	                         * scene body's `revision` — so a caller setting it by
+	                         * hand sets all four. The pacer derives it from the
+	                         * frame rate. The NAME is historical: the byte read as
+	                         * a console family until 2026-09-11, when one M-200 was
+	                         * measured writing 0x00 while mastering at 48 kHz and
+	                         * 0x02 at 44.1 kHz.                               */
 };
 
 /* The IDLE console: what the master announces about itself before any box has
