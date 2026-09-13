@@ -100,17 +100,39 @@ static uint8_t pace_code(const struct reac_console_cfg *cfg)
  * VIRTUAL stageboxes — that exceeds every hardware capture. */
 #define REAC_ENROLL_DEFAULT_WIDTH 32
 
-/* Rewrite the ENROLL group map (block[9:19]) for `in_ch` input channels. A PURE
- * FUNCTION OF WIDTH, no per-box constant: input groups (0x41) fill the input region
- * [9:14] from the front; the remaining "non-input" groups (0xc3) fill the output
- * region [14:19] from the back. Verified byte-for-byte against the M-200, M-300 and
- * M-5000 golden enrols (8ch=1x41, 16ch=2x41, 32ch=4x41 — identical across all three
- * console generations, only the [8] console byte differs) and extended to the full
- * 40-slot fabric (5x41). Leaves [8] (console-model byte) and the frame template
- * intact; re-checksums. */
+/* Rewrite the ENROLL group map (block[9:19]) for `in_ch` input channels: input
+ * groups (0x41) fill the input region [9:14] from the front, the remaining
+ * "non-input" groups (0xc3) fill the output region [14:19] from the back. Leaves
+ * [8] (the pace code) and the frame template intact; re-checksums.
+ *
+ * THE GROUP COUNT IS NOT width/8 — A 16-INPUT BOX GETS ONE GROUP. Measured
+ * 2026-09-13 over the whole capture corpus (tools/group_map_scan, 96 files,
+ * 103 group-map frames, four shapes):
+ *
+ *   8-input  S-0808  c4:dc:9c   1 x 0x41   `04 00 41 00 00 00 00 00 c3 c3 c3 c3`
+ *   16-input S-1608  c4:80:41   1 x 0x41   THE SAME MAP, byte for byte
+ *   32-input S-4000S c4:08:bc   4 x 0x41   `04 00 41 41 41 41 00 00 00 00 00 c3`
+ *
+ * The 16-input row is 13 frames over 6 captures, from an M-200 (c9:cc:03) and an
+ * M-200i (c9:cc:04); in three of them the S-1608 is the ONLY box on the wire, so
+ * there is no other box the map could have been for. This code sent 2 x 0x41
+ * there — a shape that appears in ZERO frames of the corpus. The width/8 rule was
+ * introduced with the claim that it was "byte-identical to the M-200 / M-300 /
+ * M-5000 golden enrols (8ch=1x41, 16ch=2x41, 32ch=4x41)"; the 8 and 32 rows are
+ * real and the 16 row was an interpolation between them.
+ *
+ * THE MAP IS STILL A GATE at 32, which is why the rule is not simply "one group":
+ * in matrix-m200-s4000-2026-07-24.pcap the S-4000S's own upstream frames run 340 B
+ * (52 + 8 x 36 = 8 channels) before the 4 x 0x41 map and 1204 B (32 channels)
+ * after. In every 16-input capture the S-1608's upstream is 628 B (16 channels)
+ * throughout, under the desk's one-group map — so one group does not narrow a
+ * 16-input box's return.
+ *
+ * 24 and 40 inputs are UNMEASURED: no box of either width exists in the corpus.
+ * They take width/8, which is what the 32 row measures. */
 static void set_enroll_width(uint8_t blk[34], int in_ch)
 {
-	int n_in = in_ch / 8;                          /* input groups, 1..5 */
+	int n_in = (in_ch <= 16) ? 1 : in_ch / 8;      /* input groups, 1..5 */
 	if (n_in < 1) n_in = 1;
 	if (n_in > 5) n_in = 5;
 	for (int i = 0; i < 5; i++) {
@@ -776,8 +798,8 @@ void reac_master_set_box(struct reac_master *m, int in_ch, int out_ch,
 	if (rebuild_grant_sweep(m, headamp_base, in_ch) != 0)
 		return;
 	/* Enrol the box's DECLARED input width. The cdea 0103 000d group map is the gate
-	 * the box reads to open its audio return to full width (verified byte-for-byte
-	 * across the M-200/M-300/M-5000 golden enrols: 8ch=1x41, 16ch=2x41, 32ch=4x41).
+	 * the box reads to open its audio return to full width; set_enroll_width carries
+	 * the measured per-width shapes and why 16 is not 2 x 0x41.
 	 * Without this the box only ever sees the wide DEFAULT enrol and the recognizer's
 	 * width never reaches the wire — the root cause of the S-4000 stuck at 8ch
 	 * (recognized 32, but enroll_blk stayed the static template). set_enroll_width

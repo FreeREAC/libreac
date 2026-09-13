@@ -124,15 +124,24 @@ int main(void)
 	 * Goldens, byte for byte, from reac-captures via tools/group_map_scan:
 	 *
 	 *   8-input  S-0808  <- M-200  c9:cc:03   18 frames, ...__ctl2.pcap
+	 *   16-input S-1608  <- M-200  c9:cc:03 + M-200i c9:cc:04
+	 *                                        13 frames over 6 captures, and in
+	 *                                        three of them the S-1608 is the ONLY
+	 *                                        box on the wire
 	 *   32-input S-4000S <- M-200  c9:cc:03    2 frames,
 	 *                       ...matrix-m200-s4000-2026-07-24.pcap
 	 *
-	 * A real S-4000S under a static 1 x 0x41 stayed at 8 channels upstream
+	 * The 32-input row is why the rule is not "one group, always": a real S-4000S
+	 * under a static 1 x 0x41 stayed at 8 channels upstream
 	 * (340 B) and widened to 32 (1204 B) only under 4 x 0x41 — both lengths are in
 	 * that one capture, which is what makes these bytes a gate and not decoration. */
 	{
 		static const struct { int in_ch; const char *tmpl; } WIRE[] = {
 			{  8, "cdea0103000d100400410000000000c3c3c3c300000000000000000000000000008e" },
+			/* THE FINDING: the desks send a 16-input box the SAME map as an
+			 * 8-input one. libreac sent 2 x 0x41 here, a shape that appears in
+			 * zero frames of the corpus (set_enroll_width carries the numbers). */
+			{ 16, "cdea0103000d100400410000000000c3c3c3c300000000000000000000000000008e" },
 			{ 32, "cdea0103000d100400414141410000000000c3000000000000000000000000000014" },
 		};
 		for (size_t i = 0; i < sizeof WIRE / sizeof WIRE[0]; i++) {
@@ -154,7 +163,7 @@ int main(void)
 
 	printf("OK: the pace code reaches all four carriers (cfea[19], ENROLL[8], the "
 	       "chanmap section marker and the scene revision) at 44.1/48/96 kHz, and the "
-	       "ENROLL group map is byte-identical to the M-200 enrols captured for 8- and "
-	       "32-input boxes\n");
+	       "ENROLL group map is byte-identical to the M-200 enrols captured for 8-, 16- "
+	       "and 32-input boxes\n");
 	return 0;
 }
