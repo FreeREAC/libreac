@@ -161,7 +161,9 @@ corpus: corpus_check
 #   slotmap_watch   the sliding slot-map window unrolled into per-slot state
 #   seq_gaps        per-talker frame-counter holes — the control for any
 #                   "nothing was sent" claim
-WIRE_TOOLS = headamp_trace wire_census ctrl_delta upstream_watch slotmap_watch seq_gaps
+#   group_map_scan  every ENROLL group map with its talker, VLAN-tag aware, with
+#                   a per-talker census as the control for a missing shape
+WIRE_TOOLS = headamp_trace wire_census ctrl_delta upstream_watch slotmap_watch seq_gaps group_map_scan
 
 wire-tools: $(WIRE_TOOLS)
 
