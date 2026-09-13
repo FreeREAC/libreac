@@ -17,8 +17,7 @@ way it is read. `reac_braid_pos()` (`<reac/reac_braid.h>`) is the one oracle for
 downstream broadcast; `reac_upstream_channels()` / `reac_upstream_decode()`
 (`<reac/reac_upstream.h>`) read a stagebox's narrower upstream return, sized to the box's own
 input count; `reac_braid_encode()` / `reac_downstream_build()` (`<reac/reac_encode.h>`) write
-audio back onto the wire in both directions. `reac_decode_plain_le()` reads the pre-0.5.0
-plain-LE layout; it is a diagnostic for historical captures, not a layout the wire ever carried.
+audio back onto the wire in both directions.
 `reac_frame_is_reac()`, `reac_frame_counter()`, `reac_counter_gap()`, `reac_rate_snap()` and
 `reac_detect_rate_fd()` recognise a frame, read its sequence counter and detect its sample rate
 from live capture. `reac_frame_clean_len()` strips the +2-byte Ethernet FCS residue some
@@ -48,11 +47,9 @@ trunk port (`reac_topo`, `reac_vlan`), a segment's identity and lock (`reac_segm
 state machines (`reac_slave` joining, `reac_pacer` mastering). Its public headers carry no socket type in a call shape, so a
 future backend other than userspace AF_PACKET could implement the same API; it holds no Linux
 capability itself, since a library cannot — the binding process keeps `CAP_NET_RAW` /
-`CAP_NET_ADMIN` and this library runs inside it. See
-[`docs/design/specs/2026-09-11-reac-transport-library.md`](docs/design/specs/2026-09-11-reac-transport-library.md)
-for what moved here from where, and what is still open (two headers still vendored from their
-prior home). Since 0.9.1 every transport object reaches the OS through one opaque
-`struct reac_handle` (`<reac/transport/reac_handle.h>`); no installed header names a socket.
+`CAP_NET_ADMIN` and this library runs inside it. Every transport object reaches the OS through
+one opaque `struct reac_handle` (`<reac/transport/reac_handle.h>`); no installed header names a
+socket, so a kernel-module backend can sit under the same headers.
 
 ## Who links these
 
