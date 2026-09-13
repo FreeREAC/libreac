@@ -1106,21 +1106,6 @@ void reac_pacer_request_reestablish(struct reac_pacer *p, int cause)
 	atomic_store_explicit(&p->reestab_cause, cause, memory_order_relaxed);
 	atomic_fetch_add_explicit(&p->rate_req_seq, 1, memory_order_release);
 }
-/* cfea[19] is the PACE CODE the box follows: 0 = 48 kHz, 1 = 96 kHz, 2 = 44.1 kHz.
- * Measured 2026-09-11 on one desk (M-200 c9:cc:03): 0x00 at 48 k, 0x02 at 44.1 k;
- * the M-5000 corpus writes 0x01 at 96 k. Until then the byte read as the "console
- * family" (V-Mixer 0 / OHRCA 1) — a coincidence of a corpus where every V-Mixer ran
- * 48 k and every OHRCA 96 k; a desk does not change family with its clock. The rig
- * proof of the box obeying the BYTE, not the cadence: an S-4000S under our 3675 pps
- * master with this byte at 0 returned 4000 pps (48 k). */
-uint8_t reac_pace_code(int fps)
-{
-	if (fps >= 8000) return 1;   /* 96 kHz */
-	if (fps <= 3700) return 2;   /* 44.1 kHz (3675 pps) */
-	return 0;                    /* 48 kHz */
-}
-
-
 int reac_pacer_apply_rate(struct reac_pacer *p, int hz)
 {
 	int fps = hz / REAC_SAMPLES_PER_PKT;

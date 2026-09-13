@@ -29,6 +29,18 @@ int reac_rate_snap(double pps)
 	return 96000;
 }
 
+/* The pace code a master announces and a box follows (reac.h carries the law and
+ * the measurements). Kept as three explicit bands rather than a table so an fps
+ * that is not one of the three legal paces still lands on a defined class instead
+ * of reading past a table's end; 44.1 kHz is the LOW band because its frame rate
+ * is the low one (3675), not because it is a fallback. */
+uint8_t reac_pace_code(int fps)
+{
+	if (fps >= 8000) return 1;   /* 96 kHz   */
+	if (fps <= 3700) return 2;   /* 44.1 kHz (3675 frames/s) */
+	return 0;                    /* 48 kHz   */
+}
+
 int reac_frame_is_reac(const uint8_t *frame, size_t len)
 {
 	if (!frame || len < 14)
