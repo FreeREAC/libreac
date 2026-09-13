@@ -70,7 +70,26 @@ static const uint8_t ENROLL_BLK[34] = {
 	0x00, 0x00, 0x00, 0xc3, 0xc3, 0xc3, 0xc3, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8e
 };
-#define REAC_ENROLL_CONSOLE_IDX 8   /* ENROLL_BLK[8] = console-model byte (0/1) */
+#define REAC_ENROLL_CONSOLE_IDX 8   /* ENROLL_BLK[8] = the PACE CODE (see pace_code) */
+
+/* THE THREE RATE CARRIERS ARE ONE VALUE, read here and nowhere else.
+ *
+ * A master declares its pace in the cfea announce byte [19], in the ENROLL
+ * console byte and in the scene body's `revision` (REAC_SCENE_REVISION_OFF).
+ * They are not three settings: the announce PROPOSES the rate class and the scene
+ * RECORDS it, and a box caches the revision and will not re-read the body until
+ * it changes — so a master whose scene contradicts its announce declares one rate
+ * and records another, and the box keeps whatever it already had.
+ *
+ * The value is reac_pace_code(fps), derived once by the pacer and carried in
+ * cfg.console_field (the field keeps its old name; reac_master.h says what it
+ * holds). Two of the three stamps used to squash it with `? 0x01 : 0x00`, which
+ * is invisible while the byte only ever holds 0 or 1 and turns the 44.1 kHz code
+ * 2 into the 96 kHz class — a 44.1 kHz master announcing 44.1 and recording 96. */
+static uint8_t pace_code(const struct reac_console_cfg *cfg)
+{
+	return cfg ? cfg->console_field : 0;
+}
 
 /* Wide-safe default enroll width (operator directive 2026-07-24: "40 is the safe
  * default"). 32 = 4 input groups + 1 output group (4x0x41 + 1x0xc3) — the widest
@@ -81,17 +100,39 @@ static const uint8_t ENROLL_BLK[34] = {
  * VIRTUAL stageboxes — that exceeds every hardware capture. */
 #define REAC_ENROLL_DEFAULT_WIDTH 32
 
-/* Rewrite the ENROLL group map (block[9:19]) for `in_ch` input channels. A PURE
- * FUNCTION OF WIDTH, no per-box constant: input groups (0x41) fill the input region
- * [9:14] from the front; the remaining "non-input" groups (0xc3) fill the output
- * region [14:19] from the back. Verified byte-for-byte against the M-200, M-300 and
- * M-5000 golden enrols (8ch=1x41, 16ch=2x41, 32ch=4x41 — identical across all three
- * console generations, only the [8] console byte differs) and extended to the full
- * 40-slot fabric (5x41). Leaves [8] (console-model byte) and the frame template
- * intact; re-checksums. */
+/* Rewrite the ENROLL group map (block[9:19]) for `in_ch` input channels: input
+ * groups (0x41) fill the input region [9:14] from the front, the remaining
+ * "non-input" groups (0xc3) fill the output region [14:19] from the back. Leaves
+ * [8] (the pace code) and the frame template intact; re-checksums.
+ *
+ * THE GROUP COUNT IS NOT width/8 — A 16-INPUT BOX GETS ONE GROUP. Measured
+ * 2026-09-13 over the whole capture corpus (tools/group_map_scan, 96 files,
+ * 103 group-map frames, four shapes):
+ *
+ *   8-input  S-0808  c4:dc:9c   1 x 0x41   `04 00 41 00 00 00 00 00 c3 c3 c3 c3`
+ *   16-input S-1608  c4:80:41   1 x 0x41   THE SAME MAP, byte for byte
+ *   32-input S-4000S c4:08:bc   4 x 0x41   `04 00 41 41 41 41 00 00 00 00 00 c3`
+ *
+ * The 16-input row is 13 frames over 6 captures, from an M-200 (c9:cc:03) and an
+ * M-200i (c9:cc:04); in three of them the S-1608 is the ONLY box on the wire, so
+ * there is no other box the map could have been for. This code sent 2 x 0x41
+ * there — a shape that appears in ZERO frames of the corpus. The width/8 rule was
+ * introduced with the claim that it was "byte-identical to the M-200 / M-300 /
+ * M-5000 golden enrols (8ch=1x41, 16ch=2x41, 32ch=4x41)"; the 8 and 32 rows are
+ * real and the 16 row was an interpolation between them.
+ *
+ * THE MAP IS STILL A GATE at 32, which is why the rule is not simply "one group":
+ * in matrix-m200-s4000-2026-07-24.pcap the S-4000S's own upstream frames run 340 B
+ * (52 + 8 x 36 = 8 channels) before the 4 x 0x41 map and 1204 B (32 channels)
+ * after. In every 16-input capture the S-1608's upstream is 628 B (16 channels)
+ * throughout, under the desk's one-group map — so one group does not narrow a
+ * 16-input box's return.
+ *
+ * 24 and 40 inputs are UNMEASURED: no box of either width exists in the corpus.
+ * They take width/8, which is what the 32 row measures. */
 static void set_enroll_width(uint8_t blk[34], int in_ch)
 {
-	int n_in = in_ch / 8;                          /* input groups, 1..5 */
+	int n_in = (in_ch <= 16) ? 1 : in_ch / 8;      /* input groups, 1..5 */
 	if (n_in < 1) n_in = 1;
 	if (n_in > 5) n_in = 5;
 	for (int i = 0; i < 5; i++) {
@@ -215,10 +256,11 @@ static void gen_cfea(uint8_t out[34], const uint8_t src[6],
 	out[17] = 0x28;                 /* 40: the FIXED REAC downstream slot total   */
 	out[18] = cfg->out_channels;    /* box INPUT width (see note above); carried
 	                                 * in by reac_master_set_box on recognition */
-	out[19] = cfg->console_field;   /* the PACE CODE the box follows (0 = 48 k, 1 = 96 k,
+	out[19] = pace_code(cfg);       /* the PACE CODE the box follows (0 = 48 k, 1 = 96 k,
 	                                 * 2 = 44.1 k; measured 2026-09-11) — the pacer
-	                                 * derives it from the fps (reac_pace_code). The
-	                                 * field keeps its old "console" name for now.  */
+	                                 * derives it from the fps (reac_pace_code), and the
+	                                 * ENROLL byte and the scene revision carry the same
+	                                 * value. The field keeps its old "console" name. */
 	/* [20:22] = the ENROLLED-BOX COUNT (big-endian). THE blink fix (2026-07-12):
 	 * a real M-200 announces 0x0001 here once a box is enrolled; reac-pw hard-wired
 	 * 0x0000 (the old out[21]=console_field was wrong — [19] and [21] are NOT the
@@ -283,23 +325,25 @@ static int chanmap_start(int f)
 
 /* Populate `frames` with the full 49-window fabric sweep (returns the count).
  * The master advertises the whole FABRIC, never the console's own width (see the
- * block comment above) — cfg is read for ONE byte only, the marker's family.
+ * block comment above) — cfg is read for ONE byte only, the section marker's.
  *
- * THE MARKER'S SECOND BYTE IS THE CONSOLE FAMILY (2026-08-29). A real M-5000 writes
- * the section marker `fe 01 00` where an M-200/M-300 writes `fe 00 00` — measured
- * across reac-captures (m5000-s1608-96k / m5000-s0808-96k vs the m200i 48k
- * sessions). reac-pw emitted the V-Mixer form at every rate, so a box driven under
- * our OHRCA impersonation saw an OHRCA cfea[19] over an M-200's channel map.
+ * THE MARKER'S SECOND BYTE IS THE PACE CODE — a FOURTH carrier of it, measured
+ * 2026-09-13 over the whole capture corpus (tools/group_map_scan). Per talker the
+ * marker byte and that talker's cfea[19] always agree, and the byte moves with the
+ * CLOCK while the MAC does not: the same M-200 (c9:cc:03) writes `fe 00 00` in
+ * 3 133 marker slots while mastering at 48 kHz and `fe 02 00` in 18 while mastering
+ * at 44.1 kHz; an M-5000 at 96 kHz writes `fe 01 00`, and so does an S-1608 in
+ * master mode pacing 96 kHz — which is not a console at all, so the byte cannot be
+ * a console family.
  *
- * WHY IT MIGHT MATTER: the S-1608 (fw 2.200) LATCHES its pace and has never
- * followed our cfea[19]=1 to 96 kHz, while the S-0808 (fw 1.003) follows the byte
- * live. §4's recognition path (FUN_0c003548) reads this map, so the marker is one
- * of the two frames a real M-5000 sends that we did not. UNPROVEN — this is the
- * candidate, not the confirmed cause. Gated on the family so V-Mixer output stays
- * byte-identical (tests/test_reac_s1608.c pins the captured windows). */
+ * It was read as the family (V-Mixer 0 / OHRCA 1) while every V-Mixer capture ran
+ * 48 kHz and every OHRCA one 96 kHz, and stamped `console_field ? 1 : 0`. That
+ * squash put the 96 kHz marker on a 44.1 kHz map. Codes 0 and 1 are unchanged, so
+ * the captured V-Mixer and OHRCA windows still pin byte for byte
+ * (tests/test_reac_s1608.c). §4's recognition path (FUN_0c003548) reads this map. */
 static int gen_chanmap(uint8_t frames[][34], const struct reac_console_cfg *cfg)
 {
-	const uint8_t marker_family = (cfg && cfg->console_field) ? 0x01 : 0x00;
+	const uint8_t marker_family = pace_code(cfg);
 	for (int f = 0; f < REAC_M_CHANMAP_RING; f++) {
 		uint8_t *blk = frames[f];
 		memset(blk, 0, 34);
@@ -635,10 +679,10 @@ void reac_master_init(struct reac_master *m, const uint8_t src[6],
 	 * fabric sweep + the cfea announce (OUR src MAC embedded). */
 	m->chanmap_nframes = gen_chanmap(m->chanmap, &m->cfg);
 	gen_cfea(m->announce_blk, m->src, &m->cfg, 0);   /* idle: 0 boxes enrolled */
-	/* ENROLL for this mixer: the console-model byte follows the profile
-	 * (V-Mixer 0 / OHRCA 1). apply_block re-checksums at stamp time. */
+	/* ENROLL: the console byte is the SAME pace code the announce carries
+	 * (see pace_code). apply_block re-checksums at stamp time. */
 	memcpy(m->enroll_blk, ENROLL_BLK, 34);
-	m->enroll_blk[REAC_ENROLL_CONSOLE_IDX] = m->cfg.console_field;
+	m->enroll_blk[REAC_ENROLL_CONSOLE_IDX] = pace_code(&m->cfg);
 	/* Seed the WIDE-safe default enrol; the box's declared width narrows it at
 	 * recognition (reac_master_set_box). set_enroll_width re-checksums. */
 	set_enroll_width(m->enroll_blk, REAC_ENROLL_DEFAULT_WIDTH);
@@ -662,27 +706,23 @@ void reac_master_init(struct reac_master *m, const uint8_t src[6],
 	 * cannot simply be deleted yet. */
 	memcpy(m->scene, reac_scene_placeholder, REAC_SCENE_BYTES);
 	reac_ctrl_scene_set_mac(m->scene, sizeof m->scene, m->src);
-	/* THE SCENE MUST DECLARE THE SAME GENERATION THE ANNOUNCE DOES. `revision`
-	 * (u2le at +0x14) is 0 on a V-Mixer desk and 1 on an M-5000, and the box CACHES
-	 * it and compares before it will re-read the scene's three sub-objects — a body
-	 * whose revision DIFFERS is treated as changed with no further comparison
-	 * (reac.ksy, evidenced in the firmware image and across the corpus). The
-	 * placeholder was recovered from an M-200i, so it carries 0.
+	/* THE SCENE RECORDS THE CLASS THE ANNOUNCE PROPOSED: `revision` (u2le at +0x14)
+	 * carries the SAME pace code as cfea[19], the ENROLL byte and the chanmap
+	 * marker. The box caches it and compares before it will re-read the scene's
+	 * three sub-objects — a body whose revision DIFFERS is treated as changed with
+	 * no further comparison — so because the value MOVES with the pace, a rate
+	 * change is itself the cache miss that makes the box re-read. Measured on the
+	 * rig 2026-08-29, S-1608 firmware 2.200, which had never followed reac-pw to
+	 * 96 kHz: revision 1 -> box 8004 pps at 96 k, 0 mismatches, drift -5.8 ppm, no
+	 * jitter; revision 0 -> box 4002 pps at 48 k, both clean. A STATIC value is not
+	 * enough — pinned to 1 the box latched 96 k and not even a daemon restart at
+	 * 48 k brought it back, because the revision never changed. The 44.1 kHz value
+	 * is a capture too: the same M-200 writes revision 0x0000 in 1 550 scene headers
+	 * while mastering at 48 kHz and 0x0002 while mastering at 44.1 kHz.
 	 *
-	 * Deriving it from console_field settles both halves at once. The scene stops
-	 * contradicting cfea[19] — we announced OHRCA over a V-Mixer scene, and the box
-	 * believed the scene — and because the byte MOVES with the pace, a rate change
-	 * is itself the cache miss that makes the box re-read. Measured on the rig
-	 * 2026-08-29, S-1608 firmware 2.200, which had never followed reac-pw to 96 kHz:
-	 * revision 1 -> box 8004 pps at 96 k, 0 mismatches, drift -5.8 ppm, no jitter;
-	 * revision 0 -> box 4002 pps at 48 k, both clean. A STATIC 1 is not enough — the
-	 * box then latched 96 k and no assertion, not even a daemon restart at 48 k,
-	 * brought it back down, because the revision never changed. */
-	/* Offset lives here until libreac's next release carries it beside
-	 * REAC_SCENE_MAC_OFF, where it belongs (libreac owns the encode). */
-	enum { REAC_SCENE_REVISION_OFF = 0x14 };   /* u2le `revision`, reac.ksy */
-	m->scene[REAC_SCENE_REVISION_OFF]     = m->cfg.console_field ? 0x01 : 0x00;
-	m->scene[REAC_SCENE_REVISION_OFF + 1] = 0x00;
+	 * The placeholder body was recovered from an M-200i, so it arrives carrying 0. */
+	m->scene[REAC_SCENE_REVISION_OFF]     = pace_code(&m->cfg);
+	m->scene[REAC_SCENE_REVISION_OFF + 1] = 0x00;   /* u2le, high byte */
 
 	/* Seed the descriptor from the header so FILLER frames carry a valid one from
 	 * the very first slot, before any step fires. */
@@ -758,8 +798,8 @@ void reac_master_set_box(struct reac_master *m, int in_ch, int out_ch,
 	if (rebuild_grant_sweep(m, headamp_base, in_ch) != 0)
 		return;
 	/* Enrol the box's DECLARED input width. The cdea 0103 000d group map is the gate
-	 * the box reads to open its audio return to full width (verified byte-for-byte
-	 * across the M-200/M-300/M-5000 golden enrols: 8ch=1x41, 16ch=2x41, 32ch=4x41).
+	 * the box reads to open its audio return to full width; set_enroll_width carries
+	 * the measured per-width shapes and why 16 is not 2 x 0x41.
 	 * Without this the box only ever sees the wide DEFAULT enrol and the recognizer's
 	 * width never reaches the wire — the root cause of the S-4000 stuck at 8ch
 	 * (recognized 32, but enroll_blk stayed the static template). set_enroll_width

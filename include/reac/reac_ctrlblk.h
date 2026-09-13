@@ -156,6 +156,21 @@ int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
  * source, so a master replaying a recovered body substitutes its own. */
 #define REAC_SCENE_MAC_OFF       0x340   /* = 832 */
 
+/* THE RATE CLASS THE BODY RECORDS: `revision`, u2le at +0x14 (reac.ksy
+ * scene_body). It carries the PACE CODE (reac_pace_code: 0 = 48 kHz, 1 = 96 kHz,
+ * 2 = 44.1 kHz) — the same value the cfea announce byte [19] and the ENROLL
+ * console byte carry, and a master must write one value into all three. Measured
+ * on one M-200 (c9:cc:03): scene revision 0x0000 in 1 550 headers while it
+ * mastered at 48 kHz, 0x0002 while it mastered at 44.1 kHz; an M-5000 writes
+ * 0x0001 at 96 kHz.
+ *
+ * A BOX CACHES IT AND COMPARES BEFORE RE-READING the body's three sub-objects, so
+ * this field is the only way a later scene reaches a box that has already taken
+ * one — and a master that holds it constant can never revise what it declared
+ * (rig 2026-08-29: pinned to 1, an S-1608 took 96 kHz and then LATCHED there
+ * through a cold boot at 48 kHz). */
+#define REAC_SCENE_REVISION_OFF  0x014
+
 /* Build one step of the transfer into a 34-byte [type|block] template (the shape
  * a master stamps into frame [16:50]), checksum applied. `n` must be
  * REAC_SCENE_BYTES. Returns 0, or -1 on a bad step index or a partial body. */
