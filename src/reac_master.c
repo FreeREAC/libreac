@@ -234,12 +234,27 @@ static void scene_prepare(struct reac_master *m)
  * discarded by the recognizer instead of feeding this field. reac_master_set_box
  * now writes the recognized box's in_ch into cfg->out_channels and re-stamps
  * announce_blk immediately (grant/recognition time), so a live S-1608 gets 0x10
- * and an S-0808 keeps 0x08. NOT modeled: reverting to the 0x08 idle default on
- * drop/peer-gone — no golden capture of a real M-200's disconnect transition
- * exists, so cfg->out_channels simply holds the last-recognized box's width
- * until a DIFFERENT box is recognized (reac_pacer only calls set_box on a model
- * change, matching the existing grant_burst carry-over). Flagged for the next
- * capture pass. */
+ * and an S-0808 keeps 0x08; reac_master_forget_box puts it back to the 0x08 idle
+ * default when the box goes.
+ *
+ * THE FIELD IS THE UPSTREAM WIDTH IN FORCE ON THE SEGMENT, and under this master
+ * that is the enrolled box's DECLARED input width: we enrol exactly what the box
+ * declares (set_enroll_width(in_ch)), so declaration and in-force are the same
+ * number here. They can differ under a master that grants narrower — an S-4000S
+ * declaring 32 inputs sends 340-byte 8-channel frames under a box master and that
+ * master announces 0x08 (reac-captures box-to-box-2026-09-13) — which is why the
+ * field is not read as "the box's declaration" in general.
+ *
+ * WIDTH AND COUNT MOVE AT DIFFERENT INSTANTS, measured on an M-200 bouncing an
+ * S-1608 (m200-enrol-441k-2026-09-13/analysis.md): the width goes back to 0x10 on
+ * the box's commit report while the count is still 0, and the count rises 0 -> 1
+ * only after the grant burst, ~2 s later. Going the other way the width drops to
+ * 0x08 first and the count follows ~1 s behind; we drop both together at
+ * forget_box, which is the one part of that timeline this master does not model.
+ * The whole block is corpus-named — width, pace code and count are the last three
+ * bytes that were once "unknown2"
+ * (reac-captures analysis/2026-09-13-announce-bytes-and-headamp-base.md,
+ * 17 040 announces over 105 files). */
 static void gen_cfea(uint8_t out[34], const uint8_t src[6],
                      const struct reac_console_cfg *cfg, uint16_t box_count)
 {
@@ -823,9 +838,16 @@ void reac_master_set_box(struct reac_master *m, int in_ch, int out_ch,
 	}
 
 	m->cfg.out_channels = (uint8_t)in_ch;    /* cfea width byte := box input width */
-	uint16_t box_count = (m->state == REAC_M_GRANTING ||
-	                      m->state == REAC_M_ESTABLISHED) ? 1 : 0;
-	gen_cfea(m->announce_blk, m->src, &m->cfg, box_count);
+	/* RECOGNITION IS NOT A GRANT. The announce's box count says how many boxes are
+	 * ENROLLED, and this function runs when a box DECLARES itself — which on the
+	 * cold path happens mid-dwell, while the grant sweep has not left the wire. A
+	 * count of 1 here announced a granted box during the recognized-but-ungranted
+	 * window enter_granting exists to hold, so the box never saw the ungranted
+	 * state (the same defect the count=1-on-latch behaviour had; see
+	 * enter_granting). The count rises at enter_established and nowhere else, so a
+	 * recognition while established (a warm relink, a model change) keeps its 1. */
+	gen_cfea(m->announce_blk, m->src, &m->cfg,
+	         m->state == REAC_M_ESTABLISHED ? 1 : 0);
 }
 
 void reac_master_set_headamp_src(struct reac_master *m,
