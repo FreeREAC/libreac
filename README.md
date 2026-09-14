@@ -84,8 +84,12 @@ other object still builds and only those two fail, loudly, at compile time.
 
 `packaging/build-rpm.sh` builds every `*.spec` under `packaging/` — today `libreac.spec` and
 `libreac-transport.spec` — from the one tarball `packaging/make-tarball.sh` produces, so both
-RPMs always ship the same source snapshot. `packaging/publish-repo.sh` assembles the shared
-dnf tree; see `.github/workflows/release-rpm.yml` for how a tagged release runs that dispatch.
+RPMs always ship the same source snapshot. `packaging/publish-repo.sh` assembles the public dnf
+tree at [freereac.github.io/rpm](https://freereac.github.io/rpm) — the same tree reac-pw's own
+equivalent workflow publishes into beside it; see `.github/workflows/release-rpm.yml` for how a
+tagged release (`gh workflow run release-rpm.yml -f tag=vX.Y.Z -f sign=true`) runs that dispatch.
+If the workflow cannot run, publish by hand: `packaging/publish-repo.sh --rpm-dir DIR --out
+<checkout of freereac.github.io> --key-id A14B3E1E1F69EBF4`, then commit and push `rpm/`.
 
 ## Tools
 
