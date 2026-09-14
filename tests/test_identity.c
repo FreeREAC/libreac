@@ -12,6 +12,7 @@
  * S-4000S-3208, read off the console's display on 2026-09-14. Every negative arm proves a malformed
  * or unanswered address stays a FACT (has_* clear), never a guess. */
 #include <reac/reac_identity.h>
+#include <reac/reac_link_state.h>
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac.h>
 #include <stdio.h>
@@ -67,6 +68,39 @@ static size_t build_identity_reply(uint8_t *frame, uint16_t addr_lo,
 	b[20 + plen] = 0x7f;                                 /* stand-in SysEx cksum */
 	b[21 + plen] = 0xf7;
 	return REAC_FRAME_BYTES;
+}
+
+/* A recording stand-in for pw_properties: reac_box_identity_publish COMPOSES AND
+ * STAMPS in one act, so what a consumer reads — which key, what value, written at
+ * all — is what this asserts. Merge semantics, like the real dict. */
+#define FAKE_MAX 8
+struct fake_props {
+	char key[FAKE_MAX][40];
+	char val[FAKE_MAX][40];
+	int  n;
+};
+
+static void fake_set(void *ctx, const char *key, const char *value)
+{
+	struct fake_props *f = ctx;
+	for (int i = 0; i < f->n; i++)
+		if (strcmp(f->key[i], key) == 0) {
+			snprintf(f->val[i], sizeof f->val[i], "%s", value);
+			return;
+		}
+	if (f->n == FAKE_MAX)
+		return;
+	snprintf(f->key[f->n], sizeof f->key[f->n], "%s", key);
+	snprintf(f->val[f->n], sizeof f->val[f->n], "%s", value);
+	f->n++;
+}
+
+static const char *fake_get(const struct fake_props *f, const char *key)
+{
+	for (int i = 0; i < f->n; i++)
+		if (strcmp(f->key[i], key) == 0)
+			return f->val[i];
+	return NULL;
 }
 
 int main(void)
@@ -206,6 +240,49 @@ int main(void)
 
 		/* NULL arguments. */
 		CHK(reac_ctrl_identity_reply(NULL, sizeof frame, &got_addr, &pl, &pll) == -1);
+	}
+
+	/* ---- the BADGE: one decoded identity -> the three node properties ---- */
+	{
+		struct fake_props f;
+		memset(&f, 0, sizeof f);
+
+		/* An S-1608: firmware 2.200 at 0x0000, REAC 2.302 at 0x0600 — the two
+		 * numbers the console displays side by side. They must land on DIFFERENT
+		 * keys with DIFFERENT values; substituting one for the other is the whole
+		 * defect this badge exists to prevent. */
+		reac_identity_init(&id);
+		CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE, FW_S1608, 4) == 1);
+		CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_REAC_VERSION, VER_S1608, 8) == 1);
+		reac_box_identity_publish(&id, fake_set, &f);
+		CHK(f.n == 3);
+		CHK(strcmp(fake_get(&f, REAC_PROP_BOX_FIRMWARE), "2.200") == 0);
+		CHK(strcmp(fake_get(&f, REAC_PROP_BOX_REAC_VERSION), "2.302") == 0);
+		CHK(strcmp(fake_get(&f, REAC_PROP_BOX_HW), "00000002 00030002") == 0);
+
+		/* An S-4000S-3208 over the same dict: every key is re-stamped, so a box
+		 * swap cannot leave the previous box's version standing. */
+		reac_identity_init(&id);
+		CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE, FW_S4000S, 4) == 1);
+		CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_REAC_VERSION, VER_S4000S, 8) == 1);
+		reac_box_identity_publish(&id, fake_set, &f);
+		CHK(f.n == 3);
+		CHK(strcmp(fake_get(&f, REAC_PROP_BOX_FIRMWARE), "2.500") == 0);
+		CHK(strcmp(fake_get(&f, REAC_PROP_BOX_REAC_VERSION), "2.102") == 0);
+
+		/* The box drops: an empty identity CLEARS all three rather than leaving
+		 * the departed box's numbers behind a merging update. */
+		reac_identity_init(&id);
+		reac_box_identity_publish(&id, fake_set, &f);
+		CHK(strcmp(fake_get(&f, REAC_PROP_BOX_FIRMWARE), "") == 0);
+		CHK(strcmp(fake_get(&f, REAC_PROP_BOX_REAC_VERSION), "") == 0);
+		CHK(strcmp(fake_get(&f, REAC_PROP_BOX_HW), "") == 0);
+
+		/* NULL identity is the same fact; NULL set is a no-op, not a crash. */
+		memset(&f, 0, sizeof f);
+		reac_box_identity_publish(NULL, fake_set, &f);
+		CHK(f.n == 3 && strcmp(fake_get(&f, REAC_PROP_BOX_REAC_VERSION), "") == 0);
+		reac_box_identity_publish(&id, NULL, &f);
 	}
 
 	printf("test_identity: all checks passed\n");

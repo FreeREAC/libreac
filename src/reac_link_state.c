@@ -83,3 +83,33 @@ void reac_box_master_identity_publish(unsigned width, uint64_t mac48, int locked
 	}
 	reac_box_mac_publish(mac48, set, ctx);
 }
+
+void reac_box_identity_publish(const struct reac_identity *id,
+                               reac_prop_set_fn set, void *ctx)
+{
+	if (!set)
+		return;
+
+	char fw[REAC_IDENTITY_FW_STR_CAP] = "";
+	if (id && id->has_fw)
+		reac_identity_fw_str(id->fw_milli, fw, sizeof fw);
+	set(ctx, REAC_PROP_BOX_FIRMWARE, fw);
+
+	char ver[REAC_IDENTITY_REAC_VER_STR_CAP] = "";
+	if (id && id->has_reac_version)
+		reac_identity_reac_ver_str(id->reac_version_major, id->reac_version_minor,
+		                           id->reac_version_patch, ver, sizeof ver);
+	set(ctx, REAC_PROP_BOX_REAC_VERSION, ver);
+
+	/* The same 0x0600 record as raw hex, beside the decoded version: its first u16
+	 * is undecoded, so the bytes stay readable rather than being thrown away by
+	 * the decode that resolved the other three. */
+	char hw[24] = "";
+	if (id && id->has_reac_version)
+		snprintf(hw, sizeof hw, "%02x%02x%02x%02x %02x%02x%02x%02x",
+		         id->reac_version_raw[0], id->reac_version_raw[1],
+		         id->reac_version_raw[2], id->reac_version_raw[3],
+		         id->reac_version_raw[4], id->reac_version_raw[5],
+		         id->reac_version_raw[6], id->reac_version_raw[7]);
+	set(ctx, REAC_PROP_BOX_HW, hw);
+}
