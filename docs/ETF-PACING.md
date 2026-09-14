@@ -116,6 +116,15 @@ A lead is buffered audio: it is latency, and it must stay far inside the TX ring
 
 ## The `tc` commands
 
+Two operational hazards, both met on 2026-09-14 while running the fair comparison:
+
+- **The qdisc and the backend are one setting.** With `skip_sock_check`, the etf qdisc drops every
+  frame that carries no launch time. A daemon running the thread backend under a leftover etf
+  qdisc therefore transmits *nothing*: 0 frames in a 60 s window, and the box loses its master.
+  Remove the qdisc whenever `REACPW_PACER` is not `etf`, and never install one without it.
+- **`tc qdisc replace` fails on an existing etf qdisc** ("Change operation not supported by
+  specified qdisc"): the discipline supports no change operation. Use `del` then `add`.
+
 `sch_etf` is a module and is **not loaded by default** on the desk:
 
     sudo modprobe sch_etf
@@ -206,6 +215,23 @@ and to put it back on the thread arm:
 
 The journal names the backend and the layer that chose it on every open, so which arm is running is
 read off the daemon rather than remembered.
+
+### Measured on the TX device, 2026-09-14 evening
+
+The first table (mirror capture) read thread ≈ etf; a capture on the *transmitting* device does
+not. Same build for both arms (libreac 1.1.2-2.etf, reac-pw 1.0.6-2.etf), one S-4000S-3208 per
+link, 60 s at 8000 fps, `pace_hist` at 1 µs; full rows and the reading in
+`reac-captures/pace-compare-2026-09-14/direct-link-table.txt`.
+
+| arm | interval sd µs | p99 µs | p99.9 µs | late ≥ 1.5× /s | late ≥ 4× /s | catch-up /s |
+|---|---|---|---|---|---|---|
+| PCI VLAN, thread | 28.5 | 134 | 595 | 37.0 | 13.4 | 96.3 |
+| PCI VLAN, etf | 2.7 | 127 | 136 | 0.45 | 0.03 | 0.55 |
+| USB direct, thread | 15.3 | 131 | 308 | 27.0 | 2.3 | 41.3 |
+| USB direct, etf | 1.9 | 128 | 131 | 0.44 | 0.00 | 0.49 |
+
+Both NICs are software-only (no PHC), so the etf rows measure the kernel's hrtimer release, not a
+hardware launch. The daemon's own CPU did not rise (1275 vs 1612 process jiffies on the PCI pair).
 
 ## What this does not prove
 
