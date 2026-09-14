@@ -119,12 +119,12 @@ int main(int argc, char **argv)
 	}
 
 	char kind[32] = { 0 };
-	enum reac_etf_qdisc q = reac_etf_qdisc_probe(tx_idx, kind, sizeof kind);
+	enum reac_etf_qdisc_state q = reac_etf_qdisc_state(tx_idx, kind, sizeof kind);
 	printf("etf_probe: tx=%s rx=%s fps=%d count=%d lead=%d us arm=%s\n",
 	       tx_if, rx_if, fps, count, lead_us, use_etf ? "etf" : "no-etf (control)");
 	printf("  tx qdisc: root '%s', etf %s\n", kind[0] ? kind : "(none)",
-	       q == REAC_ETF_QDISC_ETF ? "PRESENT"
-	       : q == REAC_ETF_QDISC_ABSENT ? "ABSENT" : "UNREADABLE");
+	       q == REAC_ETF_QDISC_PRESENT ? "PRESENT"
+	       : q == REAC_ETF_QDISC_NONE ? "ABSENT" : "UNREADABLE");
 
 	int tai = reac_etf_tai_offset();
 	printf("  kernel TAI offset: %d s\n", tai);

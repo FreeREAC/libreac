@@ -189,24 +189,11 @@ enum reac_etf_refusal reac_etf_lead_check(unsigned lead_us);
  * indistinguishable from no backend at all, so this is checked before the backend
  * claims to be running.
  *
- * The probe is an RTM_GETQDISC dump over the rtnetlink socket the transport already
- * speaks, filtered to one ifindex: no `tc` subprocess (the daemon has none, by
- * ruling), no parsing of a command's output. It accepts an etf qdisc ANYWHERE on
- * the device, not only at the root, because on a multiqueue NIC etf is attached per
- * TX queue under an `mq` root — see docs/ETF-PACING.md for both forms. */
-enum reac_etf_qdisc {
-	REAC_ETF_QDISC_UNREADABLE = 0,  /* the dump failed — NOT the same as absent */
-	REAC_ETF_QDISC_ETF,             /* etf is attached: launch times are honoured */
-	REAC_ETF_QDISC_ABSENT,          /* the device has qdiscs, none of them etf */
-};
-
-/* Probe `ifindex` for an etf qdisc. `kind` (may be NULL) receives the name of the
- * ROOT qdisc found, so a refusal can say what is there instead of what is not.
- *
- * UNREADABLE IS NOT ABSENT. A dump that could not be made says so with its own
- * value: reporting "no etf" from a netlink socket that never opened is the
- * broken-search failure, and it would refuse a correctly configured rig. */
-enum reac_etf_qdisc reac_etf_qdisc_probe(int ifindex, char *kind, size_t cap);
+ * The probe, and the two doors that INSTALL and REMOVE the qdisc, live in the
+ * installed header <reac/transport/reac_etf_qdisc.h>: reading what is on a device
+ * is the same question whether the pacer asks it at open or the daemon asks it
+ * before deciding what to install, and one question gets one implementation. */
+#include <reac/transport/reac_etf_qdisc.h>
 
 /* ---- the socket ----------------------------------------------------------- *
  *

@@ -42,4 +42,5 @@ group_map_scan
 test_tap
 pace_hist
 test_reac_etf
+test_reac_etf_qdisc
 etf_probe

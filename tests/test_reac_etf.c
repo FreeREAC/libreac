@@ -17,6 +17,9 @@
  * about eight minutes. The control below re-measures that number every run, so the
  * exactness test is never the only thing asserting it.
  *
+ * The qdisc probe and the two qdisc doors have their own suite
+ * (tests/test_reac_etf_qdisc.c), byte-exact against what iproute2 sends.
+ *
  * The refusals are tested through the seam rather than by finding a kernel that
  * lacks SO_TXTIME: a fake setsockopt that refuses, and a TAI offset of 0 handed in.
  * Both are the conditions an operator will actually meet — a container without
@@ -25,8 +28,6 @@
 #define _GNU_SOURCE
 #endif
 #include "reac_etf.h"
-
-#include <net/if.h>       /* if_nametoindex — the qdisc probe's positive control */
 
 #include <inttypes.h>
 #include <errno.h>
@@ -294,39 +295,7 @@ static void test_lead_bounds(void)
 	       REAC_ETF_LEAD_US_DEFAULT, REAC_ETF_LEAD_US_MIN, REAC_ETF_LEAD_US_MAX);
 }
 
-/* ---- 5. the qdisc probe can SEE a qdisc before it reports one absent --------
- *
- * The probe's own control. An instrument that has not been shown to detect the
- * presence cannot testify about the absence, and "no etf qdisc on this NIC" is an
- * absence claim that REFUSES THE BACKEND. `lo` exists on every machine and every
- * container, and its root qdisc is a real qdisc with a real name — so the probe
- * must come back readable and NAME it. A probe that returned UNREADABLE here would
- * be refusing correctly configured rigs. */
-static void test_qdisc_probe_reads_a_real_device(void)
-{
-	unsigned idx = if_nametoindex("lo");
-	if (!idx) {
-		printf("  qdisc: NO CONTROL RUN — this host has no `lo` to probe\n");
-		fails++;
-		return;
-	}
-	char kind[32];
-	enum reac_etf_qdisc q = reac_etf_qdisc_probe((int)idx, kind, sizeof kind);
-	CHECK(q != REAC_ETF_QDISC_UNREADABLE,
-	      "the qdisc dump was unreadable on `lo` — every refusal this probe makes "
-	      "would be a false one");
-	CHECK(kind[0] != '\0',
-	      "the probe read the dump but named no root qdisc for `lo`; it cannot "
-	      "detect a presence, so its absences mean nothing");
-	/* `lo` is not an ETF device, so the verdict must be ABSENT — the probe
-	 * distinguishing "read it, no etf" from "could not read" is the whole point. */
-	CHECK(q == REAC_ETF_QDISC_ABSENT,
-	      "`lo` probed as %d; a loopback carries no etf qdisc", (int)q);
-	printf("  qdisc: probe reads `lo` root qdisc \"%s\" and reports ABSENT — it can "
-	       "see a presence, so its absence is evidence\n", kind);
-}
-
-/* ---- 6. the control message carries the launch time, byte for byte --------- */
+/* ---- 5. the control message carries the launch time, byte for byte -------- */
 static void test_stamp_carries_the_launch_time(void)
 {
 	uint8_t buf[REAC_ETF_CMSG_SPACE];
@@ -366,7 +335,6 @@ int main(void)
 	test_steer_does_not_reset_the_remainder();
 	test_refusals();
 	test_lead_bounds();
-	test_qdisc_probe_reads_a_real_device();
 	test_stamp_carries_the_launch_time();
 
 	/* The real TAI offset on THIS machine, printed rather than asserted: a build
