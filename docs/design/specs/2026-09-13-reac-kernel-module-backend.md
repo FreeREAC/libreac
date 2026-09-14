@@ -1,6 +1,8 @@
 # A kernel-module backend behind `struct reac_handle`
 
-Status: draft for the operator
+Status: SUPERSEDED by the ETF backend (`docs/ETF-PACING.md`), on the 2026-09-14 TX-device
+measurements in `reac-captures/pace-compare-2026-09-14/direct-link-table.txt`. reac-kmod stays
+PARKED and source-complete.
 
 - **Author:** Pau Aliagas <linuxnow@gmail.com>
 - **Governs:** how the REAC realtime data path may run inside a Linux kernel module while every
