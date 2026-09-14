@@ -55,6 +55,13 @@ static int store_model_name(struct reac_identity *id, const uint8_t *p, size_t l
 	return 1;
 }
 
+/* The 0x0600 record is four u16be words: a reserved word then major, minor and
+ * patch. Every byte pair is read big-endian, the order the wire carries. */
+static uint16_t u16be(const uint8_t *p)
+{
+	return (uint16_t)((uint16_t)p[0] << 8 | p[1]);
+}
+
 int reac_identity_ingest(struct reac_identity *id, uint16_t addr_lo,
                          const uint8_t *payload, size_t len)
 {
@@ -72,11 +79,14 @@ int reac_identity_ingest(struct reac_identity *id, uint16_t addr_lo,
 	}
 	case REAC_IDENTITY_ADDR_MODEL_NAME:
 		return store_model_name(id, payload, len);
-	case REAC_IDENTITY_ADDR_HW_BLOCK:
-		if (len < REAC_IDENTITY_HW_LEN)
+	case REAC_IDENTITY_ADDR_REAC_VERSION:
+		if (len < REAC_IDENTITY_REAC_VER_LEN)
 			return 0;
-		memcpy(id->hw_block, payload, REAC_IDENTITY_HW_LEN);
-		id->has_hw_block = 1;
+		memcpy(id->reac_version_raw, payload, REAC_IDENTITY_REAC_VER_LEN);
+		id->reac_version_major = u16be(payload + 2);
+		id->reac_version_minor = u16be(payload + 4);
+		id->reac_version_patch = u16be(payload + 6);
+		id->has_reac_version = 1;
 		return 1;
 	default:
 		return 0;
@@ -99,6 +109,41 @@ int reac_identity_fw_str(uint16_t fw_milli, char *out, size_t cap)
 	out[w++] = (char)('0' + (frac / 100) % 10);
 	out[w++] = (char)('0' + (frac / 10) % 10);
 	out[w++] = (char)('0' + frac % 10);
+	out[w] = '\0';
+	return w;
+}
+
+/* Decimal, no padding, no libc. Returns the digits written. A uint16_t is at
+ * most five digits, which is what REAC_IDENTITY_REAC_VER_STR_CAP budgets for. */
+static int write_uint(char *out, uint16_t v)
+{
+	char tmp[5];
+	int n = 0;
+	do {
+		tmp[n++] = (char)('0' + v % 10u);
+		v = (uint16_t)(v / 10u);
+	} while (v);
+	for (int i = 0; i < n; i++)
+		out[i] = tmp[n - 1 - i];
+	return n;
+}
+
+int reac_identity_reac_ver_str(uint16_t major, uint16_t minor, uint16_t patch,
+                               char *out, size_t cap)
+{
+	if (!out || cap < REAC_IDENTITY_REAC_VER_STR_CAP)
+		return -1;
+	/* `major.minorPP` — what the M-200i prints: the minor and the patch run
+	 * together with the patch zero-padded to two digits, so (2,3,2) is "2.302".
+	 * A patch of 100 or more (never seen) widens rather than truncating, because
+	 * a wrong version is worse than a long one. */
+	int w = 0;
+	w += write_uint(out + w, major);
+	out[w++] = '.';
+	w += write_uint(out + w, minor);
+	if (patch < 10)
+		out[w++] = '0';
+	w += write_uint(out + w, patch);
 	out[w] = '\0';
 	return w;
 }

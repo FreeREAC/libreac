@@ -6,7 +6,10 @@
  * (identity_data; worked exchange m200-BIDIR-coldboot-2026-07-11 frames
  * 3475..3479). The firmware digits are cross-checked against Roland's own
  * release packages (s0808_sys_v1003, s1608_sys_ver2200, s4000_sys_ver2500), so
- * these are not self-referential goldens. Every negative arm proves a malformed
+ * these are not self-referential goldens. The addr 0x0600 REAC version is pinned
+ * the same way: the strings this decode produces are the strings an M-200i prints
+ * beside those firmwares — "REAC 2.302" for the S-1608 and "REAC 2.102" for the
+ * S-4000S-3208, read off the console's display on 2026-09-14. Every negative arm proves a malformed
  * or unanswered address stays a FACT (has_* clear), never a guess. */
 #include <reac/reac_identity.h>
 #include <reac/reac_ctrlblk.h>
@@ -26,10 +29,12 @@ static const uint8_t FW_S4000S[4] = { 0x02, 0x05, 0x00, 0x00 };  /* 2.500 */
 static const uint8_t NAME_S0808[11] = {
 	0x01, 0x53, 0x2d, 0x30, 0x38, 0x30, 0x38, 0x00, 0x00, 0x00, 0x00 };
 
-/* addr 0x0600 hardware block, per-model constant (carried raw, not interpreted). */
-static const uint8_t HW_S0808[8]  = { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
-static const uint8_t HW_S1608[8]  = { 0x00, 0x00, 0x00, 0x02, 0x00, 0x03, 0x00, 0x02 };
-static const uint8_t HW_S4000S[8] = { 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x02 };
+/* addr 0x0600 REAC version: four u16be, a reserved word then major.minor.patch.
+ * The M-200i prints the last three as `major.minorPP` — "2.302" for the S-1608 and
+ * "2.102" for the S-4000S-3208, both read off the console's display 2026-09-14. */
+static const uint8_t VER_S0808[8]  = { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 };
+static const uint8_t VER_S1608[8]  = { 0x00, 0x00, 0x00, 0x02, 0x00, 0x03, 0x00, 0x02 };
+static const uint8_t VER_S4000S[8] = { 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x02 };
 
 
 /* Lay a single-record DT1 identity REPLY into a raw frame the way the wire
@@ -67,11 +72,12 @@ static size_t build_identity_reply(uint8_t *frame, uint16_t addr_lo,
 int main(void)
 {
 	char buf[REAC_IDENTITY_FW_STR_CAP];
+	char vbuf[REAC_IDENTITY_REAC_VER_STR_CAP];
 
 	/* ---- S-0808: answers all three addresses ---- */
 	struct reac_identity id;
 	reac_identity_init(&id);
-	CHK(id.has_fw == 0 && id.has_model_name == 0 && id.has_hw_block == 0);
+	CHK(id.has_fw == 0 && id.has_model_name == 0 && id.has_reac_version == 0);
 
 	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE, FW_S0808, 4) == 1);
 	CHK(id.has_fw == 1 && id.fw_milli == 1003);
@@ -81,24 +87,43 @@ int main(void)
 	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_MODEL_NAME, NAME_S0808, sizeof NAME_S0808) == 1);
 	CHK(id.has_model_name == 1 && strcmp(id.model_name, "S-0808") == 0);
 
-	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_HW_BLOCK, HW_S0808, 8) == 1);
-	CHK(id.has_hw_block == 1 && memcmp(id.hw_block, HW_S0808, 8) == 0);
+	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_REAC_VERSION, VER_S0808, 8) == 1);
+	CHK(id.has_reac_version == 1 && memcmp(id.reac_version_raw, VER_S0808, 8) == 0);
+	CHK(id.reac_version_major == 1 && id.reac_version_minor == 0 && id.reac_version_patch == 0);
+	/* PREDICTED, not read: no M-200i display has been seen for an S-0808. */
+	CHK(reac_identity_reac_ver_str(id.reac_version_major, id.reac_version_minor,
+	                               id.reac_version_patch, vbuf, sizeof vbuf) == 5);
+	CHK(strcmp(vbuf, "1.000") == 0);
 
 	/* ---- S-1608 and S-4000S: firmware + hw block, but NO model name ---- */
 	reac_identity_init(&id);
 	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE, FW_S1608, 4) == 1);
 	CHK(id.fw_milli == 2200);
 	CHK(reac_identity_fw_str(id.fw_milli, buf, sizeof buf) == 5 && strcmp(buf, "2.200") == 0);
-	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_HW_BLOCK, HW_S1608, 8) == 1);
-	CHK(memcmp(id.hw_block, HW_S1608, 8) == 0);
+	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_REAC_VERSION, VER_S1608, 8) == 1);
+	CHK(memcmp(id.reac_version_raw, VER_S1608, 8) == 0);
+	CHK(id.reac_version_major == 2 && id.reac_version_minor == 3 && id.reac_version_patch == 2);
+	/* The console's own display: "REAC 2.302" beside "Firmware 2.200". */
+	CHK(reac_identity_reac_ver_str(id.reac_version_major, id.reac_version_minor,
+	                               id.reac_version_patch, vbuf, sizeof vbuf) == 5);
+	CHK(strcmp(vbuf, "2.302") == 0);
 	CHK(id.has_model_name == 0);   /* the S-1608 never answers 0x1000 — a fact */
 
 	reac_identity_init(&id);
 	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE, FW_S4000S, 4) == 1);
 	CHK(id.fw_milli == 2500);
 	CHK(reac_identity_fw_str(id.fw_milli, buf, sizeof buf) == 5 && strcmp(buf, "2.500") == 0);
-	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_HW_BLOCK, HW_S4000S, 8) == 1);
-	CHK(memcmp(id.hw_block, HW_S4000S, 8) == 0);
+	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_REAC_VERSION, VER_S4000S, 8) == 1);
+	CHK(memcmp(id.reac_version_raw, VER_S4000S, 8) == 0);
+	CHK(id.reac_version_major == 2 && id.reac_version_minor == 1 && id.reac_version_patch == 2);
+	/* The console's own display: "REAC 2.102" beside "Firmware 2.500". */
+	CHK(reac_identity_reac_ver_str(id.reac_version_major, id.reac_version_minor,
+	                               id.reac_version_patch, vbuf, sizeof vbuf) == 5);
+	CHK(strcmp(vbuf, "2.102") == 0);
+	/* The REAC version and the firmware are DIFFERENT numbers off DIFFERENT
+	 * addresses: 2.102 against 2.500 on the same box, so neither can stand in
+	 * for the other. */
+	CHK(id.fw_milli == 2500);
 	CHK(id.has_model_name == 0);
 
 	/* ---- negatives: a malformed or unanswered address stays a fact ---- */
@@ -123,13 +148,22 @@ int main(void)
 	CHK(id.has_model_name == 0);
 
 	/* A short hardware block is refused whole (no partial copy). */
-	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_HW_BLOCK, HW_S0808, 7) == 0);
-	CHK(id.has_hw_block == 0);
+	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_REAC_VERSION, VER_S0808, 7) == 0);
+	CHK(id.has_reac_version == 0);
 
 	/* Bad arguments. */
 	CHK(reac_identity_ingest(NULL, REAC_IDENTITY_ADDR_FIRMWARE, FW_S0808, 4) == -1);
 	CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE, NULL, 4) == -1);
 	CHK(reac_identity_fw_str(1003, buf, 4) == -1);   /* buffer too small */
+	CHK(reac_identity_reac_ver_str(2, 3, 2, vbuf, 4) == -1);   /* buffer too small */
+	CHK(reac_identity_reac_ver_str(2, 3, 2, NULL, sizeof vbuf) == -1);
+
+	/* The pad is on the PATCH, not the minor: (2,10,2) prints 2.1002, and a
+	 * two-digit patch fills the pad instead of widening. */
+	CHK(reac_identity_reac_ver_str(2, 10, 2, vbuf, sizeof vbuf) == 6);
+	CHK(strcmp(vbuf, "2.1002") == 0);
+	CHK(reac_identity_reac_ver_str(1, 0, 25, vbuf, sizeof vbuf) == 5);
+	CHK(strcmp(vbuf, "1.025") == 0);
 
 	/* A re-sent reply is idempotent (a poll may repeat). */
 	reac_identity_init(&id);
@@ -154,11 +188,11 @@ int main(void)
 		CHK(id.fw_milli == 1003);
 
 		/* S-1608 hardware block reply: addr 0x0600, eight bytes. */
-		build_identity_reply(frame, REAC_IDENTITY_ADDR_HW_BLOCK, HW_S1608, 8);
+		build_identity_reply(frame, REAC_IDENTITY_ADDR_REAC_VERSION, VER_S1608, 8);
 		CHK(reac_ctrl_identity_reply(frame, sizeof frame, &got_addr, &pl, &pll) == 1);
-		CHK(got_addr == REAC_IDENTITY_ADDR_HW_BLOCK && pll == 8);
+		CHK(got_addr == REAC_IDENTITY_ADDR_REAC_VERSION && pll == 8);
 		CHK(reac_identity_ingest(&id, got_addr, pl, pll) == 1);
-		CHK(memcmp(id.hw_block, HW_S1608, 8) == 0);
+		CHK(memcmp(id.reac_version_raw, VER_S1608, 8) == 0);
 
 		/* An RQ1 POLL (command 0x11), not a reply, is not extracted. */
 		build_identity_reply(frame, REAC_IDENTITY_ADDR_FIRMWARE, FW_S0808, 4);

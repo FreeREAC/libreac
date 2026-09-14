@@ -404,9 +404,10 @@ static void sync_published_box(struct reac_pacer *p)
 		 * a drop re-fires set_box instead of deduping into silence. */
 		p->declared_in = p->declared_out = 0;
 		/* And forget the box's identity — a NEW box on this segment must not
-		 * wear the departed one's firmware/hw until it answers for itself. */
+		 * wear the departed one's firmware or REAC version until it answers for
+		 * itself. */
 		if (p->rx_identity.has_fw || p->rx_identity.has_model_name ||
-		    p->rx_identity.has_hw_block) {
+		    p->rx_identity.has_reac_version) {
 			unsigned s = identity_write_begin(p);
 			reac_identity_init(&p->rx_identity);
 			identity_write_end(p, s);
