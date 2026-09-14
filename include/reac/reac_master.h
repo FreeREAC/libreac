@@ -310,8 +310,11 @@ struct reac_master {
 	 *     (341 chunks). The interval is fps/500 and it is a RATIO — exactly 8
 	 *     slots at 4000 fps and 16 at 8000, but 7.35 at 3675 — so the chunks are
 	 *     placed by the rounded k*fps/500 rather than by a whole-slot stride
-	 *     (`burst_slot` in reac_master.c). Truncating it to 7 put the 44.1 kHz
-	 *     transfer out in 2392 slots where a real M-200 takes 2511;
+	 *     (`burst_slot` / `burst_index_at` in reac_master.c — a pure function of
+	 *     the slot, deliberately NOT a cursor field: this struct is public and
+	 *     reac-pw embeds it, so a field added here is an ABI break). Truncating
+	 *     the ratio to 7 put the 44.1 kHz transfer out in 2392 slots where a real
+	 *     M-200 takes 2511;
 	 *   - a probe-free PAUSE for the rest of the cycle, holding sub02 right
 	 *     after the burst, ONE chanmap window mid-pause (the 49-window sweep
 	 *     thus takes 49 cycles), and sub01 at the cycle's tail.
@@ -325,9 +328,6 @@ struct reac_master {
 	                           * fps/500 — the LAST frame's offset behind the
 	                           * final chunk. The chunks themselves are placed
 	                           * by burst_slot(), which keeps the ratio.        */
-	int      burst_k;         /* next burst chunk to emit, 0..341; the header
-	                           * re-opens it. A cursor, not a modulo: the slots
-	                           * are not evenly spaced at 44.1 kHz.             */
 	int      burst_end;       /* last chunk slot: burst_slot(340)               */
 	int      sub02_off;       /* cdea 01 02 slot: burst_end + probe_stride      */
 	int      chanmap_off;     /* chanmap slot: fps*5953/4000 (mid-pause)        */

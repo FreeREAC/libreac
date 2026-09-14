@@ -99,7 +99,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -126,6 +126,13 @@ test: tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c
 	./test_master_carriers
 	$(CC) $(CFLAGS) $(INC) tests/test_master_capture.c libreac.a -lm -o test_master_capture
 	./test_master_capture
+	# THE ABI RATCHET. Every other test is rebuilt against the headers it is
+	# testing and therefore cannot see a struct member move; reac-pw is not.
+	# Needs the transport headers' vendored reac-pw ones, like the transport
+	# build does.
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests $(INC) -Ipackaging/vendor/reac-pw-headers \
+	    tests/test_abi_layout.c libreac.a -lm -o test_abi_layout
+	./test_abi_layout
 	# A SOURCE-SHAPE ARM, not a value arm. The head-amp base must have exactly
 	# one source in the code — the announced strap. A per-width table agrees
 	# with the announce on every chassis we own, so no test built from our own
@@ -167,12 +174,21 @@ corpus: corpus_check
 #                   "nothing was sent" claim
 #   group_map_scan  every ENROLL group map with its talker, VLAN-tag aware, with
 #                   a per-talker census as the control for a missing shape
-WIRE_TOOLS = headamp_trace wire_census ctrl_delta upstream_watch slotmap_watch seq_gaps group_map_scan
+# The pcap readers: one pattern rule serves all of them.
+WIRE_TOOLS_PCAP = headamp_trace wire_census ctrl_delta upstream_watch slotmap_watch seq_gaps group_map_scan
+# fake_box is a wire tool too, but it TRANSMITS: it opens an AF_PACKET socket
+# where the others only read a file, so it has its own recipe below.
+WIRE_TOOLS = $(WIRE_TOOLS_PCAP) fake_box
 
 wire-tools: $(WIRE_TOOLS)
 
-$(WIRE_TOOLS): %: tools/%.c libreac.a
+$(WIRE_TOOLS_PCAP): %: tools/%.c libreac.a
 	$(CC) $(CFLAGS) $(INC) $< libreac.a -lm -o $@
+
+# fake_box opens an AF_PACKET socket, so it needs the GNU headers the other wire
+# tools (pure pcap readers) do not. Its own rule rather than widening theirs.
+fake_box: tools/fake_box.c libreac.a
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) $< libreac.a -lm -o $@
 
 # --- libreac-transport: sockets, pacer, RT threads, VLAN/topology, ring, segment lock ---
 # The pieces of reac-pw that never touch PipeWire
@@ -221,7 +237,7 @@ test-transport: tests/test_tap.c libreac-transport.a libreac.a
 	tools/conformance-tap-silent.sh
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_abi_layout corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
