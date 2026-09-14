@@ -40,3 +40,4 @@ test_master_capture
 test_abi_layout
 group_map_scan
 test_tap
+pace_hist
