@@ -25,6 +25,8 @@ const char *reac_etf_refusal_name(enum reac_etf_refusal r)
 	switch (r) {
 	case REAC_ETF_OK:                   return "ok";
 	case REAC_ETF_REFUSE_NO_TXTIME:     return "this kernel has no SO_TXTIME on this socket";
+	case REAC_ETF_REFUSE_TXTIME_EPERM:  return "SO_TXTIME refused for want of CAP_NET_ADMIN "
+	                                           "— the option exists, this process may not set it";
 	case REAC_ETF_REFUSE_NO_QDISC:      return "no etf qdisc on this netdev — every launch "
 	                                           "time would be stamped and then ignored";
 	case REAC_ETF_REFUSE_TAI_UNSET:     return "the kernel's TAI offset is 0 — CLOCK_TAI is "
@@ -248,8 +250,14 @@ enum reac_etf_refusal reac_etf_socket_arm(int fd, int tai_offset_s,
 	 * SOF_TXTIME_REPORT_ERRORS puts a dropped frame on the socket's error queue,
 	 * where reac_etf_drain_errors can count it, instead of letting it vanish. */
 	st.flags = SOF_TXTIME_REPORT_ERRORS;
-	if (setopt(fd, SOL_SOCKET, SO_TXTIME, &st, sizeof st) < 0)
-		return REAC_ETF_REFUSE_NO_TXTIME;
+	if (setopt(fd, SOL_SOCKET, SO_TXTIME, &st, sizeof st) < 0) {
+		/* BY CODE, NOT BY MESSAGE, and the two are not the same problem: EPERM is
+		 * this process lacking CAP_NET_ADMIN (the option is there), anything else
+		 * is the option not being there. Folding them together would send an
+		 * operator after a kernel upgrade to fix a capability. */
+		return errno == EPERM ? REAC_ETF_REFUSE_TXTIME_EPERM
+		                      : REAC_ETF_REFUSE_NO_TXTIME;
+	}
 	return REAC_ETF_OK;
 }
 

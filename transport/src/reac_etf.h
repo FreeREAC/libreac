@@ -70,6 +70,16 @@ enum reac_etf_refusal {
 	REAC_ETF_OK = 0,
 	REAC_ETF_REFUSE_NO_TXTIME,     /* setsockopt(SO_TXTIME) refused: kernel too old,
 	                                * or the socket family does not carry it */
+	REAC_ETF_REFUSE_TXTIME_EPERM,  /* SO_TXTIME exists and we are not allowed to set
+	                                * it: it is gated on CAP_NET_ADMIN. MEASURED
+	                                * 2026-09-14 on r1 (kernel 7.1.9), uid 0 inside a
+	                                * container with NET_RAW but not NET_ADMIN: EPERM
+	                                * on both an AF_PACKET and a UDP socket. A
+	                                * DIFFERENT problem from "the kernel has no
+	                                * SO_TXTIME", with a different fix, so it is a
+	                                * different code — classifying both as "no
+	                                * support" would send an operator hunting for a
+	                                * kernel upgrade they do not need. */
 	REAC_ETF_REFUSE_NO_QDISC,      /* no etf qdisc on this netdev: every launch time
 	                                * would be stamped and then ignored */
 	REAC_ETF_REFUSE_TAI_UNSET,     /* the kernel's TAI offset is 0 — CLOCK_TAI is
@@ -221,6 +231,13 @@ int reac_etf_tai_offset(void);
  * the launch time becomes "no later than". A REAC slave recovers its word clock
  * from the inter-arrival interval, so early is exactly as wrong as late; we want
  * strict mode, where the packet leaves AT the time and not before.
+ *
+ * NEEDS CAP_NET_ADMIN. SO_TXTIME is capability-gated in the kernel, so this is the
+ * one precondition that is about the PROCESS rather than the machine. reac-pw
+ * already holds CAP_NET_ADMIN (it mints and marks VLAN sub-interfaces), so the
+ * backend costs the daemon no new capability — but a probe run by hand from a
+ * shell, or inside a container, will be refused with REAC_ETF_REFUSE_TXTIME_EPERM
+ * and that is about the caller, not about ETF.
  *
  * Returns REAC_ETF_OK, or the refusal code. */
 enum reac_etf_refusal reac_etf_socket_arm(int fd, int tai_offset_s,
