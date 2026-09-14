@@ -2,12 +2,25 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 #
-# pace-compare.sh -- the SAME metric, on the SAME rig, for both pacer backends.
+# pace-compare.sh -- the SAME metric, on the SAME rig, for every pacer backend.
 #
 # The question this exists to answer is the one that decides whether the kernel
 # module is worth building at all (2026-09-13-reac-kernel-module-backend.md, lane
-# 1): does an hrtimer cadence measure better than the SCHED_FIFO thread? A
-# comparison is only worth reading when both arms are measured by one instrument
+# 1): does an hrtimer cadence measure better than the SCHED_FIFO thread? The
+# operator's 2026-09-14 ruling widened it -- before anyone loads a module, the
+# STANDARD KERNEL PATH has to be on the same table: SO_TXTIME + the ETF qdisc,
+# where the kernel (or the NIC) releases the frame at a launch time the userspace
+# thread computed while only having to be EARLY. So there are three arms:
+#
+#   thread   clock_nanosleep + sendto. The egress instant is the thread's wake.
+#            (Named `userspace` before the ETF arm existed; both spellings are
+#            accepted so an older --out directory still prints.)
+#   etf      SO_TXTIME + SCM_TXTIME on an exact CLOCK_TAI grid + the etf qdisc.
+#            Still reac-pw's own thread, still one process -- what moved is who
+#            decides the instant. docs/ETF-PACING.md has its preconditions.
+#   kmod     the hrtimer cadence inside reac-kmod. Not loaded yet.
+#
+# A comparison is only worth reading when every arm is measured by one instrument
 # over one window with one definition of "late", so this script takes all three
 # measures per arm and prints ONE table:
 #
@@ -41,8 +54,8 @@ set -o pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HIST="$ROOT/pace_hist"
 
-IFACE=""; FPS=8000; SECS=60; OUT=""; UNIT="reac-pw"; SRC=""
-ARMS="userspace kmod"
+IFACE=""; TXIFACE=""; FPS=8000; SECS=60; OUT=""; UNIT="reac-pw"; SRC=""
+ARMS="thread etf kmod"
 declare -A PREPARE
 TABLE_ONLY=""
 
@@ -51,16 +64,18 @@ die() { echo "pace-compare: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--iface) IFACE=$2; shift 2 ;;
+	--tx-iface) TXIFACE=$2; shift 2 ;;
 	--fps) FPS=$2; shift 2 ;;
 	--secs) SECS=$2; shift 2 ;;
 	--out) OUT=$2; shift 2 ;;
 	--unit) UNIT=$2; shift 2 ;;
 	--src) SRC=$2; shift 2 ;;
 	--arms) ARMS=${2//,/ }; shift 2 ;;
-	--prepare-userspace) PREPARE[userspace]=$2; shift 2 ;;
+	--prepare-thread|--prepare-userspace) PREPARE[thread]=$2; PREPARE[userspace]=$2; shift 2 ;;
+	--prepare-etf) PREPARE[etf]=$2; shift 2 ;;
 	--prepare-kmod) PREPARE[kmod]=$2; shift 2 ;;
 	--table) TABLE_ONLY=$2; shift 2 ;;
-	-h|--help) sed -n '3,40p' "$0"; exit 0 ;;
+	-h|--help) sed -n '3,55p' "$0"; exit 0 ;;
 	*) die "unknown argument $1" ;;
 	esac
 done
@@ -97,6 +112,19 @@ measure_arm() {
 	pid=$(systemctl show -p MainPID --value "$UNIT" 2>/dev/null)
 	[ "$pid" = "0" ] && pid=""
 	[ -z "$pid" ] && pid=$(pgrep -x reac-pw | head -1)
+
+	# THE ETF ARM IS THE ONE THAT CAN LIE ABOUT ITSELF. A daemon can stamp a launch
+	# time on every frame and have the kernel ignore all of it, which is exactly how
+	# reac_repacer's --etf ran as a no-op for months: the wire looks like the thread
+	# arm and nothing says why. So the qdisc in force on the TX device is RECORDED
+	# with the measurement, and the table prints it beside the numbers -- an `etf`
+	# row over a `noqueue` qdisc is not an ETF measurement whatever its p99 says.
+	if [ -n "$TXIFACE" ]; then
+		tc qdisc show dev "$TXIFACE" 2>/dev/null > "$dir/qdisc.txt"
+		[ -s "$dir/qdisc.txt" ] || echo "qdisc unreadable on $TXIFACE" > "$dir/qdisc.txt"
+	else
+		echo "no --tx-iface given: the qdisc was not recorded" > "$dir/qdisc.txt"
+	fi
 
 	local start_epoch
 	start_epoch=$(date -u +%Y-%m-%d' '%H:%M:%S)
@@ -188,6 +216,12 @@ print_table() {
 	row_wire "  late >=4x /s"      late4x_ps
 	row_wire "  catch-up /s"       catchup_ps
 
+	echo "TX DEVICE QDISC (what the kernel was actually doing with the launch time)"
+	for arm in "${cols[@]}"; do
+		printf '    %-10s %s\n' "$arm:" \
+			"$(head -1 "$base/$arm/qdisc.txt" 2>/dev/null | sed 's/^qdisc //;s/ root refcnt.*//' || echo '-')"
+	done
+
 	echo "PACER (the arm's own telemetry -- a self-report, by construction)"
 	for arm in "${cols[@]}"; do
 		printf '    %-10s %s\n' "$arm:" "$(tail -1 "$base/$arm/health.txt" 2>/dev/null | sed 's/.*reac-health: //')"
@@ -209,6 +243,17 @@ print_table() {
   process's counters: read its cost in the system row, never the process row.
   A process row that fell to nearly nothing while the system row held is work
   that moved, not work that vanished.
+
+  The ETF arm keeps its thread, so its process row should NOT fall much: what
+  moved there is the release instant, not the work. Its qdisc row is the row
+  that says whether it was an ETF measurement at all -- `etf` means the launch
+  times were honoured, anything else (`noqueue`, `fq_codel`, `-`) means every
+  SCM_TXTIME was stamped and thrown away and the arm measured the thread.
+
+  On a NIC without ETF hardware offload -- the desk's RTL8125 is one, no PHC,
+  software timestamping only -- the ETF arm measures the KERNEL's hrtimer
+  release. It cannot measure a hardware launch, and no row here should be read
+  as if it had.
 
   Resolution: 1 us (classic pcap). A difference smaller than a microsecond is
   below this instrument and must not be claimed from this table.
