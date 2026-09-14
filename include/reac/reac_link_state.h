@@ -126,6 +126,14 @@
 #define REAC_PROP_MASTER_STATE  "reac.master.state"   /* us | foreign | none            */
 #define REAC_PROP_MASTER_MAC    "reac.master.mac"     /* the driving master, or "none"  */
 #define REAC_PROP_PACE_SOURCE   "reac.pace.source"    /* who owns the WIRE pace         */
+/* WHICH BACKEND OWNS THE EGRESS INSTANT, and — when it is not the one the default
+ * asked for — WHY. "etf" is the kernel releasing each frame at a launch time;
+ * "thread" is the pacer thread's own wake. ETF is the default since 2026-09-14, so
+ * a desk reading "thread" has either been told to (REACPW_PACER=thread) or could not
+ * meet a precondition, and the refusal row is the difference. "none" when there is
+ * nothing to explain. A fallback nobody can see is a silent no-op. */
+#define REAC_PROP_PACE_BACKEND  "reac.pace.backend"   /* etf | thread                   */
+#define REAC_PROP_PACE_REFUSAL  "reac.pace.backend-refusal"  /* none | why ETF is off   */
 /* A foreign master is live while WE are established — reported, never acted on (spec §6 Q1:
  * yielding drops a box mid-audio, holding breaks the one-master law, and the choice is the
  * operator's). "1" or "0". */
