@@ -269,6 +269,40 @@ link, 60 s at 8000 fps, `pace_hist` at 1 µs; full rows and the reading in
 Both NICs are software-only (no PHC), so the etf rows measure the kernel's hrtimer release, not a
 hardware launch. The daemon's own CPU did not rise (1275 vs 1612 process jiffies on the PCI pair).
 
+## Next lane: hardware launch on an Intel i226 (igc)
+
+Everything measured above is **software ETF** — the kernel's hrtimer releases the packet, which
+removes the pacer thread's wake jitter and not the driver's. An i225/i226 (`igc`) has ETF
+hardware offload on its TX queues and a PTP hardware clock, so the launch instant moves into
+the NIC. This is the brief for putting the desk on one.
+
+**1. What changes.** The etf qdisc moves off the VLAN device and onto a **hardware TX queue of
+the physical NIC**, under an `mqprio` parent, with `offload on` — a VLAN sub-interface has no TX
+queue of its own to offload onto, so `offload` does not exist there and the present software
+path is the only thing a VLAN device can do. The NIC's **PHC must be disciplined to
+`CLOCK_TAI`** by a `phc2sys` instance that **reac-pw's packaging owns** — a unit shipped by the
+RPM, guarded and reported like every other precondition, never a command someone remembers to
+run. The qdisc's `delta` and the pacer's `REACPW_PACER_LEAD_US` are both **re-measured** for the
+hardware path: their present values are derived from a thread's wake tail and a software qdisc,
+and neither term means the same thing once the NIC owns the instant.
+
+**2. What the daemon does.** It detects the two capabilities rather than being told them:
+`ETHTOOL_GET_TS_INFO` reporting `phc_index >= 0`, and `igc` launchtime on the queue. When both
+hold **and phc2sys reports locked**, it installs the offloaded qdisc; otherwise it installs the
+software etf it installs today. Either way the choice reaches the health/props line beside
+`reac.pace.backend`, and a refusal **names the errno and the fix** — never a silent downgrade,
+which is the same law the software path already follows.
+
+**3. Acceptance.** `tools/pace-compare.sh` on the i226, captured **on the TX device**, 60 s at
+8000 fps, one box per link — the same instrument and the same window as the software rows in
+this document, so the two tables are comparable line for line. Expected: interval standard
+deviation **well under 1 µs**, and **independent of desk load**, which is the property the
+software path cannot have because the release still rides a CPU.
+
+**4. What it does not touch.** The **receive** direction: nothing here measures or changes it.
+And the boxes **do not speak PTP** — the PHC exists to stamp launch times, not to discipline
+anything on the wire, so no box gains or loses a clock reference from this.
+
 ## What this does not prove
 
 - **The daemon-installed qdisc has not run on the rig.** The pacing arms in the table above
