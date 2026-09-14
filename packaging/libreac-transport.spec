@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.1.0
+Version:        1.1.1
 %global abi 4
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,8 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.1-1
+- Follows libreac 1.1.1; the pacer no longer tells the operator to bounce a linked, silent box.
 * Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.0-1
 - SONAME 3 -> 4, for the same reason .so.3 moved: `struct reac_pacer` EMBEDS a libreac
   struct that grew. libreac 1.1.0 decodes the identity page's 0x0600 record as the box's
