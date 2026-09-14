@@ -738,14 +738,24 @@ int reac_pacer_log_drain(struct reac_pacer *p, FILE *out)
 				        "nothing either way.)\n", ts,
 				        p->ifname[0] ? p->ifname : "?");
 			else if (frames == 0)
+				/* A LINKED, SILENT BOX LOOKS EXACTLY LIKE THIS, and it is not a
+				 * box to touch. Measured 2026-09-14 (reac-captures
+				 * desk-arrival-q4-2026-09-14): a box whose desk vanished stops
+				 * transmitting after ~5.6 s and stays silent, and a COMPLETED
+				 * scene transfer captures it with its cable never touched — it
+				 * answers 8.4 ms after the last chunk. So silence is what our own
+				 * push has to end, not evidence about the far end. */
 				fprintf(out, "reac-master: [%.6f] still PROBING: rx_box_frames=0 "
-				        "rx_joins=0 (carrier is up — the box is emitting NOTHING, "
-				        "so it is in BOOT and believes its OWN link is down: check "
-				        "the cable AT THE BOX)\n", ts);
+				        "rx_joins=0 (carrier is up. A box that is LINKED AND SILENT "
+				        "looks like this — it goes quiet when its desk leaves and "
+				        "answers a COMPLETED scene push, so do not bounce it yet. "
+				        "A box that is not there looks the same: check it is "
+				        "powered and cabled to THIS segment.)\n", ts);
 			else
 				fprintf(out, "reac-master: [%.6f] still PROBING: "
-				        "rx_box_frames=%llu rx_joins=%llu (%s — bounce the box "
-				        "PHY: it only cold-connects on link-up)\n", ts,
+				        "rx_box_frames=%llu rx_joins=%llu (%s — it is hearing us "
+				        "and not enrolling: capture the segment and check our scene "
+				        "push completes)\n", ts,
 				        (unsigned long long)frames, (unsigned long long)joins,
 				        e.a ? "box present, not joining" : "no sustained presence");
 			break;
