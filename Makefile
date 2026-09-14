@@ -151,6 +151,13 @@ corpus_check: tools/corpus_check.c libreac.a
 
 conformance:
 	tools/conformance-headamp-base.sh
+	# THE HARNESS IS AN INSTRUMENT, AND AN INSTRUMENT IS GATED LIKE ONE. The
+	# pacer comparison (2026-09-13-reac-kernel-module-backend.md, lane 1) is
+	# decided by a table; a table whose two columns cannot be made to differ
+	# would read as "no difference" on the day. This drives pace_hist and the
+	# table renderer with a clean grid and with the userspace pacer's own
+	# measured miss distribution, and requires them to separate.
+	tools/conformance-pace-harness.sh
 
 corpus: corpus_check
 	tools/run-corpus.sh
@@ -172,10 +179,13 @@ corpus: corpus_check
 #   slotmap_watch   the sliding slot-map window unrolled into per-slot state
 #   seq_gaps        per-talker frame-counter holes — the control for any
 #                   "nothing was sent" claim
+#   pace_hist       the inter-frame INTERVAL distribution per talker -- the
+#                   external truth for a pacer comparison, with its own
+#                   --self-test control (tools/pace-compare.sh runs both)
 #   group_map_scan  every ENROLL group map with its talker, VLAN-tag aware, with
 #                   a per-talker census as the control for a missing shape
 # The pcap readers: one pattern rule serves all of them.
-WIRE_TOOLS_PCAP = headamp_trace wire_census ctrl_delta upstream_watch slotmap_watch seq_gaps group_map_scan
+WIRE_TOOLS_PCAP = headamp_trace wire_census ctrl_delta upstream_watch slotmap_watch seq_gaps group_map_scan pace_hist
 # fake_box is a wire tool too, but it TRANSMITS: it opens an AF_PACKET socket
 # where the others only read a file, so it has its own recipe below.
 WIRE_TOOLS = $(WIRE_TOOLS_PCAP) fake_box
