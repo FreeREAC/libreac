@@ -817,20 +817,37 @@ enum reac_pace_source reac_pacer_pace_source(const struct reac_pacer *p);
  *   (launch - lead) and only has to be EARLY. reac_repacer measured the same
  *   mechanism tighten a relay's egress cadence from 3.6 us to 1.4 us of jitter.
  *
- * ETF HAS PRECONDITIONS AND THEY ARE REFUSED, NOT WORKED AROUND. An etf qdisc on
- * the device, SO_TXTIME on the socket, and a non-zero kernel TAI offset. If the
- * operator asked for ETF and one of them is missing, reac_pacer_open FAILS and names
- * the code. It does not quietly fall back to the thread backend: a run that believes
- * it is measuring launch-time pacing while the thread is doing the pacing is worse
- * than no run, and that exact silent no-op is what cost the prior art months
- * (docs/ETF-PACING.md).
+ * ETF IS THE DEFAULT (operator ruling, 2026-09-14: "we must go with qdisc and etf").
+ * Measured on the TX device, 60 s per arm, one S-4000S-3208 per link
+ * (reac-captures/pace-compare-2026-09-14/direct-link-table.txt): the interval
+ * standard deviation falls 28.5 -> 2.7 us on the PCI VLAN and 15.3 -> 1.9 us on the
+ * USB link, p99.9 falls 595 -> 136 us and 308 -> 131 us, and the late/catch-up
+ * population all but disappears (0.45/s against 27-37/s) — with no rise in the
+ * daemon's own CPU. REACPW_PACER=thread opts out.
+ *
+ * ETF HAS PRECONDITIONS, AND WHAT HAPPENS WHEN ONE IS MISSING DEPENDS ON WHO ASKED.
+ * An etf qdisc on the device, SO_TXTIME on the socket, and a non-zero kernel TAI
+ * offset.
+ *
+ *   THE OPERATOR ASKED (REACPW_PACER=etf, at any layer) — reac_pacer_open FAILS and
+ *   names the code. It does not quietly fall back: a run that believes it is
+ *   measuring launch-time pacing while the thread is doing the pacing is worse than
+ *   no run, and that exact silent no-op is what cost the prior art months.
+ *
+ *   NOBODY ASKED (the default) — the daemon still has to carry audio on a kernel
+ *   with no sch_etf or a machine whose clock nothing has disciplined. So it runs the
+ *   thread backend, logs ONE loud line naming the refusal and its fix, and PUBLISHES
+ *   the refusal (reac_pacer_backend_refusal) so the console shows which backend is
+ *   really on the wire. A fallback nobody can see is the same silent no-op wearing a
+ *   default's clothes.
  *
  * Selected by REACPW_PACER through reac_conf's existing layers — so it is
  * per-segment (REACPW_PACER_reacA) wherever the rig needs one segment on each arm
  * for a comparison, with no new cfg field and no public struct changing shape. */
 enum reac_pacer_backend {
-	REAC_PACER_BACKEND_THREAD = 0,   /* clock_nanosleep + sendto; the default */
-	REAC_PACER_BACKEND_ETF    = 1,   /* SO_TXTIME + SCM_TXTIME + the etf qdisc */
+	REAC_PACER_BACKEND_THREAD = 0,   /* clock_nanosleep + sendto */
+	REAC_PACER_BACKEND_ETF    = 1,   /* SO_TXTIME + SCM_TXTIME + the etf qdisc;
+	                                  * THE DEFAULT since 2026-09-14 */
 };
 
 /* The word an operator types and the word the journal prints. Never NULL. */
@@ -843,7 +860,11 @@ const char *reac_pacer_backend_name(enum reac_pacer_backend b);
  * `understood` (may be NULL) is set to 0 when a value was found and was neither
  * "thread" nor "etf". The default is returned in that case and the caller REPORTS
  * it — a word nobody can parse is not consent, which is reac_envflag.h's rule for
- * boolean knobs applied to this one. */
+ * boolean knobs applied to this one.
+ *
+ * A REAC_CONF_NONE layer means NOBODY ASKED, and that is what separates a refusal
+ * that must fail the open from one that may fall back: the caller reads `layer`,
+ * not the returned backend, to know which it is holding. */
 enum reac_pacer_backend reac_pacer_backend_resolve(const char *segment, const char *home,
                                                    enum reac_conf_layer *layer,
                                                    int *understood);
@@ -856,6 +877,15 @@ unsigned reac_pacer_lead_us_resolve(const char *segment, const char *home,
 /* Which backend this pacer actually opened with. The answer comes from the handle,
  * not from the knob, so it cannot say ETF for a pacer that is running the thread. */
 enum reac_pacer_backend reac_pacer_backend(const struct reac_pacer *p);
+
+/* WHY THE DEFAULT ETF BACKEND IS NOT RUNNING, as the refusal's own phrase — NULL
+ * when ETF is running, and NULL when the operator asked for `thread` and got it
+ * (that is a choice, not a refusal). Published by the daemon beside the backend
+ * name, so "we are on the thread backend" and "why" arrive together.
+ *
+ * The string is static storage owned by the library; the caller copies or prints
+ * it and never frees it. */
+const char *reac_pacer_backend_refusal(const struct reac_pacer *p);
 
 /* ---- HEALTH, published where an operator can see it (workstream CLK) --------
  *

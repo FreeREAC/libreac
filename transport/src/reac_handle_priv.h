@@ -34,6 +34,12 @@ struct reac_handle {
 	struct reac_etf_grid etf_grid;       /* the exact launch grid */
 	uint64_t             etf_refused;    /* frames the qdisc would not launch */
 	uint8_t              etf_first_code; /* SO_EE_CODE of the first refusal seen */
+	/* Why ETF is NOT running, when the DEFAULT asked for it and a precondition
+	 * was missing: a static phrase from reac_etf_refusal_name, never allocated.
+	 * NULL while ETF is running and while the operator asked for `thread`. The
+	 * daemon publishes it (reac_pacer_backend_refusal), because a fallback the
+	 * operator cannot see is a silent no-op with extra steps. */
+	const char          *etf_refusal;
 };
 
 /* Wrap an open descriptor. NULL on ENOMEM — the caller still owns `fd` then and must

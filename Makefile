@@ -99,7 +99,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_etf.c transport/src/reac_etf.c transport/src/reac_etf.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -133,6 +133,13 @@ test: tests/test_reac_etf.c transport/src/reac_etf.c transport/src/reac_etf.h te
 	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src \
 	    tests/test_reac_etf.c transport/src/reac_etf.c -o test_reac_etf
 	./test_reac_etf
+	# THE QDISC THE DAEMON OWNS. Byte-exact against what iproute2 puts on a netlink
+	# socket (captured with strace inside `unshare -rn`; the capture is in the test's
+	# header), because a wrong attribute length fails exactly like a missing module.
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src \
+	    tests/test_reac_etf_qdisc.c transport/src/reac_etf_qdisc.c \
+	    -o test_reac_etf_qdisc
+	./test_reac_etf_qdisc
 	# THE ABI RATCHET. Every other test is rebuilt against the headers it is
 	# testing and therefore cannot see a struct member move; reac-pw is not.
 	# Needs the transport headers' vendored reac-pw ones, like the transport
@@ -260,7 +267,7 @@ test-transport: tests/test_tap.c libreac-transport.a libreac.a
 	tools/conformance-tap-silent.sh
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_abi_layout test_reac_etf etf_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_abi_layout test_reac_etf test_reac_etf_qdisc etf_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
