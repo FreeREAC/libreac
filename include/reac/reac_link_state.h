@@ -47,12 +47,23 @@
 
 /* The box's OWN identity, decoded from the identity-page replies (DT1 tag 0x0500)
  * the grant sweep polls — beside reac.box-model, which comes from the geometry.
- * reac.box-firmware is the version as "D.DDD" (S-0808 1.003, …); reac.box-hw is
- * the raw hardware-identity block as hex, carried UNINTERPRETED (its meaning is
- * unresolved). Both are the EMPTY STRING until the box answers the poll (and again
+ *
+ * reac.box-firmware is the SYSTEM firmware version as "D.DDD" (S-0808 1.003,
+ * S-1608 2.200, S-4000S-3208 2.500), from identity addr 0x0000.
+ *
+ * reac.box.reac_version is the REAC PROTOCOL version the box speaks, from
+ * identity addr 0x0600, printed the way the console prints it — "2.302" on the
+ * S-1608, "2.102" on the S-4000S-3208. It is a DIFFERENT number from the
+ * firmware and a consumer must not substitute one for the other.
+ *
+ * reac.box-hw is that same 0x0600 record as raw hex, kept because its first u16
+ * is undecoded and a consumer must still be able to see the bytes.
+ *
+ * All three are the EMPTY STRING until the box answers the poll (and again
  * once it drops) — a consumer reads "" as "not answered", a fact, not a zero. */
-#define REAC_PROP_BOX_FIRMWARE "reac.box-firmware"
-#define REAC_PROP_BOX_HW       "reac.box-hw"
+#define REAC_PROP_BOX_FIRMWARE     "reac.box-firmware"
+#define REAC_PROP_BOX_HW           "reac.box-hw"
+#define REAC_PROP_BOX_REAC_VERSION "reac.box.reac_version"
 
 /* THE ENROLLED BOX'S OWN L2 ADDRESS — the peer's, never ours. Latched from the
  * source MAC of the box's JOIN (the `cdea 04 03` the master answers with a grant)
