@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.1.0
+Version:        1.1.1
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,9 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.1-1
+- The master's scene push keeps the desk's cadence at 44.1 kHz (rounded burst slots: 2511, not
+  2392), so a linked, silent box answers it the way it answers a desk. Comments say so.
 * Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.0-1
 - The identity page's 0x0600 record IS the box's REAC version, and it decodes the way the
   console prints it: eight bytes, four u16be, a reserved word then major/minor/patch,
