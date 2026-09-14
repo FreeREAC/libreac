@@ -1,18 +1,33 @@
 # Launch-time pacing: `SO_TXTIME` + the ETF qdisc
 
+**This is the default.** Operator ruling, 2026-09-14: *"we must go with qdisc and etf"*.
+`REACPW_PACER=thread` opts out.
+
 The pacer has two backends. They share one loop, one FSM, one FILLER, one depth guard and one
 set of counters; what differs is **who decides the instant a frame leaves the machine**.
 
-| | `REACPW_PACER=thread` (default) | `REACPW_PACER=etf` |
+| | `etf` (the default) | `REACPW_PACER=thread` |
 |---|---|---|
-| the egress instant is | this thread's wake | a launch time the kernel holds the frame until |
-| the thread must be | **punctual** | **early**, by one lead |
-| syscall | `sendto` | `sendmsg` + `SCM_TXTIME` |
-| slot clock | `CLOCK_MONOTONIC` | `CLOCK_TAI` |
-| needs | nothing | an etf qdisc, `SO_TXTIME`, a disciplined TAI offset |
+| the egress instant is | a launch time the kernel holds the frame until | this thread's wake |
+| the thread must be | **early**, by one lead | **punctual** |
+| syscall | `sendmsg` + `SCM_TXTIME` | `sendto` |
+| slot clock | `CLOCK_TAI` | `CLOCK_MONOTONIC` |
+| needs | an etf qdisc, `SO_TXTIME`, a disciplined TAI offset | nothing |
 
-Nothing about the default changes. With the knob unset the handle's backend fields stay zero and
-the loop never reads one — the emitted bytes and their timing are what they were.
+**The daemon installs the qdisc; nobody types a `tc` line on a rig.** The backend and the
+qdisc are one setting, and the app that owns a setting owns its configuration. reac-pw puts
+`etf clockid CLOCK_TAI delta 300000 skip_sock_check` on the device it binds when the backend
+is `etf`, removes a **leftover** etf root when the backend is `thread`, and takes away what it
+installed on a clean exit. It does that over rtnetlink from C — no `tc` subprocess. The manual
+commands further down are the debugging path, not the operating procedure.
+
+**What happens when the machine cannot run ETF depends on who asked.** With `REACPW_PACER=etf`
+set at any layer, an unmet precondition FAILS the open and names the code: a run that believes
+it is measuring launch-time pacing while the thread paces is worse than no run. With the knob
+unset — the default — the daemon logs one loud line naming the refusal and its fix, runs the
+thread backend, and **publishes the refusal** on its own node (`reac.pace.backend` and
+`reac.pace.backend-refusal`), because a fallback the operator cannot see is the same silent
+no-op wearing a default's clothes.
 
 ## Why
 
@@ -56,14 +71,16 @@ thing asserting it).
 
 ## Preconditions, and the refusal for each
 
-All three are checked at `reac_pacer_open`. **If the operator asked for ETF and one of them is
-missing, the open FAILS and names the code.** It does not fall back to the thread backend: a run
-that believes it is measuring launch-time pacing while the thread is doing the pacing is worse than
-no run at all.
+All three are checked at `reac_pacer_open`, and what happens next turns on **who asked**.
+`REACPW_PACER=etf` at any layer is the operator asking: the open FAILS and names the code,
+because a run that believes it is measuring launch-time pacing while the thread is doing the
+pacing is worse than no run at all. The knob unset is the *default* asking: the daemon logs
+the refusal and its fix, runs the thread backend, and publishes `reac.pace.backend=thread`
+with `reac.pace.backend-refusal` naming the reason.
 
 | refusal | what it means | fix |
 |---|---|---|
-| `REAC_ETF_REFUSE_NO_QDISC` | the netdev has no etf qdisc anywhere; a launch time would be stamped on every frame and ignored | the `tc` commands below |
+| `REAC_ETF_REFUSE_NO_QDISC` | the netdev has no etf qdisc anywhere; a launch time would be stamped on every frame and ignored | the daemon installs it — see the previous section; a refusal here means the install was refused, and that line names the errno |
 | `REAC_ETF_REFUSE_NO_TXTIME` | `setsockopt(SO_TXTIME)` refused, and not for want of a capability | a kernel ≥ 4.19 with `CONFIG_NET_SCH_ETF` |
 | `REAC_ETF_REFUSE_TXTIME_EPERM` | `SO_TXTIME` exists and this process may not set it | `CAP_NET_ADMIN` — see below |
 | `REAC_ETF_REFUSE_TAI_UNSET` | the kernel's TAI offset reads 0, so `CLOCK_TAI` is really UTC and every launch time would be 37 s from where the qdisc reads its own clock | discipline the clock (`chronyd`/`ntpd` sets the offset; `adjtimex` reports it) |
@@ -75,8 +92,9 @@ r1 (kernel 7.1.9, uid 0 inside a container holding `NET_RAW` but not `NET_ADMIN`
 AF_PACKET and a UDP socket. It is the *option* that needs `CAP_NET_ADMIN`, not the qdisc — so the
 refusal is `REAC_ETF_REFUSE_TXTIME_EPERM`, never "this kernel has no SO_TXTIME", because the two have
 different fixes and folding them together sends an operator after a kernel upgrade to cure a
-capability. **reac-pw already holds `CAP_NET_ADMIN`** (it mints and marks VLAN sub-interfaces), so the
-ETF backend costs the daemon no new capability. A probe run by hand from a shell will be refused.
+capability. **reac-pw holds `CAP_NET_ADMIN`** — granted by file capability on `%{_bindir}/reac-pw` in the
+RPM, for the VLAN sub-interfaces it mints and now for `SO_TXTIME` and the qdisc install. A
+probe or a daemon run by hand from a shell has neither and will be refused with `EPERM`.
 
 **The qdisc check is the one that matters most.** `reac_repacer` ran with `--etf` for months on a
 port whose root qdisc was `noqueue`: `SO_TXTIME` was set, `SCM_TXTIME` was stamped on every frame,
@@ -114,20 +132,38 @@ cannot express the difference the comparative run is being asked to resolve.
 
 A lead is buffered audio: it is latency, and it must stay far inside the TX ring's ~250 ms cap.
 
-## The `tc` commands
+## What the daemon does for you
 
-Two operational hazards, both met on 2026-09-14 while running the fair comparison:
+On every start, for the device it binds:
 
-- **The qdisc and the backend are one setting.** With `skip_sock_check`, the etf qdisc drops every
-  frame that carries no launch time. A daemon running the thread backend under a leftover etf
-  qdisc therefore transmits *nothing*: 0 frames in a 60 s window, and the box loses its master.
-  Remove the qdisc whenever `REACPW_PACER` is not `etf`, and never install one without it.
+| backend | what reac-pw does to the device's root qdisc |
+|---|---|
+| `etf` (default) | del, then add `etf clockid CLOCK_TAI delta 300000 skip_sock_check` |
+| `thread` | remove a **leftover** `etf` root, if one is there; leave anything else alone |
+
+and on a clean exit it removes exactly what it installed, verified by a netlink read-back
+before the delete is issued. The two hazards this closes were both met on 2026-09-14 while
+running the fair comparison:
+
+- **The qdisc and the backend are one setting.** With `skip_sock_check`, the etf qdisc drops
+  every frame that carries no launch time. A daemon running the thread backend under a
+  leftover etf qdisc therefore transmits *nothing*: 0 frames in a 60 s window, and the box
+  loses its master.
 - **`tc qdisc replace` fails on an existing etf qdisc** ("Change operation not supported by
-  specified qdisc"): the discipline supports no change operation. Use `del` then `add`.
+  specified qdisc"): the discipline supports no change operation, so the install is `del`
+  then `add`.
 
-`sch_etf` is a module and is **not loaded by default** on the desk:
+It needs `CAP_NET_ADMIN`, which the reac-pw RPM grants by file capability. Started by hand
+from a shell the daemon has neither that nor `SO_TXTIME`, and the ETF default falls back to
+the thread backend saying `EPERM`.
 
-    sudo modprobe sch_etf
+`sch_etf` is a module. The kernel autoloads it when the qdisc is requested; a kernel with no
+`sch_etf` at all answers `ENOENT`, and the loud line says `modprobe sch_etf`.
+
+## The `tc` commands — the debugging path
+
+Nothing below is part of running the desk. It is how to look at, or stand in for, what the
+daemon did.
 
 ### The desk as it is today (software ETF)
 
@@ -235,8 +271,10 @@ hardware launch. The daemon's own CPU did not rise (1275 vs 1612 process jiffies
 
 ## What this does not prove
 
-- **Nothing here has run on the rig.** The backend has unit tests and a clean build; no frame has
-  left a NIC with a launch time on it.
+- **The daemon-installed qdisc has not run on the rig.** The pacing arms in the table above
+  were measured with the qdisc put there by hand. The daemon installing it for itself is
+  proven on a veth in a private namespace (`tests/etf-qdisc-owned.sh` in reac-pw) and by the
+  byte-exact builder test, not yet on the desk.
 - **Software ETF only, on this desk.** The RTL8125 has no PTP hardware clock and no ETF offload, so
   a hardware-launch arm is not measurable here at all. Any figure this desk produces is about the
   kernel's hrtimer release, not about a NIC's.

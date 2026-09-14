@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.1.2
+Version:        1.1.3
 %global abi 4
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,28 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.3-1
+- ETF IS THE DEFAULT PACING BACKEND (operator ruling, 2026-09-14). Measured on the TX device,
+  60 s per arm, one S-4000S-3208 per link: interval sd 28.5 -> 2.7 us (PCI VLAN) and
+  15.3 -> 1.9 us (USB direct), p99.9 595 -> 136 and 308 -> 131 us, late slots 27-37/s ->
+  0.45/s, with no rise in the daemon's own CPU. REACPW_PACER=thread opts out.
+- A precondition the machine cannot meet now depends on WHO ASKED. Explicit REACPW_PACER=etf
+  still FAILS the open and names the code. The DEFAULT logs one loud line naming the refusal
+  and its fix, runs the thread backend, and publishes the refusal
+  (reac_pacer_backend_refusal) -- a fallback the operator cannot see is the silent no-op the
+  backend exists to avoid.
+- NEW: <reac/transport/reac_etf_qdisc.h>. Install, remove and read back the ETF qdisc over
+  rtnetlink -- no tc(8), no subprocess. del-then-add, because etf supports no change
+  operation. Every message carries NLM_F_ACK and the ack is READ: a netlink write the kernel
+  refuses returns the same byte count as one it accepted. The message builders are asserted
+  byte for byte against what iproute2 6.17.0 puts on the same socket (strace capture inside
+  `unshare -rn`, in tests/test_reac_etf_qdisc.c).
+- Refusals are classified by ERRNO, never by the kernel's extack string: EPERM is a
+  capability, ENOENT a missing sch_etf, EOPNOTSUPP the device, EINVAL the parameters. The
+  test requires all four fixes to differ.
+- reac_etf_qdisc_probe becomes the installed reac_etf_qdisc_state: the pacer's open-time
+  check and the daemon's what-is-there-now are one reading. No public struct grows;
+  libreac-transport.so.4 is unchanged.
 * Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.2-1
 - WITHDRAWS 1.1.1, WHICH WAS AN UNANNOUNCED ABI BREAK. 1.1.1 added one `int` at offset 1712
   of `struct reac_master` -- a per-cycle cursor, entirely internal -- and moved every member
