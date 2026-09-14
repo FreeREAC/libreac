@@ -25,6 +25,7 @@ corpus_check
 test_ctrl
 headamp_trace
 wire_census
+fake_box
 ctrl_delta
 upstream_watch
 slotmap_watch
@@ -36,5 +37,6 @@ test_link
 test_identity
 test_master_carriers
 test_master_capture
+test_abi_layout
 group_map_scan
 test_tap

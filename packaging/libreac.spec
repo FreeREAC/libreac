@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.1.1
+Version:        1.1.2
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,28 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.2-1
+- WITHDRAWS 1.1.1, WHICH WAS AN UNANNOUNCED ABI BREAK. 1.1.1 added one `int` at offset 1712
+  of `struct reac_master` -- a per-cycle cursor, entirely internal -- and moved every member
+  behind it four bytes: headamp_src 14304 -> 14308, box_mac 14344 -> 14348, and through the
+  embedding reac_pacer.recognized_box 15232 -> 15236. sizeof(struct reac_master) went
+  14456 -> 14464 and sizeof(struct reac_pacer) 24312 -> 24320, with LIBREAC_ABI and both
+  sonames unmoved. reac-pw 1.0.4, built against 1.1.0, then read a POINTER from the wrong
+  offset and dereferenced it: SEGV about 7 s after every start, 99 restarts on the live rig
+  before the rollback. Every test was green, because every test is rebuilt against the
+  headers it is testing.
+- The 44.1 kHz burst cadence 1.1.1 shipped is KEPT and is now computed rather than stored:
+  burst_slot()/burst_index_at() place chunk k at the rounded k*fps/500, so the transfer
+  still spans the desk's measured 2511 slots and the struct does not grow at all. The
+  emitted frames are byte-identical to 1.1.1's at 44.1, 48 and 96 kHz.
+- THE RATCHET THAT WOULD HAVE CAUGHT IT: tests/abi-layout.inc records sizeof, _Alignof and
+  every member offset of all 61 public structs (566 offsets), generated from DWARF by
+  tools/gen-abi-layout.py; tests/test_abi_layout.c re-measures them with offsetof in
+  `make test`. A layout that moves is red unless LIBREAC_ABI moved and the table was
+  regenerated in the same change.
+- tools/fake_box: a wire-level linked-silent box built from the desk-arrival capture's own
+  bytes, which is what reproduced the crash off the rig (a veth in a private namespace) and
+  what proves it gone.
 * Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.1-1
 - The master's scene push keeps the desk's cadence at 44.1 kHz (rounded burst slots: 2511, not
   2392), so a linked, silent box answers it the way it answers a desk. Comments say so.

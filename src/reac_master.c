@@ -629,6 +629,38 @@ static int burst_slot(const struct reac_master *m, int k)
 	return s < k ? k : s;
 }
 
+/* The inverse: which burst chunk, if any, this cycle slot carries. -1 for a slot
+ * the burst does not claim.
+ *
+ * A CURSOR WOULD HAVE BEEN A FIELD, AND A FIELD IN THIS STRUCT IS AN ABI BREAK.
+ * `struct reac_master` is public and reac-pw EMBEDS it in `struct reac_pacer`, so
+ * one `int` added mid-struct moved every later member by four bytes — including
+ * `headamp_src` and, through the embedding, `reac_pacer.recognized_box`. A daemon
+ * built against the previous headers then read a POINTER from the wrong offset and
+ * dereferenced it: reac-pw 1.0.4 against libreac 1.1.1, SEGV in
+ * sink_publish_link_props ~7 s after every start, 99 restarts on the rig
+ * (2026-09-14). The cadence's chunk index is a pure function of the slot, so it is
+ * computed, not stored, and this file adds no state to the struct at all.
+ *
+ * burst_slot() is strictly increasing, so the k that maps to `pos` — if there is
+ * one — is within one of the linear estimate, in both regimes: the rounded ratio
+ * above REAC_M_BURST_PER_SEC frames a second, and the one-chunk-per-slot clamp
+ * below it. The window is searched rather than assumed. */
+static int burst_index_at(const struct reac_master *m, int pos)
+{
+	if (pos < 0 || pos > m->burst_end || m->fps <= 0)
+		return -1;
+	int k = (int)(((int64_t)pos * REAC_M_BURST_PER_SEC + m->fps / 2) / m->fps);
+	if (k > pos)
+		k = pos;            /* the clamped regime: burst_slot(k) == k */
+	for (int d = -1; d <= 1; d++) {
+		int c = k + d;
+		if (c >= 0 && c < REAC_SCENE_CHUNKS && burst_slot(m, c) == pos)
+			return c;
+	}
+	return -1;
+}
+
 void reac_master_init(struct reac_master *m, const uint8_t src[6],
                       const struct reac_console_cfg *cfg, int fps)
 {
@@ -895,7 +927,6 @@ void reac_master_set_headamp_src(struct reac_master *m,
 static void reset_control_cadence(struct reac_master *m)
 {
 	m->cycle_pos       = m->sub01_off;
-	m->burst_k         = 0;             /* the header the next slot emits opens it */
 	m->announce_tick   = (3 * m->fps) / 4;
 	m->chanmap_cursor  = 0;
 	m->est_chanmap_tick = m->fps / 4;   /* offset ~0.5 s from cfea so the two
@@ -1239,10 +1270,9 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 		 * cadence below, so the frames are the ones a hunting master would send.
 		 * Off by default: toward an S-1608 a real M-5000 stops it (est_scene_stream). */
 		if (est_scene_stream()) {
-			if (m->burst_k < REAC_SCENE_CHUNKS &&
-			    pos == burst_slot(m, m->burst_k)) {
-				m->scene_step = 1 + m->burst_k;
-				m->burst_k++;
+			int k = burst_index_at(m, pos);
+			if (k >= 0) {
+				m->scene_step = 1 + k;
 				return REAC_M_EMIT_SCENE_CHUNK;
 			}
 			if (pos == m->sub02_off) {
@@ -1251,7 +1281,6 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 			}
 			if (pos == m->sub01_off) {
 				m->scene_step = 0;
-				m->burst_k    = 0;
 				return REAC_M_EMIT_SCENE_HEAD;
 			}
 		}
@@ -1264,12 +1293,14 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 
 	/* HUNT cadence (PROBING; byte-measured on the M-300/S-1608 establish capture):
 	 * the probe burst + sub02/chanmap/sub01 cycle events + cfea free-running. */
-	if (m->burst_k < REAC_SCENE_CHUNKS && pos == burst_slot(m, m->burst_k)) {
+	{
 		/* Chunk N of the push. Step 0 (the header) went out at sub01_off five
 		 * slots before this cycle opened, so the burst carries steps 1..341. */
-		m->scene_step = 1 + m->burst_k;
-		m->burst_k++;
-		return REAC_M_EMIT_SCENE_CHUNK;
+		int k = burst_index_at(m, pos);
+		if (k >= 0) {
+			m->scene_step = 1 + k;
+			return REAC_M_EMIT_SCENE_CHUNK;
+		}
 	}
 	if (pos == m->sub02_off) {
 		m->scene_step = REAC_SCENE_STEPS - 1;   /* the final chunk */
@@ -1282,7 +1313,6 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 	}
 	if (pos == m->sub01_off) {
 		m->scene_step = 0;                      /* the header opens a transfer */
-		m->burst_k    = 0;                      /* ... and re-opens the burst   */
 		return REAC_M_EMIT_SCENE_HEAD;
 	}
 	if (m->announce_tick >= m->fps) {

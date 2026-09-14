@@ -147,7 +147,7 @@ static int burst_geometry(int fps, int want_head_to_last)
 	struct reac_master m;
 	reac_master_init(&m, OUR, &cfg, fps);
 
-	long head_slot = -1, last_slot = -1;
+	long head_slot = -1, last_slot = -1, last_chunk_slot = -1;
 	int mids = 0, transfers = 0, orphan_last = 0, orphan_first = 0, inflight = 0;
 	int first_emit_was_head = -1;
 
@@ -167,6 +167,13 @@ static int burst_geometry(int fps, int want_head_to_last)
 		} else if (e == REAC_M_EMIT_SCENE_CHUNK) {
 			if (inflight)
 				mids++;
+			/* THE CHUNK INDEX IS COMPUTED FROM THE SLOT, NOT COUNTED. It has to
+			 * be: a cursor would be a field, and a field in this public struct
+			 * moves every member behind it (rig, 2026-09-14). So the steps are
+			 * checked to arrive 1..341 IN ORDER, which is the one thing a
+			 * stateless inverse of the burst slot can get wrong. */
+			CHK(m.scene_step == mids);
+			last_chunk_slot = slot;
 		} else if (e == REAC_M_EMIT_SCENE_TAIL) {
 			if (!inflight) { orphan_last++; continue; }
 			last_slot = slot;
@@ -185,6 +192,12 @@ static int burst_geometry(int fps, int want_head_to_last)
 	CHK(orphan_last == 0);
 	CHK(orphan_first == 0);
 	CHK(transfers >= 3);
+
+	/* The burst ends where burst_end says it does — the emitted sequence and the
+	 * struct's own arithmetic are the same fact, checked against each other
+	 * rather than each against itself. The header goes out 5 slots before the
+	 * cycle opens, so chunk 341 lands at head + 5 + burst_end. */
+	CHK(last_chunk_slot - head_slot == 5 + m.burst_end);
 	return 0;
 }
 
