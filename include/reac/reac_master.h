@@ -53,13 +53,28 @@ struct reac_headamp_tx;   /* reac_headamp_tx.h — the head-amp state group A pu
  *                 PROBING immediately and unconditionally: the golden evidence
  *                 shows a real unlinked M-5000 ALWAYS probes; there is no
  *                 observed silent-idle, and a master that waits for "presence"
- *                 deadlocks against a box whose PHY never bounced (§13b: the
- *                 box only cold-connects on a real link-down/up).
- *   PROBING     — unlinked: FILLER + the continuous M-300 control cadence
- *                 (PROBE ~115/s + sub01/sub02/chanmap/cfea @1 Hz each). The
- *                 chanmap advertises the sub-state-0x03 map the box's parser
- *                 needs to recognize a master. Leaves ONLY on a validated box
- *                 JOIN (REAC_M_RX_BOX_JOIN). No timer path out.
+ *                 deadlocks against a box that is linked and silent — which is
+ *                 the normal state of a box whose desk went away.
+ *
+ *                 (The §13b premise this paragraph used to carry — "the box only
+ *                 cold-connects on a real link-down/up" — is MEASURED FALSE.
+ *                 reac-captures desk-arrival-q4-2026-09-14: an S-4000S linked to
+ *                 the switch throughout, its cable never touched, rejoined a
+ *                 returning M-200 in 3.380 s. What captured it was a COMPLETED
+ *                 scene transfer, and it answered with its state-4 commit report,
+ *                 not a cold connect.)
+ *   PROBING     — unlinked: FILLER + the continuous control cadence — the scene
+ *                 push (FIRST, 341 chunks, LAST, 500 chunks/s) plus one chanmap
+ *                 window per cycle and cfea at ~1/s. The chanmap advertises the
+ *                 sub-state-0x03 map the box's parser needs to recognize a
+ *                 master; THE COMPLETED PUSH is what captures a box that is
+ *                 already linked and silent, and an interrupted one is measured
+ *                 to produce nothing at all (the same capture carries a LAST
+ *                 without its FIRST as the negative control). Leaves on a
+ *                 validated box JOIN (REAC_M_RX_BOX_JOIN) OR on the box's
+ *                 config announce (REAC_M_RX_BOX_CONFIG — the warm relink, and
+ *                 the only door a warm box uses: its `04 03` burst comes 1.7 s
+ *                 LATER, behind our own ENROLL group map). No timer path out.
  *   GRANTING    — echo the box's own cdea 04 03 block back as the broadcast
  *                 grant burst (1 frame per 12 slots over a ~150 ms window),
  *                 preceded by a ~1.6 s ENROLL->grant DWELL (grant_dwell) that
@@ -134,6 +149,13 @@ enum reac_master_drop_reason {
 #define REAC_M_LINKCHECK_SECONDS_X10 65   /* 6.5 s, scaled by fps at init */
 /* Diagnostic presence flag decay (same frame budget as the link-check). */
 #define REAC_M_PRESENCE_TIMEOUT 600
+/* THE SCENE BURST'S RATE: 500 chunks a second, whatever the frame rate. Read off
+ * the M-300/S-1608 establish capture at 4000 fps (a chunk every 8 slots) and
+ * confirmed on the M-200 at 3675 fps, where the interval is 7.35 slots and the
+ * 341-chunk transfer spans the desk's measured 2511 slots
+ * (desk-arrival-q4-2026-09-14: FIRST counter 46839, LAST 49350). It is a RATE,
+ * not a slot count — see burst_slot() in reac_master.c. */
+#define REAC_M_BURST_PER_SEC 500
 /* Grant burst density: one echoed grant per this many slots (~100 control
  * frames over the ~150 ms window @8000 fps, the transcribed real burst). */
 #define REAC_M_GRANT_STRIDE 12
@@ -284,9 +306,12 @@ struct reac_master {
 	 * capture; identical in PROBING and ESTABLISHED). A real master's control
 	 * plane is one deterministic cycle of `cycle_len` slots (10778 @ 4000 fps =
 	 * 2.69 s, scaled by fps):
-	 *   - a probe BURST: one probe every `probe_stride` slots (8 @ 4000 fps =
-	 *     500/s) from slot 0 through `burst_end` (341 probes), probe indices
-	 *     30..33 being the 4 inventory specials (zeros / our-MAC / SYSP / SCEN);
+	 *   - a scene BURST: 500 chunks a second from slot 0 through `burst_end`
+	 *     (341 chunks). The interval is fps/500 and it is a RATIO — exactly 8
+	 *     slots at 4000 fps and 16 at 8000, but 7.35 at 3675 — so the chunks are
+	 *     placed by the rounded k*fps/500 rather than by a whole-slot stride
+	 *     (`burst_slot` in reac_master.c). Truncating it to 7 put the 44.1 kHz
+	 *     transfer out in 2392 slots where a real M-200 takes 2511;
 	 *   - a probe-free PAUSE for the rest of the cycle, holding sub02 right
 	 *     after the burst, ONE chanmap window mid-pause (the 49-window sweep
 	 *     thus takes 49 cycles), and sub01 at the cycle's tail.
@@ -296,8 +321,14 @@ struct reac_master {
 	 * independent of the cycle. */
 	int      cycle_len;       /* slots per control cycle (fps*10778/4000)       */
 	int      cycle_pos;       /* current slot in the cycle [0, cycle_len)       */
-	int      probe_stride;    /* slots between burst probes (fps/500)           */
-	int      burst_end;       /* last probe slot: (341-1)*probe_stride          */
+	int      probe_stride;    /* NOMINAL slots between burst chunks, ROUNDED
+	                           * fps/500 — the LAST frame's offset behind the
+	                           * final chunk. The chunks themselves are placed
+	                           * by burst_slot(), which keeps the ratio.        */
+	int      burst_k;         /* next burst chunk to emit, 0..341; the header
+	                           * re-opens it. A cursor, not a modulo: the slots
+	                           * are not evenly spaced at 44.1 kHz.             */
+	int      burst_end;       /* last chunk slot: burst_slot(340)               */
 	int      sub02_off;       /* cdea 01 02 slot: burst_end + probe_stride      */
 	int      chanmap_off;     /* chanmap slot: fps*5953/4000 (mid-pause)        */
 	int      sub01_off;       /* cdea 01 01 slot: cycle_len - 5                 */

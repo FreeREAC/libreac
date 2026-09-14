@@ -612,6 +612,23 @@ static int est_scene_stream(void)
 	return cached;
 }
 
+/* The slot, within the cycle, that burst chunk `k` (0-based, k = 0 is body chunk
+ * 1) goes out on. The desk's burst is 500 chunks per second — `fps / 500` slots
+ * apart — and at 44.1 kHz that is 7.35, not 7: placing chunk k at the ROUNDED
+ * k*fps/500 keeps the whole 341-chunk burst on the desk's timeline instead of
+ * accumulating the truncation 341 times. At 48 kHz and 96 kHz the division is
+ * exact and this returns 8k and 16k, the slots the goldens were measured at.
+ *
+ * Strictly increasing by construction (the `< k` clamp), so the cadence's
+ * per-slot cursor can never stall on two chunks claiming one slot at a frame rate
+ * below REAC_M_BURST_PER_SEC. */
+static int burst_slot(const struct reac_master *m, int k)
+{
+	int s = (int)(((int64_t)k * m->fps + REAC_M_BURST_PER_SEC / 2) /
+	              REAC_M_BURST_PER_SEC);
+	return s < k ? k : s;
+}
+
 void reac_master_init(struct reac_master *m, const uint8_t src[6],
                       const struct reac_console_cfg *cfg, int fps)
 {
@@ -627,10 +644,18 @@ void reac_master_init(struct reac_master *m, const uint8_t src[6],
 	 * (341/burst incl. the 4 specials at indices 30..33); sub02 at 2728;
 	 * chanmap at 5953; sub01 at 10773 (cycle_len - 5). */
 	m->cycle_len    = (int)(((int64_t)m->fps * 10778) / 4000);
-	m->probe_stride = m->fps / 500;
+	/* THE BURST RATE IS 500 CHUNKS A SECOND, AND IT IS A RATIO, NOT A WHOLE NUMBER
+	 * OF SLOTS. `fps / 500` divides exactly at 48 kHz (8) and 96 kHz (16) — the two
+	 * rates every golden was read at — and TRUNCATES 7.35 to 7 at 44.1 kHz, which
+	 * put the whole transfer out in 2392 slots where the desk takes 2511
+	 * (desk-arrival-q4-2026-09-14: FIRST at counter 46839, LAST at 49350). Round
+	 * here, and place each chunk with burst_slot() below, so the 44.1 kHz burst
+	 * lands on the desk's own geometry and the other two rates are unchanged to the
+	 * byte. */
+	m->probe_stride = (m->fps + REAC_M_BURST_PER_SEC / 2) / REAC_M_BURST_PER_SEC;
 	if (m->probe_stride < 1)
 		m->probe_stride = 1;
-	m->burst_end    = (341 - 1) * m->probe_stride;
+	m->burst_end    = burst_slot(m, REAC_SCENE_CHUNKS - 1);
 	m->sub02_off    = m->burst_end + m->probe_stride;
 	m->chanmap_off  = (int)(((int64_t)m->fps * 5953) / 4000);
 	m->sub01_off    = m->cycle_len - 5;
@@ -870,6 +895,7 @@ void reac_master_set_headamp_src(struct reac_master *m,
 static void reset_control_cadence(struct reac_master *m)
 {
 	m->cycle_pos       = m->sub01_off;
+	m->burst_k         = 0;             /* the header the next slot emits opens it */
 	m->announce_tick   = (3 * m->fps) / 4;
 	m->chanmap_cursor  = 0;
 	m->est_chanmap_tick = m->fps / 4;   /* offset ~0.5 s from cfea so the two
@@ -1213,8 +1239,10 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 		 * cadence below, so the frames are the ones a hunting master would send.
 		 * Off by default: toward an S-1608 a real M-5000 stops it (est_scene_stream). */
 		if (est_scene_stream()) {
-			if (pos <= m->burst_end && pos % m->probe_stride == 0) {
-				m->scene_step = 1 + pos / m->probe_stride;
+			if (m->burst_k < REAC_SCENE_CHUNKS &&
+			    pos == burst_slot(m, m->burst_k)) {
+				m->scene_step = 1 + m->burst_k;
+				m->burst_k++;
 				return REAC_M_EMIT_SCENE_CHUNK;
 			}
 			if (pos == m->sub02_off) {
@@ -1223,6 +1251,7 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 			}
 			if (pos == m->sub01_off) {
 				m->scene_step = 0;
+				m->burst_k    = 0;
 				return REAC_M_EMIT_SCENE_HEAD;
 			}
 		}
@@ -1235,10 +1264,11 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 
 	/* HUNT cadence (PROBING; byte-measured on the M-300/S-1608 establish capture):
 	 * the probe burst + sub02/chanmap/sub01 cycle events + cfea free-running. */
-	if (pos <= m->burst_end && pos % m->probe_stride == 0) {
+	if (m->burst_k < REAC_SCENE_CHUNKS && pos == burst_slot(m, m->burst_k)) {
 		/* Chunk N of the push. Step 0 (the header) went out at sub01_off five
 		 * slots before this cycle opened, so the burst carries steps 1..341. */
-		m->scene_step = 1 + pos / m->probe_stride;
+		m->scene_step = 1 + m->burst_k;
+		m->burst_k++;
 		return REAC_M_EMIT_SCENE_CHUNK;
 	}
 	if (pos == m->sub02_off) {
@@ -1252,6 +1282,7 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 	}
 	if (pos == m->sub01_off) {
 		m->scene_step = 0;                      /* the header opens a transfer */
+		m->burst_k    = 0;                      /* ... and re-opens the burst   */
 		return REAC_M_EMIT_SCENE_HEAD;
 	}
 	if (m->announce_tick >= m->fps) {
