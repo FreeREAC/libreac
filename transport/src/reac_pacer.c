@@ -231,8 +231,11 @@ enum reac_pacer_backend reac_pacer_backend_resolve(const char *segment, const ch
 	enum reac_conf_layer l = reac_conf_lookup("REACPW_PACER", segment, home, v, sizeof v);
 	if (layer)
 		*layer = l;
+	/* THE DEFAULT IS ETF (operator ruling, 2026-09-14). A caller that needs to know
+	 * whether this was a choice or a default reads `layer`: REAC_CONF_NONE means
+	 * nobody asked, and only then may a missing precondition fall back. */
 	if (l == REAC_CONF_NONE)
-		return REAC_PACER_BACKEND_THREAD;
+		return REAC_PACER_BACKEND_ETF;
 	if (!strcmp(v, "etf"))
 		return REAC_PACER_BACKEND_ETF;
 	if (!strcmp(v, "thread"))
@@ -241,7 +244,7 @@ enum reac_pacer_backend reac_pacer_backend_resolve(const char *segment, const ch
 	 * string knob): take the default and let the caller say so. */
 	if (understood)
 		*understood = 0;
-	return REAC_PACER_BACKEND_THREAD;
+	return REAC_PACER_BACKEND_ETF;
 }
 
 unsigned reac_pacer_lead_us_resolve(const char *segment, const char *home,
@@ -267,6 +270,11 @@ unsigned reac_pacer_lead_us_resolve(const char *segment, const char *home,
 		return REAC_ETF_LEAD_US_DEFAULT;
 	}
 	return (unsigned)n;
+}
+
+const char *reac_pacer_backend_refusal(const struct reac_pacer *p)
+{
+	return (p && p->handle) ? p->handle->etf_refusal : NULL;
 }
 
 enum reac_pacer_backend reac_pacer_backend(const struct reac_pacer *p)
@@ -1824,8 +1832,8 @@ static enum reac_etf_refusal pacer_arm_etf(struct reac_pacer *p, const char *ifn
 	 * kernel whose netlink we could not read. An ABSENT verdict is a real reading
 	 * and does refuse. */
 	char kind[32] = { 0 };
-	enum reac_etf_qdisc q = reac_etf_qdisc_probe(p->ifindex, kind, sizeof kind);
-	if (q == REAC_ETF_QDISC_ABSENT) {
+	enum reac_etf_qdisc_state q = reac_etf_qdisc_state(p->ifindex, kind, sizeof kind);
+	if (q == REAC_ETF_QDISC_NONE) {
 		fprintf(stderr, "reac-pacer: %s carries root qdisc '%s' and no etf qdisc "
 		        "anywhere; a SCM_TXTIME launch time would be stamped on every frame "
 		        "and ignored by the kernel. See docs/ETF-PACING.md for the exact "
@@ -1849,7 +1857,7 @@ static enum reac_etf_refusal pacer_arm_etf(struct reac_pacer *p, const char *ifn
 	fprintf(stderr, "reac-pacer: backend ETF — SO_TXTIME on CLOCK_TAI (kernel TAI "
 	        "offset %d s), qdisc %s, lead %u us, launch grid exact at %d fps "
 	        "(%u + %u/%u ns per slot)\n",
-	        tai, q == REAC_ETF_QDISC_ETF ? "etf" : "unverified", lead_us, p->fps,
+	        tai, q == REAC_ETF_QDISC_PRESENT ? "etf" : "unverified", lead_us, p->fps,
 	        (unsigned)(1000000000u / (unsigned)p->fps),
 	        (unsigned)(1000000000u % (unsigned)p->fps), (unsigned)p->fps);
 	return REAC_ETF_OK;
@@ -2073,11 +2081,10 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 				        REAC_ETF_LEAD_US_MAX, reac_conf_layer_name(llay),
 				        REAC_ETF_LEAD_US_DEFAULT);
 			enum reac_etf_refusal r = pacer_arm_etf(p, cfg->ifname, lead_us);
-			if (r != REAC_ETF_OK) {
-				/* REFUSE, never fall back. The operator asked for launch-time
-				 * pacing; giving them the thread backend while they believe
-				 * they are measuring ETF poisons the comparison this backend
-				 * exists for. */
+			if (r != REAC_ETF_OK && lay != REAC_CONF_NONE) {
+				/* THE OPERATOR ASKED: REFUSE, never fall back. Giving them the
+				 * thread backend while they believe they are measuring ETF
+				 * poisons the comparison this backend exists for. */
 				fprintf(stderr, "reac-pacer: ETF backend REFUSED (%s, asked "
 				        "for by %s). Fix the precondition or set "
 				        "REACPW_PACER=thread.\n",
@@ -2085,6 +2092,24 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 				reac_handle_close(&p->handle);
 				reac_frame_ring_free(&p->ring);
 				return -1;
+			}
+			if (r != REAC_ETF_OK) {
+				/* NOBODY ASKED — the default did. A desk must still carry audio
+				 * on a kernel with no sch_etf, in a container with no
+				 * CAP_NET_ADMIN, or on a machine whose TAI offset nothing has
+				 * disciplined. ONE LOUD LINE, naming the refusal and what to do
+				 * about it, and the refusal is REMEMBERED on the handle so the
+				 * daemon publishes it beside the backend name: a fallback the
+				 * operator cannot see is the silent no-op this whole backend
+				 * exists to avoid. */
+				p->handle->etf_refusal = reac_etf_refusal_name(r);
+				fprintf(stderr, "reac-pacer: ETF IS THE DEFAULT AND THIS MACHINE "
+				        "CANNOT RUN IT — %s. Running the thread backend, whose "
+				        "egress cadence is ~10x looser (interval sd 28.5 us "
+				        "against 2.7 us, measured 2026-09-14). Fix the "
+				        "precondition to get launch-time pacing, or set "
+				        "REACPW_PACER=thread to stop being told.\n",
+				        reac_etf_refusal_name(r));
 			}
 		} else {
 			fprintf(stderr, "reac-pacer: backend thread — clock_nanosleep on "
