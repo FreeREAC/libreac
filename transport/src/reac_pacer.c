@@ -6,6 +6,7 @@
 #endif
 #include <reac/transport/reac_pacer.h>
 #include "reac_handle_priv.h"
+#include "reac_etf.h"          /* the launch-time pacing backend */
 #include <reac/transport/reac_rt.h>
 #include <reac/transport/reac_carrier.h>   /* the wire before the protocol */
 #include <reac/reac_ctrl.h>     /* reac_ctrl_classify_box_frame */
@@ -209,6 +210,71 @@ long reac_pacer_period_ns(int fps)
 	if (fps <= 0)
 		fps = 8000;
 	return (long)(1000000000.0 / (double)fps + 0.5);  /* 125000 @8000, 250000 @4000 */
+}
+
+/* ---- which backend owns the egress instant (reac_pacer.h) ------------------ */
+
+const char *reac_pacer_backend_name(enum reac_pacer_backend b)
+{
+	return b == REAC_PACER_BACKEND_ETF ? "etf" : "thread";
+}
+
+enum reac_pacer_backend reac_pacer_backend_resolve(const char *segment, const char *home,
+                                                   enum reac_conf_layer *layer,
+                                                   int *understood)
+{
+	if (layer)
+		*layer = REAC_CONF_NONE;
+	if (understood)
+		*understood = 1;
+	char v[32];
+	enum reac_conf_layer l = reac_conf_lookup("REACPW_PACER", segment, home, v, sizeof v);
+	if (layer)
+		*layer = l;
+	if (l == REAC_CONF_NONE)
+		return REAC_PACER_BACKEND_THREAD;
+	if (!strcmp(v, "etf"))
+		return REAC_PACER_BACKEND_ETF;
+	if (!strcmp(v, "thread"))
+		return REAC_PACER_BACKEND_THREAD;
+	/* A word nobody can parse is not consent (reac_envflag.h's rule, applied to a
+	 * string knob): take the default and let the caller say so. */
+	if (understood)
+		*understood = 0;
+	return REAC_PACER_BACKEND_THREAD;
+}
+
+unsigned reac_pacer_lead_us_resolve(const char *segment, const char *home,
+                                    enum reac_conf_layer *layer, int *understood)
+{
+	if (layer)
+		*layer = REAC_CONF_NONE;
+	if (understood)
+		*understood = 1;
+	char v[32];
+	enum reac_conf_layer l = reac_conf_lookup("REACPW_PACER_LEAD_US", segment, home,
+	                                          v, sizeof v);
+	if (layer)
+		*layer = l;
+	if (l == REAC_CONF_NONE)
+		return REAC_ETF_LEAD_US_DEFAULT;
+	char *end = NULL;
+	long n = strtol(v, &end, 10);
+	if (end == v || (end && *end) || n <= 0 ||
+	    reac_etf_lead_check((unsigned)n) != REAC_ETF_OK) {
+		if (understood)
+			*understood = 0;
+		return REAC_ETF_LEAD_US_DEFAULT;
+	}
+	return (unsigned)n;
+}
+
+enum reac_pacer_backend reac_pacer_backend(const struct reac_pacer *p)
+{
+	/* Read off the HANDLE, never off the knob: a pacer whose ETF arming was refused
+	 * must not be able to report the backend the operator asked for. */
+	return (p && p->handle && p->handle->etf_on) ? REAC_PACER_BACKEND_ETF
+	                                             : REAC_PACER_BACKEND_THREAD;
 }
 
 /* CLOCK_MONOTONIC in ns. Exposed (reac_pacer.h) rather than file-static so the sink
@@ -1440,7 +1506,30 @@ static void *pacer_loop(void *arg)
 	uint8_t frame[REAC_PACER_SLOT_SZ];
 	uint8_t rxbuf[REAC_PACER_SLOT_SZ];
 
-	uint64_t deadline = mono_ns() + (uint64_t)p->period_ns;
+	/* THE SLOT CLOCK, AND WHAT `deadline` MEANS ON EACH BACKEND.
+	 *
+	 *   thread: CLOCK_MONOTONIC, and `deadline` IS the instant the frame leaves,
+	 *           because this thread is what puts it on the wire.
+	 *   etf:    CLOCK_TAI (what the etf qdisc compares against), and `deadline` is
+	 *           only the instant we hand the frame DOWN — one lead ahead of the
+	 *           launch time the kernel will release it at. Being late here costs
+	 *           lead, not cadence, until the lead is exhausted.
+	 *
+	 * Everything between the two is identical, which is the point: one pacer. */
+	struct reac_handle *h = p->handle;
+	const int etf = h && h->etf_on;
+	const clockid_t slotclk = etf ? CLOCK_TAI : CLOCK_MONOTONIC;
+	uint64_t deadline;
+	if (etf) {
+		/* Base the grid a full lead plus a slot into the future, so the very first
+		 * frame is submitted early rather than already late. */
+		uint64_t base = reac_etf_tai_ns() + h->etf_lead_ns + (uint64_t)p->period_ns;
+		reac_etf_grid_init(&h->etf_grid, p->fps, base);
+		deadline = h->etf_grid.launch_ns - h->etf_lead_ns;
+	} else {
+		deadline = mono_ns() + (uint64_t)p->period_ns;
+	}
+	uint64_t etf_drain_countdown = 0;
 	atomic_store_explicit(&p->started, 1, memory_order_release);
 
 	struct sockaddr_ll sll;
@@ -1456,7 +1545,7 @@ static void *pacer_loop(void *arg)
 		 * signals are blocked on this thread). An EINTR return means the slot sleep
 		 * was cut short — sleeping again to the same absolute target keeps cadence;
 		 * just emitting would put a frame ahead of the beat. */
-		while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &d, NULL) == EINTR)
+		while (clock_nanosleep(slotclk, TIMER_ABSTIME, &d, NULL) == EINTR)
 			;
 
 		/* Bounded non-blocking RX drain: apply the box's frames to the FSM BEFORE
@@ -1580,12 +1669,47 @@ static void *pacer_loop(void *arg)
 		 * THIS thread mid-period and smear the cadence the pacer exists to protect.
 		 * On EAGAIN/EWOULDBLOCK we drop this slot (bump tx_errors) and move on — the
 		 * absolute-deadline snap-forward below keeps the next slot on time. */
-		ssize_t r = sendto(reac_handle_fd(p->handle), frame, REAC_FRAME_BYTES, MSG_DONTWAIT,
-		                   (struct sockaddr *)&sll, sizeof sll);
+		ssize_t r;
+		if (etf) {
+			/* THE ONE LINE THE BACKEND CHANGES. The frame carries the instant it
+			 * is to leave; the kernel holds it until then. MSG_DONTWAIT still
+			 * applies — a full qdisc must not stall a SCHED_FIFO thread. */
+			struct iovec iov = { .iov_base = frame, .iov_len = REAC_FRAME_BYTES };
+			uint8_t cbuf[REAC_ETF_CMSG_SPACE];
+			struct msghdr msg;
+			memset(&msg, 0, sizeof msg);
+			msg.msg_name    = &sll;
+			msg.msg_namelen = sizeof sll;
+			msg.msg_iov     = &iov;
+			msg.msg_iovlen  = 1;
+			reac_etf_stamp(&msg, cbuf, h->etf_grid.launch_ns);
+			r = sendmsg(reac_handle_fd(p->handle), &msg, MSG_DONTWAIT);
+		} else {
+			r = sendto(reac_handle_fd(p->handle), frame, REAC_FRAME_BYTES, MSG_DONTWAIT,
+			           (struct sockaddr *)&sll, sizeof sll);
+		}
 		if (r < 0)
 			atomic_fetch_add_explicit(&p->tx_errors, 1, memory_order_relaxed);
 		else
 			atomic_fetch_add_explicit(&p->tx_frames, 1, memory_order_relaxed);
+
+		/* A LAUNCH TIME THE QDISC REFUSED IS A FRAME THAT NEVER LEFT, and sendmsg
+		 * returned 0 for it. SOF_TXTIME_REPORT_ERRORS puts it on the error queue;
+		 * draining it is the only way that loss is ever visible, and the prior art
+		 * not draining it is why its ETF ran as a silent no-op for months. Eight
+		 * times a second at any rate, bounded budget: never on the hot path's
+		 * critical section. */
+		if (etf && !etf_drain_countdown--) {
+			etf_drain_countdown = (uint64_t)p->fps / 8;
+			uint8_t code = 0;
+			unsigned bad = reac_etf_drain_errors(reac_handle_fd(p->handle), 8, &code);
+			if (bad) {
+				h->etf_refused += bad;
+				if (!h->etf_first_code)
+					h->etf_first_code = code;
+				atomic_fetch_add_explicit(&p->tx_errors, bad, memory_order_relaxed);
+			}
+		}
 
 		/* Advance the absolute deadline by exactly one period (no drift).
 		 *
@@ -1598,8 +1722,19 @@ static void *pacer_loop(void *arg)
 		 * correction is a slow pull rather than an audible click. */
 		long slot_ns = p->clock_follow ? reac_pacer_clock_tick(p, mono_ns())
 		                               : p->period_ns;
-		deadline += (uint64_t)slot_ns;
-		uint64_t now = mono_ns();
+		if (etf) {
+			/* The grid is advanced, never the deadline: `deadline` is derived
+			 * from the launch time so the lead stays exactly a lead. With
+			 * following off the advance is the EXACT rational grid (reac_etf.h)
+			 * rather than slot_ns, because a launch time accumulates what a
+			 * relative sleep would have absorbed. */
+			uint64_t launch = reac_etf_grid_advance(&h->etf_grid,
+			                                        p->clock_follow ? slot_ns : 0);
+			deadline = launch - h->etf_lead_ns;
+		} else {
+			deadline += (uint64_t)slot_ns;
+		}
+		uint64_t now = etf ? reac_etf_tai_ns() : mono_ns();
 		if (now > deadline) {
 			/* WE OVERSLEPT. What this branch does with the debt is the whole
 			 * difference between a clock master and a process that happens to
@@ -1643,7 +1778,19 @@ static void *pacer_loop(void *arg)
 			} else {
 				atomic_fetch_add_explicit(&p->slots_dropped, behind,
 				                          memory_order_relaxed);
-				deadline = now + (uint64_t)p->period_ns;
+				/* The same re-base, on whichever grid this backend keeps. On
+				 * ETF the launch grid is re-based one lead into the future, so
+				 * the first frame after the re-base is submitted early rather
+				 * than stamped with an instant that has already passed — which
+				 * the qdisc would refuse, one frame per slot, until it caught
+				 * up. */
+				if (etf) {
+					reac_etf_grid_rebase(&h->etf_grid,
+					                     now + (uint64_t)h->etf_lead_ns);
+					deadline = h->etf_grid.launch_ns - h->etf_lead_ns;
+				} else {
+					deadline = now + (uint64_t)p->period_ns;
+				}
 			}
 		}
 	}
@@ -1651,6 +1798,62 @@ static void *pacer_loop(void *arg)
 }
 
 /* ---- lifecycle ---------------------------------------------------------- */
+
+/* Arm the ETF backend on an already-open handle, or say exactly why not.
+ *
+ * ORDER MATTERS AND IS THE CHEAPEST-FIRST, LOUDEST-LAST: the lead is arithmetic, the
+ * TAI offset is one adjtimex, the qdisc is one netlink dump, the socket option is
+ * the only thing that changes state. Nothing is armed until everything that can be
+ * checked has been. */
+static enum reac_etf_refusal pacer_arm_etf(struct reac_pacer *p, const char *ifname,
+                                           unsigned lead_us)
+{
+	struct reac_handle *h = p->handle;
+
+	enum reac_etf_refusal r = reac_etf_lead_check(lead_us);
+	if (r != REAC_ETF_OK)
+		return r;
+
+	int tai = reac_etf_tai_offset();
+	if (tai < 0)
+		return REAC_ETF_REFUSE_NO_TAI_CLOCK;
+
+	/* THE QDISC, BEFORE ANYTHING IS STAMPED. An UNREADABLE dump is not an absence
+	 * and must not refuse a correctly configured rig — it is reported and the arming
+	 * continues, because the alternative is a probe that fails closed on every
+	 * kernel whose netlink we could not read. An ABSENT verdict is a real reading
+	 * and does refuse. */
+	char kind[32] = { 0 };
+	enum reac_etf_qdisc q = reac_etf_qdisc_probe(p->ifindex, kind, sizeof kind);
+	if (q == REAC_ETF_QDISC_ABSENT) {
+		fprintf(stderr, "reac-pacer: %s carries root qdisc '%s' and no etf qdisc "
+		        "anywhere; a SCM_TXTIME launch time would be stamped on every frame "
+		        "and ignored by the kernel. See docs/ETF-PACING.md for the exact "
+		        "tc command for this device.\n", ifname ? ifname : "?",
+		        kind[0] ? kind : "(none)");
+		return REAC_ETF_REFUSE_NO_QDISC;
+	}
+	if (q == REAC_ETF_QDISC_UNREADABLE)
+		fprintf(stderr, "reac-pacer: could not read %s's qdisc table over netlink — "
+		        "arming ETF anyway, because an unreadable probe is not evidence of "
+		        "an absent qdisc. If the cadence does not tighten, check "
+		        "`tc qdisc show dev %s` by hand.\n",
+		        ifname ? ifname : "?", ifname ? ifname : "?");
+
+	r = reac_etf_socket_arm(reac_handle_fd(h), tai, NULL);
+	if (r != REAC_ETF_OK)
+		return r;
+
+	h->etf_lead_ns = lead_us * 1000u;
+	h->etf_on = 1;
+	fprintf(stderr, "reac-pacer: backend ETF — SO_TXTIME on CLOCK_TAI (kernel TAI "
+	        "offset %d s), qdisc %s, lead %u us, launch grid exact at %d fps "
+	        "(%u + %u/%u ns per slot)\n",
+	        tai, q == REAC_ETF_QDISC_ETF ? "etf" : "unverified", lead_us, p->fps,
+	        (unsigned)(1000000000u / (unsigned)p->fps),
+	        (unsigned)(1000000000u % (unsigned)p->fps), (unsigned)p->fps);
+	return REAC_ETF_OK;
+}
 
 int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 {
@@ -1843,6 +2046,51 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 		close(fd);
 		reac_frame_ring_free(&p->ring);
 		return -1;
+	}
+
+	/* THE PACING BACKEND (reac_pacer.h). Unset -> thread, and every line above and
+	 * below is then byte- and timing-identical to the pacer as it was: the handle's
+	 * etf fields stay zero and the loop never reads one. */
+	{
+		enum reac_conf_layer lay = REAC_CONF_NONE;
+		int understood = 1;
+		enum reac_pacer_backend be =
+			reac_pacer_backend_resolve(cfg->ifname, NULL, &lay, &understood);
+		if (!understood)
+			fprintf(stderr, "reac-pacer: REACPW_PACER is set to a value that is "
+			        "neither 'thread' nor 'etf' (%s) — running the thread backend "
+			        "and saying so rather than guessing\n",
+			        reac_conf_layer_name(lay));
+		if (be == REAC_PACER_BACKEND_ETF) {
+			enum reac_conf_layer llay = REAC_CONF_NONE;
+			int lok = 1;
+			unsigned lead_us = reac_pacer_lead_us_resolve(cfg->ifname, NULL,
+			                                              &llay, &lok);
+			if (!lok)
+				fprintf(stderr, "reac-pacer: REACPW_PACER_LEAD_US is out of "
+				        "[%u, %u] us or unreadable (%s) — using the measured "
+				        "default %u us\n", REAC_ETF_LEAD_US_MIN,
+				        REAC_ETF_LEAD_US_MAX, reac_conf_layer_name(llay),
+				        REAC_ETF_LEAD_US_DEFAULT);
+			enum reac_etf_refusal r = pacer_arm_etf(p, cfg->ifname, lead_us);
+			if (r != REAC_ETF_OK) {
+				/* REFUSE, never fall back. The operator asked for launch-time
+				 * pacing; giving them the thread backend while they believe
+				 * they are measuring ETF poisons the comparison this backend
+				 * exists for. */
+				fprintf(stderr, "reac-pacer: ETF backend REFUSED (%s, asked "
+				        "for by %s). Fix the precondition or set "
+				        "REACPW_PACER=thread.\n",
+				        reac_etf_refusal_name(r), reac_conf_layer_name(lay));
+				reac_handle_close(&p->handle);
+				reac_frame_ring_free(&p->ring);
+				return -1;
+			}
+		} else {
+			fprintf(stderr, "reac-pacer: backend thread — clock_nanosleep on "
+			        "CLOCK_MONOTONIC + sendto; the egress instant is this "
+			        "thread's wake (REACPW_PACER=etf hands it to the kernel)\n");
+		}
 	}
 	return 0;
 }
