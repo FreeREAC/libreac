@@ -27,6 +27,7 @@
 #define REAC_PACER_H
 
 #include <reac/transport/reac_handle.h>
+#include <reac/transport/reac_conf.h>   /* the layered lookup the backend knob rides */
 
 #include <net/if.h>   /* IFNAMSIZ */
 #include <stdint.h>
@@ -797,6 +798,64 @@ long reac_pacer_clock_tick(struct reac_pacer *p, uint64_t now_ns);
  * discipline to.
  */
 enum reac_pace_source reac_pacer_pace_source(const struct reac_pacer *p);
+
+/* ---- WHICH BACKEND OWNS THE EGRESS INSTANT (2026-09-14) ---------------------
+ *
+ * ONE PACER, TWO WAYS OF RELEASING A FRAME — not two pacers. Everything above is
+ * unchanged whichever is chosen: the same loop, the same FSM step, the same FILLER
+ * on underrun, the same depth guard, the same slot-debt law, the same telemetry.
+ * What moves is WHO decides the instant the frame leaves.
+ *
+ *   THREAD (the default, and what has always run). The loop sleeps to an absolute
+ *   CLOCK_MONOTONIC deadline and calls sendto. The frame leaves when the thread
+ *   gets to run, so every scheduling tail between the wake and the syscall lands on
+ *   the wire — measured here at 3.6 late slots/s and 900 ppm of transmit deficit.
+ *
+ *   ETF. The socket carries SO_TXTIME, every frame carries a SCM_TXTIME launch time
+ *   on an exact CLOCK_TAI grid, and the kernel's etf qdisc (or the NIC, where it
+ *   offloads) holds the packet until that instant. The thread sleeps to
+ *   (launch - lead) and only has to be EARLY. reac_repacer measured the same
+ *   mechanism tighten a relay's egress cadence from 3.6 us to 1.4 us of jitter.
+ *
+ * ETF HAS PRECONDITIONS AND THEY ARE REFUSED, NOT WORKED AROUND. An etf qdisc on
+ * the device, SO_TXTIME on the socket, and a non-zero kernel TAI offset. If the
+ * operator asked for ETF and one of them is missing, reac_pacer_open FAILS and names
+ * the code. It does not quietly fall back to the thread backend: a run that believes
+ * it is measuring launch-time pacing while the thread is doing the pacing is worse
+ * than no run, and that exact silent no-op is what cost the prior art months
+ * (docs/ETF-PACING.md).
+ *
+ * Selected by REACPW_PACER through reac_conf's existing layers — so it is
+ * per-segment (REACPW_PACER_reacA) wherever the rig needs one segment on each arm
+ * for a comparison, with no new cfg field and no public struct changing shape. */
+enum reac_pacer_backend {
+	REAC_PACER_BACKEND_THREAD = 0,   /* clock_nanosleep + sendto; the default */
+	REAC_PACER_BACKEND_ETF    = 1,   /* SO_TXTIME + SCM_TXTIME + the etf qdisc */
+};
+
+/* The word an operator types and the word the journal prints. Never NULL. */
+const char *reac_pacer_backend_name(enum reac_pacer_backend b);
+
+/* Resolve REACPW_PACER for `segment` (the TX interface name; NULL skips the
+ * per-segment layer). `layer` (may be NULL) receives which layer answered, so the
+ * journal can say WHERE the choice came from.
+ *
+ * `understood` (may be NULL) is set to 0 when a value was found and was neither
+ * "thread" nor "etf". The default is returned in that case and the caller REPORTS
+ * it — a word nobody can parse is not consent, which is reac_envflag.h's rule for
+ * boolean knobs applied to this one. */
+enum reac_pacer_backend reac_pacer_backend_resolve(const char *segment, const char *home,
+                                                   enum reac_conf_layer *layer,
+                                                   int *understood);
+
+/* Resolve REACPW_PACER_LEAD_US the same way. Out-of-range and unparseable values
+ * fall back to REAC_ETF_LEAD_US_DEFAULT and set `*understood` to 0. */
+unsigned reac_pacer_lead_us_resolve(const char *segment, const char *home,
+                                    enum reac_conf_layer *layer, int *understood);
+
+/* Which backend this pacer actually opened with. The answer comes from the handle,
+ * not from the knob, so it cannot say ETF for a pacer that is running the thread. */
+enum reac_pacer_backend reac_pacer_backend(const struct reac_pacer *p);
 
 /* ---- HEALTH, published where an operator can see it (workstream CLK) --------
  *
