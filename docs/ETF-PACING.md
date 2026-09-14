@@ -64,10 +64,19 @@ no run at all.
 | refusal | what it means | fix |
 |---|---|---|
 | `REAC_ETF_REFUSE_NO_QDISC` | the netdev has no etf qdisc anywhere; a launch time would be stamped on every frame and ignored | the `tc` commands below |
-| `REAC_ETF_REFUSE_NO_TXTIME` | `setsockopt(SO_TXTIME)` refused | a kernel ≥ 4.19 with `CONFIG_NET_SCH_ETF` |
+| `REAC_ETF_REFUSE_NO_TXTIME` | `setsockopt(SO_TXTIME)` refused, and not for want of a capability | a kernel ≥ 4.19 with `CONFIG_NET_SCH_ETF` |
+| `REAC_ETF_REFUSE_TXTIME_EPERM` | `SO_TXTIME` exists and this process may not set it | `CAP_NET_ADMIN` — see below |
 | `REAC_ETF_REFUSE_TAI_UNSET` | the kernel's TAI offset reads 0, so `CLOCK_TAI` is really UTC and every launch time would be 37 s from where the qdisc reads its own clock | discipline the clock (`chronyd`/`ntpd` sets the offset; `adjtimex` reports it) |
 | `REAC_ETF_REFUSE_NO_TAI_CLOCK` | `adjtimex` itself failed | — |
 | `REAC_ETF_REFUSE_BAD_LEAD` | `REACPW_PACER_LEAD_US` outside [50, 50000] | — |
+
+**`SO_TXTIME` is capability-gated, and that is a separate code on purpose.** Measured 2026-09-14 on
+r1 (kernel 7.1.9, uid 0 inside a container holding `NET_RAW` but not `NET_ADMIN`): `EPERM` on both an
+AF_PACKET and a UDP socket. It is the *option* that needs `CAP_NET_ADMIN`, not the qdisc — so the
+refusal is `REAC_ETF_REFUSE_TXTIME_EPERM`, never "this kernel has no SO_TXTIME", because the two have
+different fixes and folding them together sends an operator after a kernel upgrade to cure a
+capability. **reac-pw already holds `CAP_NET_ADMIN`** (it mints and marks VLAN sub-interfaces), so the
+ETF backend costs the daemon no new capability. A probe run by hand from a shell will be refused.
 
 **The qdisc check is the one that matters most.** `reac_repacer` ran with `--etf` for months on a
 port whose root qdisc was `noqueue`: `SO_TXTIME` was set, `SCM_TXTIME` was stamped on every frame,
@@ -206,5 +215,9 @@ read off the daemon rather than remembered.
   a hardware-launch arm is not measurable here at all. Any figure this desk produces is about the
   kernel's hrtimer release, not about a NIC's.
 - **`skip_sock_check`'s effect on the segment's other transmitters is unverified**, as above.
+- **No veth arm has run.** `tools/etf-veth-probe.sh` submits a burst with launch times and requires
+  it to ARRIVE as a grid, with an unstamped burst as its control. It has not executed anywhere: the
+  r1 build container has no iproute2 and no `CAP_NET_ADMIN`, and the desk was not touched. What r1
+  did establish is narrower and is stated as such — that `SO_TXTIME` is capability-gated.
 - The 2500 µs lead's two terms are each measured, but **the sum has never been swept**; the
   comparative run is where a shorter lead gets tried.
