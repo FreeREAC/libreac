@@ -3,8 +3,8 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.0.3
-%global abi 3
+Version:        1.1.0
+%global abi 4
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
 
@@ -14,9 +14,9 @@ Source0:        libreac-%{version}.tar.gz
 
 BuildRequires:  gcc
 BuildRequires:  make
-BuildRequires:  pkgconfig(libreac) >= 1.0.2
+BuildRequires:  pkgconfig(libreac) >= 1.1.0
 
-Requires:       libreac%{?_isa} >= 1.0.2
+Requires:       libreac%{?_isa} >= 1.1.0
 
 %description
 libreac-transport is the REAC transport layer: AF_PACKET frame RX/TX over a lock-free
@@ -29,7 +29,7 @@ itself, that belongs to the process that links it.
 %package devel
 Summary:        Development files for libreac-transport
 Requires:       %{name}%{?_isa} = %{version}-%{release}
-Requires:       pkgconfig(libreac) >= 1.0.2
+Requires:       pkgconfig(libreac) >= 1.1.0
 
 %description devel
 Headers and pkg-config for building against libreac-transport.
@@ -70,7 +70,7 @@ includedir=\${prefix}/include
 Name: libreac-transport
 Description: The REAC transport layer (sockets, pacer, RT threads, VLAN scan)
 Version: %{version}
-Requires: libreac >= 1.0.2
+Requires: libreac >= 1.1.0
 Libs: -L\${libdir} -lreac-transport -lpthread -lm
 Cflags: -I\${includedir}
 PC
@@ -87,6 +87,18 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.0-1
+- SONAME 3 -> 4, for the same reason .so.3 moved: `struct reac_pacer` EMBEDS a libreac
+  struct that grew. libreac 1.1.0 decodes the identity page's 0x0600 record as the box's
+  REAC version, so struct reac_identity goes 30 -> 38 bytes; reac_pacer carries one as
+  rx_identity and goes 24304 -> 24312, with every field after rx_identity (identity_seq,
+  declared_in/out, drops, the whole discovery half) shifted by 8. Measured with offsetof
+  against both header trees, x86-64.
+- The libreac floor rises to 1.1.0 in all four places (BuildRequires, Requires, the devel
+  Requires and the generated pkg-config), because a transport built against the 38-byte
+  identity cannot run against the 30-byte one.
+- reac_pacer_read_identity() hands back a REAC version alongside the firmware; the
+  seqlock around rx_identity is unchanged and still covers the whole struct.
 * Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.3-1
 - The tap role: reac_tap survey and serve (listen, never transmit) for a segment another
   master owns — one stream for the desk downstream, one per box. Same ABI, new symbols.
