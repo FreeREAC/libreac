@@ -185,6 +185,20 @@ static int fake_setopt_refuses(int fd, int level, int optname,
 	return 0;
 }
 
+/* The OTHER way SO_TXTIME fails, and it is not the same problem: the option is
+ * there and this process may not set it. MEASURED on r1, uid 0 in a container
+ * without CAP_NET_ADMIN. */
+static int fake_setopt_eperm(int fd, int level, int optname,
+                             const void *val, socklen_t len)
+{
+	(void)fd; (void)level; (void)val; (void)len;
+	if (optname == SO_TXTIME) {
+		errno = EPERM;
+		return -1;
+	}
+	return 0;
+}
+
 static int fake_setopt_accepts_calls;
 static int fake_setopt_clockid;
 static unsigned fake_setopt_flags;
@@ -208,6 +222,16 @@ static void test_refusals(void)
 	CHECK(r == REAC_ETF_REFUSE_NO_TXTIME,
 	      "a kernel without SO_TXTIME gave %d (%s), want REAC_ETF_REFUSE_NO_TXTIME",
 	      (int)r, reac_etf_refusal_name(r));
+
+	/* EPERM is a DIFFERENT refusal. Same syscall, same failure return, different
+	 * fix — a capability, not a kernel. Collapsing the two would send an operator
+	 * after an upgrade they do not need. */
+	r = reac_etf_socket_arm(-1, 37, fake_setopt_eperm);
+	CHECK(r == REAC_ETF_REFUSE_TXTIME_EPERM,
+	      "an EPERM from SO_TXTIME gave %d (%s), want REAC_ETF_REFUSE_TXTIME_EPERM",
+	      (int)r, reac_etf_refusal_name(r));
+	CHECK(REAC_ETF_REFUSE_TXTIME_EPERM != REAC_ETF_REFUSE_NO_TXTIME,
+	      "a capability failure and a missing feature share one code");
 
 	/* TAI offset 0: refused BEFORE the socket is touched, because a clock nobody
 	 * has disciplined would put every launch time 37 s from where the qdisc reads

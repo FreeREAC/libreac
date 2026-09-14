@@ -204,6 +204,12 @@ $(WIRE_TOOLS_PCAP): %: tools/%.c libreac.a
 
 # fake_box opens an AF_PACKET socket, so it needs the GNU headers the other wire
 # tools (pure pcap readers) do not. Its own rule rather than widening theirs.
+# etf_probe transmits and configures nothing outside a namespace it is handed; it
+# reaches libreac not at all, only transport/src/reac_etf.c. Not in $(WIRE_TOOLS):
+# those are pcap readers and this one opens a socket.
+etf_probe: tools/etf_probe.c transport/src/reac_etf.c
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src $^ -o $@
+
 fake_box: tools/fake_box.c libreac.a
 	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) $< libreac.a -lm -o $@
 
@@ -254,7 +260,7 @@ test-transport: tests/test_tap.c libreac-transport.a libreac.a
 	tools/conformance-tap-silent.sh
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_abi_layout test_reac_etf corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_abi_layout test_reac_etf etf_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
