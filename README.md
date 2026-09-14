@@ -51,8 +51,7 @@ socket, so a kernel-module backend can sit under the same headers.
 ## Who links these
 
 `reac-pw`, the PipeWire-native REAC endpoint, links both: `libreac-transport` for the wire and
-`libreac` underneath it for what the frames mean. `reac-aes67`, the REAC→AES67 bridge, links
-`libreac` alone — it has no need of the transport layer's threads or pacer.
+`libreac` underneath it for what the frames mean.
 
 ## The three paces
 
