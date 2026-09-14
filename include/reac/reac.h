@@ -190,10 +190,32 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * sockets/pacer/RT-thread/VLAN code, depending on libreac unchanged. Not an
  * ABI break for libreac.so itself (no symbol here moves or is removed, so
  * LIBREAC_ABI stays put); the minor bump is the one middle-digit increment a
- * new build product beside the existing one deserves. */
+ * new build product beside the existing one deserves.
+ *
+ * 1.1.0 IS AN ABI BREAK, and a measurement says so rather than the diff's
+ * shape. `struct reac_identity` (reac_identity.h) is a PUBLIC struct a consumer
+ * allocates, and the 0x0600 record it carries is now decoded into major/minor/
+ * patch beside its raw bytes. The same offsetof program compiled against the
+ * header before and after, x86-64:
+ *
+ *   sizeof(struct reac_identity)   30 -> 38
+ *   the 0x0600 raw bytes           offset 21 -> 28
+ *   its has_* flag                 offset 29 -> 36
+ *
+ * fw_milli, has_fw, model_name and has_model_name keep their offsets, so a
+ * caller reading only those would have LOOKED fine -- and then handed
+ * reac_identity_ingest() a 30-byte object to write 38 bytes of. The rename of
+ * hw_block to reac_version_raw forces none of that; the eight added bytes do,
+ * which is why the ABI question is settled by sizeof/offsetof and never by
+ * reading the patch.
+ *
+ * libreac-transport's soname moves with it, for the reason .so.3 already moved
+ * once: `struct reac_pacer` EMBEDS a reac_identity, so it grew too (24304 ->
+ * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
+ * becomes .so.4. Same rule, one library along. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 0
-#define LIBREAC_VERSION_PATCH 3
+#define LIBREAC_VERSION_MINOR 1
+#define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
@@ -205,7 +227,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
  * number; packaging/make-tarball.sh refuses a tarball whose spec disagrees. */
-#define LIBREAC_ABI 2
+#define LIBREAC_ABI 3
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)
