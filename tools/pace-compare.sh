@@ -52,7 +52,7 @@
 set -o pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-HIST="$ROOT/pace_hist"
+HIST=${PACE_HIST:-$ROOT/pace_hist}
 
 IFACE=""; TXIFACE=""; FPS=8000; SECS=60; OUT=""; UNIT="reac-pw"; SRC=""
 ARMS="thread etf kmod"
