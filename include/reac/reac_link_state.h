@@ -34,6 +34,7 @@
 #include <stdint.h>
 
 #include <reac/reac_ctrlblk.h>   /* struct reac_box_model, the fixed matrix */
+#include <reac/reac_identity.h>   /* struct reac_identity — the identity-page badge */
 
 #include <reac/reac_master.h>
 
@@ -268,5 +269,19 @@ const struct reac_box_model *reac_box_master_model(unsigned width);
  * a key a consumer does not find. `set` NULL is a no-op. */
 void reac_box_master_identity_publish(unsigned width, uint64_t mac48, int locked,
                                       reac_prop_set_fn set, void *ctx);
+
+/* THE IDENTITY-PAGE BADGE, composed and STAMPED in one act — REAC_PROP_BOX_FIRMWARE,
+ * REAC_PROP_BOX_REAC_VERSION and REAC_PROP_BOX_HW from one decoded `struct reac_identity`
+ * (reac_identity.h). Same reasoning as reac_box_mac_publish: a formatter tested alone
+ * leaves "which key, with what value, and is it written at all" untested, and the firmware
+ * and the REAC version are two DIFFERENT numbers off two different addresses — a node that
+ * spells either one a second time is where they get swapped.
+ *
+ * ALL THREE ARE ALWAYS STAMPED, "" when the box has not answered that address. The keys
+ * merge on update, so an unwritten key keeps the DEPARTED box's version; "" is how a
+ * consumer reads "not answered", which is a fact and not a zero. A NULL `id` stamps all
+ * three empty, which is exactly the state after a box drops. `set` NULL is a no-op. */
+void reac_box_identity_publish(const struct reac_identity *id,
+                               reac_prop_set_fn set, void *ctx);
 
 #endif /* REAC_LINK_STATE_H */
