@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.0.3
+Version:        1.1.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -9,7 +9,7 @@ Version:        1.0.3
 # LIBREAC_ABI in include/reac/reac.h -- packaging/make-tarball.sh refuses to
 # build a tarball when this copy and the header disagree, which is the only
 # moment the copy can be caught.
-%global abi 2
+%global abi 3
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -107,6 +107,29 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.0-1
+- The identity page's 0x0600 record IS the box's REAC version, and it decodes the way the
+  console prints it: eight bytes, four u16be, a reserved word then major/minor/patch,
+  rendered `major.minorPP`. Read off an M-200i's own identity display on 2026-09-14 --
+  S-1608 "REAC 2.302" beside "Firmware 2.200", S-4000S-3208 "REAC 2.102" beside
+  "Firmware 2.500" -- so the two versions are different numbers off different addresses
+  and a consumer must not substitute one for the other. The older reading, that the
+  second u16 tracked the box's REAC port count, was a coincidence of a three-model corpus
+  and is dropped.
+- SONAME 2 -> 3. `struct reac_identity` is public and a consumer allocates it; decoding
+  0x0600 into major/minor/patch beside its raw bytes grows it from 30 to 38 bytes and
+  moves the record's offset from 21 to 28 (measured with offsetof against both headers,
+  x86-64). The four fields before it keep their offsets, so an old caller compiles and
+  looks right, then hands reac_identity_ingest() a 30-byte object to write 38 bytes of.
+  The rename hw_block -> reac_version_raw and REAC_IDENTITY_ADDR_HW_BLOCK ->
+  _REAC_VERSION is the API half; the eight added bytes are the ABI half.
+- New: reac_identity_reac_ver_str() formats the console's spelling, has_reac_version and
+  the three numbers join struct reac_identity, and reac_box_identity_publish() stamps
+  reac.box-firmware, reac.box.reac_version and reac.box-hw from one decoded identity in
+  a single act -- the firmware and the REAC version are exactly where a second speller
+  would swap them.
+- The capture corpus baseline records 29 captures added since 1.0.3 (114 total). Pure
+  additions: no tally of any previously recorded capture moved.
 * Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.3-1
 - The master's announce raises its box count only once the slave is established (measured
   M-200 timeline); carrier tests gate the pace code, width and count at 44.1/48/96 kHz.
