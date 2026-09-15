@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.1.3
+Version:        1.1.4
 %global abi 4
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,12 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Tue Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.4-1
+- reac_hunt: a segment PINNED master with a stagebox already mastering the wire now JOINS it
+  as a slave instead of refusing (operator ruling 2026-09-16, "enroll any box, master or
+  slave"). The rig measured the refusal twice: a door with no audio and an operator reading
+  "not detected". REAC_HUNT_REFUSED is left for its one remaining case, a rival whose geometry
+  has never been captured. Behaviour only -- same ABI (LIBREAC_ABI 3), no struct, no symbol.
 * Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.3-1
 - ETF IS THE DEFAULT PACING BACKEND (operator ruling, 2026-09-14). Measured on the TX device,
   60 s per arm, one S-4000S-3208 per link: interval sd 28.5 -> 2.7 us (PCI VLAN) and

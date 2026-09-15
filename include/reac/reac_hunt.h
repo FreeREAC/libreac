@@ -5,10 +5,11 @@
  *
  * THE RULE, and it is this daemon's own: no foreign master on the segment -> we drive
  * it, probe, grant, establish; ANY master on it -> we join as a slave and follow its
- * pace, a desk and a stagebox strapped to master alike (operator ruling 2026-09-09; the
- * width the box announces is what the segment is then sized from, and it rides the
- * verdict in `arb.rival_channels`); a rival whose geometry nobody has ever captured ->
- * we refuse, because there is nothing to size a segment from. Nothing has to be written
+ * pace, a desk and a stagebox strapped to master alike, WHATEVER the segment is pinned to
+ * (operator rulings 2026-09-09 and 2026-09-16; the width the box announces is what the
+ * segment is then sized from, and it rides the verdict in `arb.rival_channels`); a rival
+ * whose geometry nobody has ever captured -> we refuse, because there is nothing to size
+ * a segment from. Nothing has to be written
  * down for any of it: a role a normal box needs hand-set is a defect in the defaults,
  * exactly as a hand-set rate would be.
  *
@@ -30,17 +31,19 @@
  * what a segment with nothing configured means. This module resolves the second into
  * the first; the clock axis is untouched by any of it.
  *
- * WHY IT REFUSES RATHER THAN FIGHTS, AND WHERE THAT IS NOW THE ONLY REFUSAL. REAC keeps
- * ONE master per segment, and we are never the second one. Until 2026-09-09 that was
- * spelled "a stagebox on M is refused"; the rig proved the spelling wrong — an S-0808 on
- * M was refused, nothing was served, and the segment disappeared from the console. A
- * clock is a clock whichever end of the pairing sends it, so an unpinned wire (or one
- * pinned `slave`) JOINS a box master. What survives is the contradiction: a wire the
- * operator pinned MASTER with a box mastering it is refused, logged with the remedy — the
- * switch on the box's own front — and left alone; never probed at, never out-shouted. A
- * refused segment is still PUBLISHED, as a door-only node carrying the refusal props
- * (DESIGN.md, 0.5.1), because a refusal nobody can see is indistinguishable from a
- * daemon that is not running.
+ * WHY IT JOINS RATHER THAN FIGHTS, AND WHERE THE ONE REMAINING REFUSAL IS. REAC keeps ONE
+ * master per segment, and we are never the second one. A clock is a clock whichever end of
+ * the pairing sends it, so ANY wire with a box mastering it is JOINED — unpinned, pinned
+ * `slave`, and since 2026-09-16 pinned `master` too (operator: "we set the daemons to
+ * enroll any box, master or slave"). Both spellings before it were measured wrong on the
+ * rig: an S-0808 on M refused on an unpinned wire vanished from the console (2026-09-09),
+ * and an S-1608 on M refused on a PINNED one published a door with no audio while the
+ * operator read "not detected" (2026-09-16). The switch position costs the head-amp, not
+ * the audio, and saying so is the console's job. THE ONE REFUSAL LEFT is a rival whose
+ * geometry has never been captured: there is nothing to size a segment from. A refused
+ * segment is still PUBLISHED, as a door-only node carrying the refusal props (DESIGN.md,
+ * 0.5.1), because a refusal nobody can see is indistinguishable from a daemon that is not
+ * running.
  *
  * Main-thread only, like the discovery table it holds: one hunt per passive sniffer,
  * alive only until its segment is served (or refused). It transmits nothing; hearing is
@@ -82,8 +85,8 @@ enum reac_hunt_verdict {
 	REAC_HUNT_HUNTING = 0,   /* nothing decides it yet; keep listening */
 	REAC_HUNT_MASTER,        /* no master heard and a box is present: we drive and grant */
 	REAC_HUNT_SLAVE,         /* somebody masters this wire: join it and follow its pace */
-	REAC_HUNT_REFUSED,       /* an unreadable rival masters it, or a box does on a wire
-	                          * pinned MASTER: say so, and publish a door about it */
+	REAC_HUNT_REFUSED,       /* a rival whose geometry has never been captured masters it:
+	                          * say so, and publish a door about it */
 };
 
 const char *reac_hunt_verdict_name(enum reac_hunt_verdict v);
@@ -136,9 +139,9 @@ void reac_hunt_init(struct reac_hunt *h, const uint8_t our_mac[6], uint64_t now_
  * first frame; `master` and `slave` pin, and `auto` is expressed by not calling this at
  * all. A pinned hunt never elects and never waits: the next `reac_hunt_step` answers
  * with the pinned role on an empty table, so a pinned master drives a wire whose box has
- * not spoken and cannot speak until it does. It refuses in exactly one case — pinned
- * MASTER with a BOX already mastering the wire (2026-09-09) — and that case reads only
- * what the table ALREADY holds, so it costs a cold wire nothing. */
+ * not spoken and cannot speak until it does. A pinned MASTER yields to a BOX already
+ * mastering the wire and joins it as a slave (2026-09-16) — that case reads only what the
+ * table ALREADY holds, so it costs a cold wire nothing. */
 void reac_hunt_pin(struct reac_hunt *h, enum reac_role role);
 
 /* Grant the masterless licence (reac_knock.h): this wire carried nothing for the whole
@@ -155,7 +158,7 @@ int reac_hunt_observe(struct reac_hunt *h, const uint8_t *frame, size_t len,
                       uint64_t now_ns, struct reac_disco_sighting *out);
 
 /* Re-decide. Ages the table first, so an unplugged desk stops mastering the segment and
- * a box switched out of M stops being refused, without anything latching. Returns 1 when
+ * a box switched out of M stops mastering it, without anything latching. Returns 1 when
  * the verdict CHANGED (log it), 0 when it stands. */
 int reac_hunt_step(struct reac_hunt *h, uint64_t now_ns);
 
