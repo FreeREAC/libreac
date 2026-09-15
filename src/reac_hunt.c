@@ -141,11 +141,19 @@ static enum reac_hunt_verdict decide(const struct reac_hunt *h, uint64_t now_ns)
 	 * second kind is what made the desk silent (DESIGN.md, "A cold stagebox is
 	 * silent"). */
 	if (h->pinned) {
-		/* THE ONE CONTRADICTION A PIN CANNOT SETTLE (operator ruling, 2026-09-09). The
-		 * operator wrote down that THIS wire is ours to drive, and a stagebox on M says
-		 * it is not. Two answers, and the daemon never picks between them by
-		 * out-shouting a box: it refuses, publishes the code and the rival's address,
-		 * and the remedy is the switch on the box's own front panel.
+		/* A PIN SAYS WHICH END, AND A BOX ON M ANSWERS THE QUESTION FIRST (operator
+		 * ruling, 2026-09-16: "we set the daemons to enroll any box, master or slave").
+		 * The operator wrote down that THIS wire is ours to drive, and a stagebox on M
+		 * is already driving it. We neither out-shout it nor walk away: we JOIN it, at
+		 * the width it announces, and the box's audio is on the graph. What the switch
+		 * position still costs is the head-amp — a box on M has no mixer behind it and
+		 * accepts no preamp control — and that is the CONSOLE's to report, beside a
+		 * segment that works, rather than this module's to refuse.
+		 *
+		 * IT WAS A REFUSAL UNTIL 2026-09-16, and the refusal is what the rig measured:
+		 * a pinned `enp131s0` with an S-1608 on M published a door and no audio, and the
+		 * operator read "not detected". A pin nobody re-asserted that night cost a whole
+		 * stagebox to make a point about the pin.
 		 *
 		 * IT STILL WAITS FOR NOTHING. This reads whatever the table ALREADY holds on the
 		 * first step after link — a box on M streams at wire cadence, so it is in the
@@ -153,14 +161,13 @@ static enum reac_hunt_verdict decide(const struct reac_hunt *h, uint64_t now_ns)
 		 * COLD leaves the table empty, so the pin drives exactly as it did before (the
 		 * 2026-09-08 cold-start rule, untouched).
 		 *
-		 * ONLY A BOX. An UNREADABLE rival does not flip a pin: §4's conservatism is
-		 * that a frame kind nobody has captured must not decide a segment's topology,
-		 * and turning the operator's own answer into a refusal is deciding it. A box's
-		 * geometry is unambiguous and its remedy is physical, which is what earns it
-		 * the right to outrank a pin. */
+		 * AN UNREADABLE RIVAL STILL DOES NOT FLIP A PIN: §4's conservatism is that a
+		 * frame kind nobody has captured must not decide a segment's topology, and
+		 * turning the operator's own answer into a refusal is deciding it. A BOX's
+		 * geometry is unambiguous and is what earns it the right to outrank a pin. */
 		if (h->pin == REAC_ROLE_MASTER && h->arb.state == REAC_SEGMENT_FOREIGN &&
 		    h->arb.rival == REAC_RIVAL_BOX)
-			return REAC_HUNT_REFUSED;
+			return REAC_HUNT_SLAVE;
 		return h->pin == REAC_ROLE_SLAVE ? REAC_HUNT_SLAVE : REAC_HUNT_MASTER;
 	}
 
