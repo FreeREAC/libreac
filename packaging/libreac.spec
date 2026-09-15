@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.1.3
+Version:        1.1.4
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,12 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Tue Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.4-1
+- reac_hunt: a segment PINNED master with a stagebox already mastering the wire now JOINS it
+  as a slave instead of refusing (operator ruling 2026-09-16, "enroll any box, master or
+  slave"). The rig measured the refusal twice: a door with no audio and an operator reading
+  "not detected". REAC_HUNT_REFUSED is left for its one remaining case, a rival whose geometry
+  has never been captured. Behaviour only -- same ABI (LIBREAC_ABI 3), no struct, no symbol.
 * Mon Sep 14 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.3-1
 - reac.pace.backend and reac.pace.backend-refusal join the node-property vocabulary: which
   backend owns the egress instant, and why it is not the one the default asked for. Same ABI
