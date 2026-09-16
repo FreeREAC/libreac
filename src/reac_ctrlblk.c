@@ -827,10 +827,11 @@ static void ctrl_finish(uint8_t *frame, const struct ctrl_frame *f)
 
 /* The six-step ritual, once. Returns the frame length, or 0 when the row is not
  * emitted for this model / the width is not a real box width. */
-static size_t ctrl_emit(uint8_t *out, const struct ctrl_frame *f,
-                        const uint8_t dst[6], const uint8_t src[6],
-                        uint16_t counter, int n_ch, const uint8_t *args,
-                        float *const *planar, int ns)
+static size_t ctrl_emit_as(uint8_t *out, const struct ctrl_frame *f,
+                           const struct reac_box_model *model,
+                           const uint8_t dst[6], const uint8_t src[6],
+                           uint16_t counter, int n_ch, const uint8_t *args,
+                           float *const *planar, int ns)
 {
 	/* The braid packs channel PAIRS: box widths are even, 2..40 (628 B at 16,
 	 * 340 B at 8). Rows sized from the matrix carry a verified width already. */
@@ -838,13 +839,23 @@ static size_t ctrl_emit(uint8_t *out, const struct ctrl_frame *f,
 	    (n_ch < 2 || n_ch > REAC_MAX_CHANNELS || (n_ch & 1)))
 		return 0;
 
-	const struct reac_box_model *m = reac_box_model_by_channels(n_ch);
+	/* THE ROW IS THE CALLER'S WHEN THE CALLER HAS ONE. A width can only ever
+	 * name a captured model (reac_box_model_by_channels answers for those
+	 * alone), so a box-role daemon declaring a derived row passes it here; every
+	 * existing caller passes NULL and keeps the width-keyed behaviour exactly. */
+	const struct reac_box_model *m = model ? model
+	                                       : reac_box_model_by_channels(n_ch);
 	if (!ctrl_gate_ok(m, (enum ctrl_gate)f->gate))
 		return 0;
 
+	/* A ROW WHOSE MODEL WAS HANDED IN IS SIZED BY THE WIDTH THAT CAME WITH IT.
+	 * `m->in_ch` is the DECLARED input count, which an output-only row sets to
+	 * zero — a frame of that width is not a frame. The caller's n_ch is already
+	 * reac_box_model_upstream_width's answer, so it is the one to use. */
+	int model_w = model ? n_ch : m->in_ch;
 	size_t len = (f->len == LEN_DOWNSTREAM)
 	           ? (size_t)REAC_FRAME_BYTES
-	           : reac_ctrl_box_frame_len(f->len == LEN_MODEL_WIDTH ? m->in_ch : n_ch);
+	           : reac_ctrl_box_frame_len(f->len == LEN_MODEL_WIDTH ? model_w : n_ch);
 
 	memset(out, 0, len);
 	put_hdr(out, dst, src, counter, f->type0, f->type1);
@@ -855,6 +866,14 @@ static size_t ctrl_emit(uint8_t *out, const struct ctrl_frame *f,
 	out[len - 2] = REAC_END_MARKER_0;
 	out[len - 1] = REAC_END_MARKER_1;
 	return len;
+}
+
+static size_t ctrl_emit(uint8_t *out, const struct ctrl_frame *f,
+                        const uint8_t dst[6], const uint8_t src[6],
+                        uint16_t counter, int n_ch, const uint8_t *args,
+                        float *const *planar, int ns)
+{
+	return ctrl_emit_as(out, f, NULL, dst, src, counter, n_ch, args, planar, ns);
 }
 
 /* Lay a row over an ALREADY-BUILT frame: the type word [16:18] and the control
@@ -1116,6 +1135,36 @@ size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
 {
 	return ctrl_emit(out, &CTRL_FRAMES[CTRL_IDENT_LAST], master, src,
 	                 counter, in_ch, NULL, NULL, 0);
+}
+
+/* The model table's block vocabulary -> this scaffold's frame rows: the inverse
+ * of ctrl_block_to_box_block, and the one place a caller's row becomes a frame. */
+static int box_block_to_ctrl_frame(enum reac_box_block b)
+{
+	switch (b) {
+	case REAC_BOX_BLOCK_CONFIG:      return CTRL_CONFIG_ANNOUNCE;
+	case REAC_BOX_BLOCK_CC0014:      return CTRL_COLDCONNECT;
+	case REAC_BOX_BLOCK_CC0013:      return CTRL_COLDCONNECT_0013;
+	case REAC_BOX_BLOCK_CC0016:      return CTRL_COLDCONNECT_0016;
+	case REAC_BOX_BLOCK_CC001A:      return CTRL_COLDCONNECT_001A;
+	case REAC_BOX_BLOCK_IDENT_FIRST: return CTRL_IDENT_FIRST;
+	case REAC_BOX_BLOCK_IDENT_LAST:  return CTRL_IDENT_LAST;
+	default:                         return -1;
+	}
+}
+
+size_t reac_ctrl_build_as(uint8_t *out, const struct reac_box_model *m,
+                          enum reac_box_block b, const uint8_t master[6],
+                          const uint8_t src[6], uint16_t counter,
+                          float *const *planar, int ns)
+{
+	if (!out || !m)
+		return 0;
+	int row = box_block_to_ctrl_frame(b);
+	if (row < 0)
+		return 0;
+	return ctrl_emit_as(out, &CTRL_FRAMES[row], m, master, src, counter,
+	                    reac_box_model_upstream_width(m), NULL, planar, ns);
 }
 
 /* ---- Head-amp source control (link 4 SINGLE, record TAG 0x0101) ---- */
