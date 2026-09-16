@@ -1,0 +1,6 @@
+m200-compare.sh -- tap the mirror port, capture, run corpus_check/scene-on-wire.py/
+recover-scene.py/pace-compare.sh, and diff a real M-200's master traffic against
+reac-pw's own (wire_census/group_map_scan/ctrl_delta) into m200-vs-reac-pw.md.
+Subcommands: tap | capture | analyse | diff | all. `--help` is the usage banner
+at the top of the file; the fixture pair to try it on lives under
+~/Devel/audio/reac-captures/captures/m200i-s1608-48k-*.
