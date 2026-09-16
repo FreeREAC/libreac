@@ -153,7 +153,15 @@ void reac_hunt_silence_proven(struct reac_hunt *h);
 /* Offer one raw frame. Returns 1 when it was a sighting that changed the table
  * OBSERVABLY (a new peer, a sharper role or model) — which is what deserves a log line;
  * 0 when it was a sighting that only refreshed liveness; -1 when the frame is not
- * evidence of REAC gear at all. `*out` is filled on any sighting (return >= 0). */
+ * evidence of REAC gear at all.
+ *
+ * `*out` is filled on any sighting (return >= 0) with THIS PEER'S SETTLED VERDICT —
+ * the disco table's entry for that MAC, not the classification of the frame that
+ * just arrived. One MAC is one box and deserves one answer: a box that has lost its
+ * master floods broadcast filler, which is role-`unknown` by construction, so a
+ * per-frame answer reports one box as `box` off its declaration and `unknown` off
+ * its flood a millisecond later (live, VLAN 13, 2026-09-17). The MAC and the
+ * sighting's own fields other than role/model/channels are the frame's. */
 int reac_hunt_observe(struct reac_hunt *h, const uint8_t *frame, size_t len,
                       uint64_t now_ns, struct reac_disco_sighting *out);
 

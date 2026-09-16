@@ -48,8 +48,6 @@ int reac_hunt_observe(struct reac_hunt *h, const uint8_t *frame, size_t len,
 	struct reac_disco_sighting s;
 	if (reac_disco_classify_on_segment(&h->lock, frame, len, h->our_mac, &s) != 0)
 		return -1;
-	if (out)
-		*out = s;
 	/* THE WINDOW RUNS FROM THE FIRST SIGHTING, not from the socket opening. A sniffer
 	 * can sit on a quiet office NIC for a week; when a segment finally powers up, the
 	 * three cadences have to be spent HEARING it, or the first box to speak would take a
@@ -59,7 +57,30 @@ int reac_hunt_observe(struct reac_hunt *h, const uint8_t *frame, size_t len,
 		h->opened_ns = now_ns;
 	/* `owned` is 0: nothing is established here — this is the wire BEFORE we decide
 	 * whether to drive it. */
-	return reac_disco_table_observe(&h->table, &s, 0, now_ns) ? 1 : 0;
+	int changed = reac_disco_table_observe(&h->table, &s, 0, now_ns) ? 1 : 0;
+
+	/* ONE MAC, ONE VERDICT. The caller is answered with the TABLE's entry for
+	 * this peer, not with the frame that just arrived. A box that has lost its
+	 * master FLOODS BROADCAST FILLER, which is deliberately role-`unknown` (a
+	 * master's downstream is byte-identical in kind), so a per-FRAME answer
+	 * reports the same box as `box (8 ch)` off its declaration and
+	 * `unknown (32 ch)` off its flood — which is exactly what the operator read
+	 * on VLAN 13 on 2026-09-17 and could not resolve. The table is where facts
+	 * CORROBORATE: a role only ever sharpens, a model is byte-exact or absent,
+	 * and the width is the widest geometry the peer has shown. */
+	if (out) {
+		*out = s;
+		for (int i = 0; i < h->table.n; i++) {
+			const struct reac_disco_entry *e = &h->table.e[i];
+			if (memcmp(e->mac, s.mac, 6) != 0)
+				continue;
+			out->role = e->role;
+			out->model = e->model;
+			out->channels = e->channels;
+			break;
+		}
+	}
+	return changed;
 }
 
 /* Is `e` still live, by the same staleness bar the arbitration uses? A peer heard once
