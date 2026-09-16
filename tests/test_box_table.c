@@ -1,0 +1,212 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+
+/* The model table is DATA, and this test is the licence for saying so
+ * (docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §2, reac-pw's tree).
+ *
+ * A row used to BE its captured bytes. So a model nobody has captured — an
+ * S-0816, an S-2416, or the operator's 40-channel experiment — could not be a
+ * row at all; it could only be code. Every block is now SYNTHESISED from a row's
+ * declared facts, and the captured bytes are the ORACLE for that synthesis:
+ *
+ *   ARM 1  for every CAPTURED row, every block the synthesiser writes is
+ *          BYTE-IDENTICAL to the bytes a real box put on a wire. Three models,
+ *          seven block kinds. This is the only thing that makes arm 4 mean
+ *          anything: the same generator, fed the seen models' facts, reproduces
+ *          the seen models' bytes.
+ *   ARM 2  every row's config-announce decodes through reac_ports to the row's
+ *          OWN declared widths and strap, sums to zero mod 256, and spends
+ *          exactly twelve slots.
+ *   ARM 3  every row's identity page round-trips through reac_identity_ingest
+ *          back to the row's declared firmware, REAC version and name — the
+ *          decoder is the corpus's, not this test's.
+ *   ARM 4  the rows nobody has seen are rows: widths, tokens, and the 40-channel
+ *          experiment declaring the fabric's full width with no Roland model
+ *          behind it.
+ *   ARM 5  the identity is OURS unless the row asks otherwise: every DERIVED
+ *          FreeREAC row claims REAC major 9, which no Roland box has ever sent,
+ *          and every CAPTURED row is Roland-shaped.
+ */
+#include <reac/reac_ctrlblk.h>
+#include <reac/reac_identity.h>
+#include <reac/reac_ports.h>
+
+#include <stdio.h>
+#include <string.h>
+
+#define CHK(c) do { if (!(c)) { fprintf(stderr, "FAIL: %s (line %d)\n", #c, __LINE__); return 1; } } while (0)
+
+static int same_bytes(const char *what, const char *token,
+                      const uint8_t *got, const uint8_t *want)
+{
+	for (int i = 0; i < 32; i++)
+		if (got[i] != want[i]) {
+			fprintf(stderr, "FAIL: %s/%s byte %d: synthesised %02x, "
+			        "the wire says %02x\n", token, what, i, got[i], want[i]);
+			return 0;
+		}
+	return 1;
+}
+
+int main(void)
+{
+	size_t n = 0;
+	const struct reac_box_model *t = reac_box_model_table(&n);
+	CHK(t && n >= 3);
+
+	int derived_seen = 0, captured_seen = 0;
+
+	for (size_t i = 0; i < n; i++) {
+		const struct reac_box_model *m = &t[i];
+		uint8_t blk[32];
+
+		/* ---- ARM 1: the captured rows are the oracle ---- */
+		if (m->origin == REAC_BOX_CAPTURED) {
+			captured_seen++;
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CONFIG, blk) == 1);
+			CHK(same_bytes("config", m->token, blk, m->config_block));
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC0014, blk) == 1);
+			CHK(same_bytes("cc0014", m->token, blk, m->cc0014));
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC0013, blk) == 1);
+			CHK(same_bytes("cc0013", m->token, blk, m->cc0013));
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC0016, blk) == 1);
+			CHK(same_bytes("cc0016", m->token, blk, m->cc0016));
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC001A, blk) == 1);
+			CHK(same_bytes("cc001a", m->token, blk, m->cc001a));
+			if (m->has_identity_record) {
+				CHK(reac_box_model_block(m, REAC_BOX_BLOCK_IDENT_FIRST, blk) == 1);
+				CHK(same_bytes("ident_first", m->token, blk, m->identity_first));
+				CHK(reac_box_model_block(m, REAC_BOX_BLOCK_IDENT_LAST, blk) == 1);
+				CHK(same_bytes("ident_last", m->token, blk, m->identity_last));
+			}
+		} else {
+			derived_seen++;
+			/* A row nobody has seen carries NO captured bytes at all: an
+			 * all-zero array read as a declaration is the defect this whole
+			 * change exists to remove. */
+			uint8_t zero[32];
+			memset(zero, 0, sizeof zero);
+			CHK(memcmp(m->config_block, zero, 32) == 0);
+		}
+
+		/* ---- ARM 2: the declaration says what the row says ---- */
+		CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CONFIG, blk) == 1);
+		struct reac_box_ports p;
+		CHK(reac_ports_parse(blk, &p) == 0);
+		CHK(p.in_ch == m->in_ch);
+		CHK(p.out_ch == m->out_ch);
+		CHK(p.headamp_base == m->headamp_strap * 0x10);
+		unsigned sum = 0;
+		for (int k = 0; k < 32; k++)
+			sum += blk[k];
+		CHK((sum & 0xff) == 0);
+		int slots = 0;
+		for (int k = 0; k < REAC_PORTS_TABLE_SLOTS; k++) {
+			uint8_t c = blk[REAC_PORTS_TABLE_OFF + k];
+			CHK(c == REAC_PORT_SLOT_IN || c == REAC_PORT_SLOT_OUT ||
+			    c == REAC_PORT_SLOT_EMPTY);
+			slots++;
+		}
+		CHK(slots == REAC_PORTS_TABLE_SLOTS);
+
+		/* ---- ARM 3: the identity page round-trips through the decoder ---- */
+		struct reac_identity id;
+		reac_identity_init(&id);
+		CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC0016, blk) == 1);
+		CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_FIRMWARE,
+		                         blk + 20, 4) == 1);
+		CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC001A, blk) == 1);
+		CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_REAC_VERSION,
+		                         blk + 20, REAC_IDENTITY_REAC_VER_LEN) == 1);
+		CHK(id.has_fw && id.fw_milli == m->fw_milli);
+		CHK(id.has_reac_version);
+		CHK(id.reac_version_major == m->reac_major);
+		CHK(id.reac_version_minor == m->reac_minor);
+		CHK(id.reac_version_patch == m->reac_patch);
+
+		if (m->has_identity_record) {
+			/* The name arrives as TWO fragments of one record — 10 bytes in
+			 * the FIRST, 6 in the LAST — so the payload the decoder sees is
+			 * reassembled here exactly as a receiver must reassemble it. */
+			uint8_t first[32], last[32], page[17];
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_IDENT_FIRST, first) == 1);
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_IDENT_LAST, last) == 1);
+			page[0] = first[20];               /* name_kind */
+			memcpy(page + 1, first + 21, 10);
+			memcpy(page + 11, last + 9, 6);
+			CHK(page[0] == 0x01);
+			CHK(reac_identity_ingest(&id, REAC_IDENTITY_ADDR_MODEL_NAME,
+			                         page, sizeof page) == 1);
+			CHK(id.has_model_name);
+			CHK(m->name && strcmp(id.model_name, m->name) == 0);
+		} else {
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_IDENT_FIRST, blk) == 0);
+			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_IDENT_LAST, blk) == 0);
+		}
+
+		/* ---- ARM 5: whose identity is this ---- */
+		if (m->identity_shape == REAC_BOX_IDENTITY_FREEREAC) {
+			CHK(m->origin == REAC_BOX_DERIVED);
+			CHK(m->reac_major == 9);   /* no Roland box has ever sent a 9 */
+			CHK(m->name && strncmp(m->name, "FR-", 3) == 0);
+		} else {
+			CHK(m->reac_major <= 2);
+		}
+
+		/* The geometry is legal in the twelve slots, whoever declared it. */
+		CHK(m->in_ch % 4 == 0 && m->out_ch % 4 == 0);
+		CHK(m->in_ch + m->out_ch <= REAC_PORTS_TABLE_SLOTS * REAC_PORTS_CH_PER_SLOT);
+
+		/* Tokens are unique: a duplicate token is a row nobody can address. */
+		for (size_t j = 0; j < i; j++)
+			CHK(strcmp(t[j].token, m->token) != 0);
+	}
+
+	CHK(captured_seen == 3);
+	CHK(derived_seen >= 6);
+
+	/* ---- ARM 4: the rows nobody has seen, by name ---- */
+	const struct reac_box_model *m;
+	CHK((m = reac_box_model_by_token("s0816")) && m->in_ch == 8 && m->out_ch == 16);
+	CHK((m = reac_box_model_by_token("s2416")) && m->in_ch == 24 && m->out_ch == 16);
+	CHK((m = reac_box_model_by_token("s4000d")) && m->in_ch == 0 && m->out_ch == 32);
+	CHK((m = reac_box_model_by_token("s4000m")) && m->in_ch == 32 && m->out_ch == 0);
+	CHK((m = reac_box_model_by_token("s4000h")) && m->in_ch == 16 && m->out_ch == 16);
+	/* The S-4000S split the corpus HAS, and the one it does not. */
+	CHK((m = reac_box_model_by_token("s4000s")) && m->in_ch == 32 && m->out_ch == 8);
+	CHK(m->origin == REAC_BOX_CAPTURED);
+	CHK((m = reac_box_model_by_token("s4000s-0832")) && m->in_ch == 8 && m->out_ch == 32);
+	CHK(m->origin == REAC_BOX_DERIVED);
+	CHK(m->identity_shape == REAC_BOX_IDENTITY_ROLAND);   /* the same chassis */
+
+	/* THE OPERATOR'S EXPERIMENT: the protocol's full 40-channel width, either
+	 * way round, with no Roland model behind it. 40 and not 48 — the port table
+	 * spans 48 channels but the downstream frame carries 40 slots. */
+	CHK((m = reac_box_model_by_token("fr4000")) && m->in_ch == 40 && m->out_ch == 0);
+	CHK(m->origin == REAC_BOX_DERIVED && m->identity_shape == REAC_BOX_IDENTITY_FREEREAC);
+	CHK((m = reac_box_model_by_token("fr0040")) && m->in_ch == 0 && m->out_ch == 40);
+	CHK((m = reac_box_model_by_token("fr2020")) && m->in_ch == 20 && m->out_ch == 20);
+
+	/* A WIDTH STILL NAMES ONLY A CAPTURED ROW. Derived rows are addressed by
+	 * token alone — otherwise an experiment row would start answering for a real
+	 * box's width on a wire, which is the defect a fixed matrix exists to stop. */
+	CHK((m = reac_box_model_by_channels(16)) && m->origin == REAC_BOX_CAPTURED);
+	CHK(strcmp(m->token, "s1608") == 0);
+	CHK((m = reac_box_model_by_channels(8)) && strcmp(m->token, "s0808") == 0);
+	CHK((m = reac_box_model_by_channels(32)) && strcmp(m->token, "s4000s") == 0);
+	CHK((m = reac_box_model_by_channels(40)) && m->origin == REAC_BOX_CAPTURED);
+
+	/* Bad arguments refuse; they never write a half block. */
+	uint8_t blk[32];
+	CHK(reac_box_model_block(NULL, REAC_BOX_BLOCK_CONFIG, blk) < 0);
+	CHK(reac_box_model_block(reac_box_model_by_token("s1608"),
+	                         REAC_BOX_BLOCK_CONFIG, NULL) < 0);
+
+	printf("OK: reac_box_model — the table is DATA: the synthesiser reproduces "
+	       "every captured block of all 3 captured rows byte for byte, every row's "
+	       "declaration decodes to its own widths and strap, every identity page "
+	       "round-trips through reac_identity, and the unseen models (S-0816, "
+	       "S-2416, S-4000D/M/H, the 0832 split) plus the 40-channel experiment "
+	       "are rows\n");
+	return 0;
+}

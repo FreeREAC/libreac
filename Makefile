@@ -24,7 +24,7 @@ INC     := -Iinclude
 # The operator's ruling: a daemon is sockets and PipeWire, it does not speak REAC control.
 # Every file in the second list is PURE - no socket, no thread, no clock - which is what let
 # them move here unchanged from reac-pw, where they had already been written that way.
-OBJS = reac.o reac_ctrlblk.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o \
+OBJS = reac.o reac_ctrlblk.o reac_box_synth.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o \
        reac_fsm.o reac_master.o reac_master_fsm.o reac_hunt.o reac_arbitration.o \
        reac_grant.o reac_headamp_tx.o reac_ctrl.o reac_scene_body.o \
        reac_link_state.o reac_disco.o reac_boxreg.o reac_clock.o reac_link.o reac_macaddr.o
@@ -99,7 +99,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -122,6 +122,11 @@ test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c
 	./test_facts
 	$(CC) $(CFLAGS) $(INC) tests/test_identity.c libreac.a -lm -o test_identity
 	./test_identity
+	# THE TABLE IS DATA. Every block synthesised from a row's declared facts, with
+	# the three captured rows' real bytes as the oracle for the synthesis - which
+	# is the only thing that licenses a row for a model nobody has ever seen.
+	$(CC) $(CFLAGS) $(INC) tests/test_box_table.c libreac.a -lm -o test_box_table
+	./test_box_table
 	$(CC) $(CFLAGS) $(INC) tests/test_master_carriers.c libreac.a -lm -o test_master_carriers
 	./test_master_carriers
 	$(CC) $(CFLAGS) $(INC) tests/test_master_capture.c libreac.a -lm -o test_master_capture
