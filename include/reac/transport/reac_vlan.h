@@ -54,6 +54,24 @@ int reac_vlan_query(const char *name, int *ours);
  * appeared underneath us, ENODEV if the parent went away). */
 int reac_vlan_create(const char *parent, uint16_t vid);
 
+/* Set `name`'s ADMIN FLAG, both directions, over the same rtnetlink socket the rest of this
+ * file uses. One bit is written (`ifi_change = IFF_UP`); nothing else about the netdev is
+ * touched. Returns 0, or -1 with errno (EPERM without CAP_NET_ADMIN, ENODEV if the name is
+ * not there). Already in the requested state is 0.
+ *
+ * THE DOWN DIRECTION EXISTS FOR ONE CALLER AND ONE REASON: a stagebox leaves its dropped
+ * state on PHY LINK-UP and on nothing else — "a data gap does NOT" (reac-firmware-re
+ * REAC-PROTOCOL-FROM-SOURCE §10.2, and reac_carrier.h says the same). A master whose box
+ * went quiet while the desk was away has no frame it can send that will bring it back, and
+ * on 2026-09-16 that cost a live segment 73 minutes of correct probing into silence. The
+ * edge the box needs is one the daemon can make on its OWN port. When and how seldom it may
+ * is reac-pw's `reac_wake` and its spec — this function is the write, and it has no policy
+ * in it at all.
+ *
+ * NOT for an interface this process does not drive. Taking a link down takes every VLAN
+ * child down with it. */
+int reac_link_admin(const char *name, int up);
+
 /* Bring `name` up. An adopted netdev may be configured and DOWN, which carries no frames
  * and looks exactly like a box that is not talking. Returns 0/-1; already up is 0. */
 int reac_vlan_up(const char *name);
