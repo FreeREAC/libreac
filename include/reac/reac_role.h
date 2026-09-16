@@ -71,7 +71,30 @@ enum reac_role_intent {
 	 * desk's own box from enrolling for 180 s and a granted one blocked it outright.
 	 * EXPLICIT ONLY — `auto` never resolves to it. */
 	REAC_ROLE_INTENT_TAP,
+	/* box — WE ARE THE STAGEBOX. The mixer masters the wire and we present a box
+	 * to it: we answer with a MODEL ROW's declaration and identity, follow its
+	 * scene push and chanmap, pace as a slave, and return its channels. On the
+	 * wire this is the slave end of the pairing — reac_slave is the engine and
+	 * there is no second one — so what `box` adds is an INTENT: which model we
+	 * declare, and which way round the two PipeWire doors face
+	 * (reac-pw docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md).
+	 *
+	 * EXPLICIT ONLY, exactly like `tap` and for the mirror-image reason: a mixer
+	 * never wants a surprise stagebox appearing on its fabric and taking
+	 * channels. `auto` resolves to master, slave, tap or refused, and never to
+	 * this. */
+	REAC_ROLE_INTENT_BOX,
 };
+
+/* Can an election ARRIVE at this intent, or must an operator have asked for it?
+ * Two intents are explicit-only and they are the two that change what the desk
+ * on the other end SEES: a tap that never speaks, and a box that claims
+ * channels. Asked here rather than by comparing against two constants at every
+ * election site, because a third one would be missed at one of them. */
+static inline int reac_role_intent_explicit_only(enum reac_role_intent i)
+{
+	return i == REAC_ROLE_INTENT_TAP || i == REAC_ROLE_INTENT_BOX;
+}
 
 /* Does this intent put ANYTHING on the wire? A caller that opens a socket, claims a
  * segment lock or starts an engine asks this first; `tap` is the one answer that is 0,
@@ -93,6 +116,7 @@ static inline int reac_role_intent_parse(const char *s, enum reac_role_intent *o
 	if (!strcmp(s, "master")) { *out = REAC_ROLE_INTENT_MASTER; return 0; }
 	if (!strcmp(s, "slave"))  { *out = REAC_ROLE_INTENT_SLAVE;  return 0; }
 	if (!strcmp(s, "tap"))    { *out = REAC_ROLE_INTENT_TAP;    return 0; }
+	if (!strcmp(s, "box"))    { *out = REAC_ROLE_INTENT_BOX;    return 0; }
 	return -1;
 }
 
@@ -102,6 +126,7 @@ static inline const char *reac_role_intent_name(enum reac_role_intent i)
 	case REAC_ROLE_INTENT_MASTER: return "master";
 	case REAC_ROLE_INTENT_SLAVE:  return "slave";
 	case REAC_ROLE_INTENT_TAP:    return "tap";
+	case REAC_ROLE_INTENT_BOX:    return "box";
 	case REAC_ROLE_INTENT_AUTO:
 	default:                      return "auto";
 	}
@@ -117,7 +142,10 @@ static inline const char *reac_role_intent_name(enum reac_role_intent i)
  * ever transmitted on it. */
 static inline enum reac_role reac_role_from_intent(enum reac_role_intent i)
 {
-	return i == REAC_ROLE_INTENT_SLAVE ? REAC_ROLE_SLAVE : REAC_ROLE_MASTER;
+	/* A BOX IS THE SLAVE END OF THE PAIRING. The mixer drives, we answer — the
+	 * same wire role, a different declaration (see the intent's own comment). */
+	return (i == REAC_ROLE_INTENT_SLAVE || i == REAC_ROLE_INTENT_BOX)
+	               ? REAC_ROLE_SLAVE : REAC_ROLE_MASTER;
 }
 
 /* Validate a parsed role against the other CLI options. The slave role REQUIRES a
