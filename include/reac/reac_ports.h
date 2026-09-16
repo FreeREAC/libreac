@@ -50,10 +50,37 @@
  * not from a hand-kept model list. A model NAME is still a byte-exact matrix
  * match (reac-pw's recognizer); an unnamed box still declares its widths here.
  *
- * A slot code outside {01, 02, 03} is a table nobody has captured — REFUSE
- * (-1), never guess: a mis-read geometry reaches the wire as a wrong-width
- * grant. The caller validates the frame around the block (0x8819, cdea type,
- * checksum) — this is a pure block decode, no frame concerns. */
+ * A SLOT CODE SPEAKS FOR ITS OWN FOUR CHANNELS AND NO OTHERS (operator ruling
+ * 2026-09-17: "we should be able to enrol any stage box"; the 2026-09-17 spec's
+ * second amendment). This decoder used to REFUSE THE WHOLE TABLE on the first
+ * byte outside {00, 01, 02, 03}, and that refusal is what kept a fully
+ * declaring S-4000H off the graph: no parse, no reac_master_set_box, no grant,
+ * a roster stuck at probing for minutes over one unfamiliar byte. An unknown
+ * code is now counted as an UNKNOWN GROUP and reported; the geometry we CAN
+ * read is returned and the box enrols at that width.
+ *
+ * That is not the guess the old refusal existed to stop. The guess was an
+ * OVER-claim — sizing a box from anything but its declaration, so the grant
+ * claims slots the box does not own and every head-amp record lands somewhere
+ * else with every gate still green. An unknown group is an UNDER-claim: we
+ * enrol what we can read, the box's own frame width still carries its audio
+ * (reac_rx reads the width off the frame, never off the grant), and nothing is
+ * addressed that was not declared. It must be LOUD — the pacer's
+ * REAC_PEV_RECOGNIZED carries the count and the code, and the master's log
+ * names them, so an unknown code reads as "capture this byte".
+ *
+ * A block that is not a DECLARATION at all is still refused (-1): wrong link,
+ * wrong segment bits, wrong opcode. "This is not a box declaring itself" is a
+ * different fact from "this box has a group I do not recognise". The caller
+ * validates the frame around the block (0x8819, cdea type, checksum) — this is
+ * a pure block decode, no frame concerns.
+ *
+ * THE UNKNOWN GROUPS ARE READ BY THEIR OWN FUNCTION, not by a field on the
+ * result, and that is not a style choice: struct reac_box_ports is PUBLIC and
+ * reac-pw embeds libreac structs by value, so a member added here moves every
+ * member behind it in every binary built against the old headers — the ABI gate
+ * refused exactly that on the first cut of this change. A second pure read of
+ * the same twelve bytes costs nothing and moves nothing. */
 #ifndef REAC_PORTS_H
 #define REAC_PORTS_H
 
@@ -76,9 +103,18 @@ struct reac_box_ports {
 
 /* Decode the port table from a config-announce CONTROL BLOCK (the 32 bytes at
  * frame[18:50]). Returns 0 and fills `out` when the block is a complete link-1
- * message whose OPCODE at block[4] is one of the three declaration arms, and
- * every table slot is a known code; -1 otherwise, leaving `out` untouched. */
+ * message whose OPCODE at block[4] is one of the three declaration arms; -1
+ * otherwise, leaving `out` untouched. Slots carrying a code this decoder does
+ * not know are counted by reac_ports_unknown rather than refusing the table. */
 int reac_ports_parse(const uint8_t block[32], struct reac_box_ports *out);
+
+/* The CHANNELS this decoder could not place: four per slot carrying a code
+ * outside {00, 01, 02, 03}. Returns that count (0 when the whole table is
+ * understood) or -1 when the block is not a declaration at all — the same
+ * refusal reac_ports_parse makes, for the same reason. `first_code`, when not
+ * NULL, receives the first unrecognised code, which is the byte a capture has
+ * to answer for; it is set to 0 when there is none. PURE. */
+int reac_ports_unknown(const uint8_t block[32], uint8_t *first_code);
 
 /* ---- THE HEAD-AMP BASE IS ANNOUNCED, NOT GRANTED ------------------------
  *
