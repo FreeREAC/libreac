@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.2.0
+Version:        1.2.1
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,28 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.2.1-1
+- A REAL S-4000H-0832 ON VLAN 13 COULD NOT JOIN, AND FOUR THINGS WERE WRONG.
+  Its config-announce marks input groups 0x00 and writes its outputs first;
+  reac_ports_parse refused the whole table on the unknown code, so the master
+  never sized the box and dropped back to PROBING every dwell (the operator's
+  state=probing model=none width=0/0). 0x00 is now a captured input code, and
+  ANY unrecognised code costs only its own four channels — a box enrols on what
+  it declares (operator ruling 2026-09-17), and reac_ports_unknown says out loud
+  what could not be read.
+- The model table's s4000h row was a 16/16 guess and is now the captured 8/32
+  declaration, origin REAC_BOX_DECLARED: a real box's declaration, and NO
+  identity page, because in four seconds it sent none. A row with fw_milli 0
+  emits no identity block rather than inventing a firmware number.
+- reac_box_master_model refuses a width two captured rows share (S-0808 and the
+  S-4000H are both 8 inputs) — a number may narrow, only a byte-exact
+  declaration names.
+- reac_hunt_observe answers with the disco TABLE's entry for the MAC, so one box
+  is one verdict: the same box read `box (8 ch)` then `unknown (32 ch)` a
+  millisecond apart on the live wire.
+- LIBREAC_ABI stays 4 and tests/abi-layout.inc is unchanged: the two new
+  reac_box_model fields fit its tail padding, and the unknown-group read is a
+  function rather than a member on public struct reac_box_ports.
 * Wed Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.5-1
 - No change to this library. Version moves with libreac-transport, which gains
   reac_link_admin(). LIBREAC_ABI stays 3; tests/abi-layout.inc is unchanged.
