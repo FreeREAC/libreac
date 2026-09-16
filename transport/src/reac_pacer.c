@@ -619,9 +619,21 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 					reac_master_regrant(&p->master);
 				p->declared_in  = ports.in_ch;
 				p->declared_out = ports.out_ch;
+				/* WHAT WE COULD NOT READ TRAVELS WITH WHAT WE COULD. A slot
+				 * code nobody has captured no longer refuses the table (the
+				 * 2026-09-17 spec's second amendment: any stagebox enrols on
+				 * what it declares), so the box is sized from the groups we
+				 * understand — and the ones we do not have to be SAID, or a
+				 * silently narrowed enrolment looks exactly like a correct
+				 * one. blk[0] is the channel count, blk[1] the first code. */
+				uint8_t note[REAC_CTRL_BLOCK_LEN];
+				memset(note, 0, sizeof note);
+				int unknown = reac_ports_unknown(frame + REAC_CTRL_BLOCK_OFF,
+				                                 &note[1]);
+				note[0] = unknown > 0 ? (uint8_t)unknown : 0;
 				pev_push(p, REAC_PEV_RECOGNIZED, (uint8_t)ports.in_ch,
 				         (uint8_t)(reac_disco_model_index(bm) + 1),
-				         parsed.src, NULL);
+				         parsed.src, note);
 			}
 		}
 	}
@@ -855,13 +867,23 @@ int reac_pacer_log_drain(struct reac_pacer *p, FILE *out)
 			 * reac_box_model_by_channels here: its S-1608 fallback would NAME a
 			 * box that only declared a width. */
 			const struct reac_box_model *bm = reac_disco_model_by_index((int)e.b - 1);
+			/* The groups the port decoder could not place, carried on blk[0:2].
+			 * Printed BESIDE the recognition, never instead of it: the box is
+			 * enrolled at the width we read, and this is the byte a capture
+			 * has to answer for. */
+			char unknown[128] = "";
+			if (e.blk[0])
+				snprintf(unknown, sizeof unknown,
+				         " — %u channel(s) declared with slot code 0x%02x, which "
+				         "nothing has captured: they are NOT enrolled",
+				         (unsigned)e.blk[0], (unsigned)e.blk[1]);
 			if (bm)
-				fprintf(out, "reac-master: [%.6f] recognized box = %s from %s\n",
-				        ts, bm->display, mac);
+				fprintf(out, "reac-master: [%.6f] recognized box = %s from %s%s\n",
+				        ts, bm->display, mac, unknown);
 			else
 				fprintf(out, "reac-master: [%.6f] box declared %u inputs from %s "
-				        "(no matrix row — sized from the declaration)\n",
-				        ts, (unsigned)e.a, mac);
+				        "(no matrix row — sized from the declaration)%s\n",
+				        ts, (unsigned)e.a, mac, unknown);
 			break;
 		}
 		case REAC_PEV_CLOCK: {

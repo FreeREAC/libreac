@@ -50,6 +50,7 @@ static const uint8_t BLK_S4000H[32] = {
 int main(void)
 {
 	struct reac_box_ports pt;
+	uint8_t code = 0xee;
 
 	/* The three real declarations decode to the six known width facts. */
 	CHK(reac_ports_parse(BLK_S1608, &pt) == 0);
@@ -96,13 +97,28 @@ int main(void)
 	wrong[3] = 0x19;                          /* only the LENGTH moved */
 	CHK(reac_ports_parse(wrong, &pt) == 0);
 
-	/* A slot code nobody has captured: refuse the whole table, never guess. */
+	/* A SLOT CODE NOBODY HAS CAPTURED SPEAKS FOR ITS OWN FOUR CHANNELS, and the
+	 * other eleven slots still decode (operator ruling 2026-09-17: any stagebox
+	 * enrols on what it declares). Refusing the whole table is what kept a
+	 * fully declaring S-4000H off the graph. */
 	memcpy(wrong, BLK_S0808, 32);
-	wrong[REAC_PORTS_TABLE_OFF + 5] = 0x04;
-	CHK(reac_ports_parse(wrong, &pt) == -1);
+	wrong[REAC_PORTS_TABLE_OFF + 5] = 0x04;   /* was an EMPTY slot */
+	CHK(reac_ports_parse(wrong, &pt) == 0);
+	CHK(pt.in_ch == 8 && pt.out_ch == 8);     /* unchanged: it took no known slot */
+	CHK(reac_ports_unknown(wrong, &code) == 4 && code == 0x04);
 	memcpy(wrong, BLK_S1608, 32);
-	wrong[REAC_PORTS_TABLE_OFF + 0] = 0x05;
-	CHK(reac_ports_parse(wrong, &pt) == -1);
+	wrong[REAC_PORTS_TABLE_OFF + 0] = 0x05;   /* was one of the four IN slots */
+	CHK(reac_ports_parse(wrong, &pt) == 0);
+	CHK(pt.in_ch == 12 && pt.out_ch == 8);    /* the three inputs we can read */
+	CHK(reac_ports_unknown(wrong, &code) == 4 && code == 0x05);
+	/* A table we understand reports no unknown groups at all — the absence is
+	 * asserted, so "0 unknown" cannot be a field nobody fills. */
+	CHK(reac_ports_unknown(BLK_S4000H, &code) == 0 && code == 0x00);
+	CHK(reac_ports_unknown(BLK_S1608, NULL) == 0);
+	/* A block that is not a declaration refuses in the same voice. */
+	memcpy(wrong, BLK_S0808, 32);
+	wrong[4] = REAC_OP_SLOT_MAP;
+	CHK(reac_ports_unknown(wrong, &code) == -1 && code == 0x00);
 	/* 0x00 USED TO BE THAT CASE and is asserted the other way now: a real box
 	 * put it on a wire, so it is a captured code and an S-1608 declaring one
 	 * group of it declares 4 more inputs, not a corrupt table. */
@@ -113,10 +129,12 @@ int main(void)
 
 	/* A refusal leaves the out-struct untouched — INCLUDING THE BASE. A block
 	 * that does not parse is not a box, so nothing about it may be written:
-	 * the caller's struct must come back exactly as it went in. */
+	 * the caller's struct must come back exactly as it went in. The refusal is
+	 * now a block that is not a DECLARATION (here: the wrong link), because an
+	 * unrecognised slot code no longer refuses anything. */
 	pt.in_ch = -7; pt.out_ch = -7; pt.headamp_base = -7;
 	memcpy(wrong, BLK_S0808, 32);
-	wrong[REAC_PORTS_TABLE_OFF] = 0xff;
+	wrong[0] = REAC_LINK_RECORD;
 	CHK(reac_ports_parse(wrong, &pt) == -1);
 	CHK(pt.in_ch == -7 && pt.out_ch == -7 && pt.headamp_base == -7);
 
