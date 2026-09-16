@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.2.0
+Version:        1.2.1
 %global abi 5
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,11 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.2.1-1
+- The pacer's RECOGNIZED event carries the port groups the decoder could not
+  place (count + first code) and the master log names them, so a box enrolled at
+  a narrowed width says so instead of looking correctly sized. Version moves
+  with libreac 1.2.1, which is where the S-4000H work is.
 * Wed Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.5-1
 - reac_link_admin(): set a netdev's IFF_UP in EITHER direction, over the rtnetlink socket
   reac_vlan.c already owns; reac_vlan_up() is now one line of it. A stagebox leaves its
