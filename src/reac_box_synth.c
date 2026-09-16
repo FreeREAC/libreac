@@ -104,11 +104,21 @@ static int build_config(const struct reac_box_model *m, uint8_t *out)
 	out[4] = m->selector;
 	out[5] = 0x00; out[6] = 0x00;
 	out[7] = m->headamp_strap;      /* the chassis strap; base = strap * 0x10 */
+	/* THE PLACEMENT IS DECLARED, because a sort would be a guess. A split
+	 * chassis lays its outputs first and marks its input groups 0x00; the three
+	 * Roland rows lay inputs first and mark them 0x02. reac_box_port_layout. */
 	int k = 0;
-	for (int i = 0; i < in_slots; i++)
-		out[REAC_PORTS_TABLE_OFF + k++] = REAC_PORT_SLOT_IN;
-	for (int i = 0; i < out_slots; i++)
-		out[REAC_PORTS_TABLE_OFF + k++] = REAC_PORT_SLOT_OUT;
+	if (m->port_layout == REAC_BOX_PORTS_SPLIT_OUT_FIRST) {
+		for (int i = 0; i < out_slots; i++)
+			out[REAC_PORTS_TABLE_OFF + k++] = REAC_PORT_SLOT_OUT;
+		for (int i = 0; i < in_slots; i++)
+			out[REAC_PORTS_TABLE_OFF + k++] = REAC_PORT_SLOT_IN_SPLIT;
+	} else {
+		for (int i = 0; i < in_slots; i++)
+			out[REAC_PORTS_TABLE_OFF + k++] = REAC_PORT_SLOT_IN;
+		for (int i = 0; i < out_slots; i++)
+			out[REAC_PORTS_TABLE_OFF + k++] = REAC_PORT_SLOT_OUT;
+	}
 	while (k < REAC_PORTS_TABLE_SLOTS)
 		out[REAC_PORTS_TABLE_OFF + k++] = REAC_PORT_SLOT_EMPTY;
 	memcpy(out + REAC_PORTS_TABLE_OFF + REAC_PORTS_TABLE_SLOTS, m->tail,
@@ -225,9 +235,18 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
 	case REAC_BOX_BLOCK_CC0013:
 		memcpy(out, JOIN_0013, BLK);
 		return 1;
+	/* NO FIRMWARE NUMBER, NO FIRMWARE RECORD. A row whose identity page was
+	 * never captured (REAC_BOX_DECLARED) has fw_milli 0, and emitting "0.000"
+	 * and a REAC version of 0.000 would put an invented page on the wire and
+	 * feed an invented one back to every reader. 0 is "this row does not emit
+	 * that block", the same answer the name record already gives. */
 	case REAC_BOX_BLOCK_CC0016:
+		if (m->fw_milli == 0)
+			return 0;
 		return build_firmware(m, out);
 	case REAC_BOX_BLOCK_CC001A:
+		if (m->fw_milli == 0)
+			return 0;
 		return build_reac_version(m, out);
 	case REAC_BOX_BLOCK_IDENT_FIRST:
 		/* A family whose selector already names it sends NEITHER fragment; the
@@ -252,7 +271,13 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
  * as a plausible number. */
 int reac_box_model_upstream_width(const struct reac_box_model *m)
 {
-	if (!m || m->in_ch < 0 || m->in_ch > REAC_MAX_CHANNELS || (m->in_ch & 1))
+	if (!m)
 		return 0;
-	return m->in_ch < 2 ? 2 : m->in_ch;
+	/* A MEASURED WIDTH WINS OVER THE DERIVATION, because the derivation is only
+	 * ever a guess about a chassis nobody has heard. The S-4000H declares 8
+	 * inputs and puts 32 channels on the wire. */
+	int w = m->wire_upstream_ch ? (int)m->wire_upstream_ch : m->in_ch;
+	if (w < 0 || w > REAC_MAX_CHANNELS || (w & 1))
+		return 0;
+	return w < 2 ? 2 : w;
 }

@@ -554,11 +554,49 @@ static const struct reac_box_model BOX_MODELS[] = {
 	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
 	  .has_identity_record = 1, .name = "FR-4000M",
 	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
-	{ .token = "s4000h", .display = "S-4000H (16 in / 16 out)", .in_ch = 16, .out_ch = 16,
-	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
-	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
-	  .has_identity_record = 1, .name = "FR-4000H",
-	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
+	/* ---- THE S-4000H, LIVE ON THE WIRE 2026-09-17 ----
+	 * Captured from box 00:40:ab:c4:25:80, alone on VLAN 13 with this daemon as
+	 * its master (vlan13-0832.pcap, t=+1.4579, the file's one config-announce).
+	 * The row REPLACES a 16/16 DERIVED guess the same day's spec had written
+	 * down: this chassis is 8 in / 32 out (operator, 2026-09-17) and its
+	 * declaration says so — 8 output groups FIRST, then two groups marked 0x00.
+	 *
+	 * ITS TAIL IS THE S-4000S'S, byte for byte, which is what says the same
+	 * chassis is underneath the other strap.
+	 *
+	 * DECLARED, NOT CAPTURED: in four seconds it sent this declaration, the
+	 * three JOIN records and a heartbeat — and no identity record of any kind,
+	 * so its firmware, REAC version and name are UNKNOWN and stay zero. The
+	 * likely reason is that we never granted (the identity page is polled by
+	 * the grant sweep's group B), which is a capture the rig day can take.
+	 *
+	 * ITS UPSTREAM IS 32 CHANNELS WIDE while it declares 8 inputs: 12 773
+	 * frames of 1204 B in the same capture. Which 32 slots carry the 8 preamps
+	 * is NOT known — nothing was plugged in and the box was never granted. */
+	{ .token = "s4000h", .display = "S-4000H-0832 (8 in / 32 out)",
+	  .in_ch = 8, .out_ch = 32,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DECLARED,
+	  .identity_shape = REAC_BOX_IDENTITY_ROLAND,
+	  .port_layout = REAC_BOX_PORTS_SPLIT_OUT_FIRST,
+	  .wire_upstream_ch = 32,
+	  .tail = { 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 },
+	  .config_block = {
+		0x01, 0x03, 0x00, 0x10, 0x84, 0x00, 0x00, 0x00,
+		0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+		0x00, 0x00, 0x03, 0x03, 0x00, 0x03, 0x00, 0x00,
+		0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x56 },
+	  .has_identity_record = 0,   /* no identity record was ever heard from it */
+	  .cc0014 = {
+		0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe,
+		0x0f, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
+		0x01, 0x00, 0x06, 0x00, 0x01, 0x00, 0x78, 0xf7,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+	  .cc0013 = {
+		0x04, 0x03, 0x00, 0x13, 0x00, 0x02, 0x00, 0xfe,
+		0x0e, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
+		0x03, 0x02, 0x00, 0x01, 0x00, 0x7a, 0xf7, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 },
+	},
 
 	/* ---- THE EXPERIMENT (operator, 2026-09-17: "test if we can emulate a 40
 	 * channels input or output box"). No Roland model is behind these. 40 is the
