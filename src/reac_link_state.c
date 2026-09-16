@@ -61,8 +61,15 @@ const struct reac_box_model *reac_box_master_model(unsigned width)
 	const struct reac_box_model *t = reac_box_model_table(&n);
 	if (!t)
 		return NULL;
+	/* A WIDTH HEARD ON THE WIRE NAMES ONLY A CAPTURED ROW (1.2.0). The table now
+	 * carries rows for models nobody has captured — including a 40-input experiment
+	 * — and naming a peer from one would be a guess dressed as a recognition: the
+	 * exact defect this function was written to refuse (its `_by_channels` sibling
+	 * falls back to the S-1608 and this one answers nothing at all). What we may
+	 * DECLARE as is a different question, and it is asked by token. */
 	for (size_t i = 0; i < n; i++)
-		if (t[i].in_ch > 0 && (unsigned)t[i].in_ch == width)
+		if (t[i].in_ch > 0 && (unsigned)t[i].in_ch == width &&
+		    t[i].origin == REAC_BOX_CAPTURED)
 			return &t[i];
 	return NULL;
 }
