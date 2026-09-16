@@ -270,7 +270,7 @@ int reac_vlan_create(const char *parent, uint16_t vid)
 	return rc;
 }
 
-int reac_vlan_up(const char *name)
+int reac_link_admin(const char *name, int up)
 {
 	unsigned idx = if_nametoindex(name);
 	if (idx == 0) {
@@ -286,13 +286,20 @@ int reac_vlan_up(const char *name)
 	req.nh.nlmsg_type = RTM_SETLINK;
 	req.ifi.ifi_family = AF_UNSPEC;
 	req.ifi.ifi_index = (int)idx;
-	req.ifi.ifi_flags = IFF_UP;
+	/* ONE BIT, BOTH WAYS. `ifi_change` is the mask: IFF_UP alone, so nothing else
+	 * about this netdev is touched by either direction. */
+	req.ifi.ifi_flags = up ? IFF_UP : 0;
 	req.ifi.ifi_change = IFF_UP;
 	int rc = nl_talk(fd, &req);
 	int saved = errno;
 	close(fd);
 	errno = saved;
 	return rc;
+}
+
+int reac_vlan_up(const char *name)
+{
+	return reac_link_admin(name, 1);
 }
 
 int reac_vlan_delete(const char *name)

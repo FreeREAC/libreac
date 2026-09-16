@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.1.4
+Version:        1.1.5
 %global abi 4
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,14 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Wed Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.5-1
+- reac_link_admin(): set a netdev's IFF_UP in EITHER direction, over the rtnetlink socket
+  reac_vlan.c already owns; reac_vlan_up() is now one line of it. A stagebox leaves its
+  dropped state on PHY LINK-UP and on nothing else (REAC-PROTOCOL-FROM-SOURCE 10.2), so a
+  master whose box went quiet has no frame that brings it back -- on 2026-09-16 that cost a
+  live segment 73 minutes of correct probing into silence. The policy is reac-pw's
+  reac_wake; this is only the write. ADDED SYMBOL, no struct touched: LIBREAC_ABI stays 3
+  and tests/abi-layout.inc is unchanged.
 * Tue Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.4-1
 - reac_hunt: a segment PINNED master with a stagebox already mastering the wire now JOINS it
   as a slave instead of refusing (operator ruling 2026-09-16, "enroll any box, master or
