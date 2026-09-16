@@ -395,6 +395,9 @@ size_t reac_ctrl_box_frame_len(int n_ch)
  * exact model. All blocks byte-matched to matrix-m200/m5000-s1608 / -s0808. */
 static const struct reac_box_model BOX_MODELS[] = {
 	{ .token = "s1608", .display = "S-1608 (16 in / 8 out)", .in_ch = 16, .out_ch = 8,
+	  .selector = 0x82, .headamp_strap = 0x02, .origin = REAC_BOX_CAPTURED,
+	  .identity_shape = REAC_BOX_IDENTITY_ROLAND,
+	  .fw_milli = 2200, .reac_major = 2, .reac_minor = 3, .reac_patch = 2,
 	  .config_block = {
 		0x01, 0x03, 0x00, 0x10, 0x82, 0x00, 0x00, 0x02,
 		0x02, 0x02, 0x02, 0x02, 0x01, 0x01, 0x03, 0x03,
@@ -423,6 +426,9 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x00, 0x03, 0x00, 0x02, 0x6e, 0xf7, 0x00, 0xf4 },
 	},
 	{ .token = "s0808", .display = "S-0808 (8 in / 8 out)", .in_ch = 8, .out_ch = 8,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_CAPTURED,
+	  .identity_shape = REAC_BOX_IDENTITY_ROLAND, .name = "S-0808",
+	  .fw_milli = 1003, .reac_major = 1, .reac_minor = 0, .reac_patch = 0,
 	  .config_block = {
 		0x01, 0x03, 0x00, 0x10, 0x84, 0x00, 0x00, 0x00,
 		0x02, 0x02, 0x01, 0x01, 0x03, 0x03, 0x03, 0x03,
@@ -465,7 +471,14 @@ static const struct reac_box_model BOX_MODELS[] = {
 	 * M-5000 (s4000s-coldboot-m5000-2026-07-12, box c4:06:80). NOTE: captured on
 	 * OHRCA (frames +2 CRC trailer); the control blocks below are generation-
 	 * independent, but emulating on an OHRCA desk needs the upstream +2 (W4). */
-	{ .token = "s4000s", .display = "S-4000S (32 in / 8 out)", .in_ch = 32, .out_ch = 8,
+	{ .token = "s4000s", .display = "S-4000S-3208 (32 in / 8 out)", .in_ch = 32, .out_ch = 8,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_CAPTURED,
+	  .identity_shape = REAC_BOX_IDENTITY_ROLAND,
+	  .fw_milli = 2500, .reac_major = 2, .reac_minor = 1, .reac_patch = 2,
+	  /* The model tail this chassis carries after the port table — the one row
+	   * in the corpus whose tail is not all zero, and the reason the tail is a
+	   * declared field rather than an assumption. */
+	  .tail = { 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 },
 	  .config_block = {
 		0x01, 0x03, 0x00, 0x10, 0x84, 0x00, 0x00, 0x00,
 		0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
@@ -493,6 +506,81 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02,
 		0x00, 0x01, 0x00, 0x02, 0x70, 0xf7, 0x00, 0xf4 },
 	},
+
+	/* ---- DERIVED ROWS — models nobody in this project has ever put on a wire
+	 * (2026-09-17). They carry NO captured bytes, because there are none: a row
+	 * is its declared facts and every block it emits is synthesised from them by
+	 * reac_box_synth.c, whose licence is that the same generator reproduces the
+	 * three rows above byte for byte (tests/test_box_table.c arm 1).
+	 *
+	 * BEING IN THIS TABLE IS NOT A CLAIM THAT A ROLAND DESK ACCEPTS THEM. The
+	 * widths are what the product names say; the declaration's tail is zero
+	 * because no capture says otherwise, and the S-4000S above is the proof that
+	 * a tail CAN be non-zero. What a real mixer does with one of these rows is an
+	 * open question with a rig step behind it (the spec's §9). ---- */
+
+	/* The S-4000S's other strap. Same chassis, same firmware, the split
+	 * reversed — the corpus has the 3208 and has never seen an 0832, so it is
+	 * DERIVED while keeping the Roland identity its chassis really carries. */
+	{ .token = "s4000s-0832", .display = "S-4000S-0832 (8 in / 32 out)",
+	  .in_ch = 8, .out_ch = 32,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_ROLAND,
+	  .fw_milli = 2500, .reac_major = 2, .reac_minor = 1, .reac_patch = 2 },
+
+	/* The operator named these two as the models we have never seen. Their
+	 * identity is OURS: a FreeREAC name, this daemon's own firmware number, and
+	 * REAC major 9, which no Roland box has ever sent. */
+	{ .token = "s0816", .display = "S-0816 (8 in / 16 out)", .in_ch = 8, .out_ch = 16,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
+	  .has_identity_record = 1, .name = "FR-0816",
+	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
+	{ .token = "s2416", .display = "S-2416 (24 in / 16 out)", .in_ch = 24, .out_ch = 16,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
+	  .has_identity_record = 1, .name = "FR-2416",
+	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
+
+	/* The S-4000 family's other members, by what their names declare: D is
+	 * outputs only, M is inputs only, H is symmetric. */
+	{ .token = "s4000d", .display = "S-4000D (0 in / 32 out)", .in_ch = 0, .out_ch = 32,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
+	  .has_identity_record = 1, .name = "FR-4000D",
+	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
+	{ .token = "s4000m", .display = "S-4000M (32 in / 0 out)", .in_ch = 32, .out_ch = 0,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
+	  .has_identity_record = 1, .name = "FR-4000M",
+	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
+	{ .token = "s4000h", .display = "S-4000H (16 in / 16 out)", .in_ch = 16, .out_ch = 16,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
+	  .has_identity_record = 1, .name = "FR-4000H",
+	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
+
+	/* ---- THE EXPERIMENT (operator, 2026-09-17: "test if we can emulate a 40
+	 * channels input or output box"). No Roland model is behind these. 40 is the
+	 * AUDIO FABRIC's full width and it is not 48: the port table spans twelve
+	 * 4-channel slots = 48 channels, but the downstream frame carries 40 slots
+	 * (REAC_AUDIO_FABRIC_SLOTS), so 40/0 and 0/40 are the widest rows the fabric
+	 * can actually carry and 20/20 is the widest symmetric one. ---- */
+	{ .token = "fr4000", .display = "FreeREAC 40 in / 0 out", .in_ch = 40, .out_ch = 0,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
+	  .has_identity_record = 1, .name = "FR-4000",
+	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
+	{ .token = "fr0040", .display = "FreeREAC 0 in / 40 out", .in_ch = 0, .out_ch = 40,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
+	  .has_identity_record = 1, .name = "FR-0040",
+	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
+	{ .token = "fr2020", .display = "FreeREAC 20 in / 20 out", .in_ch = 20, .out_ch = 20,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
+	  .has_identity_record = 1, .name = "FR-2020",
+	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
 };
 
 const struct reac_box_model *reac_box_model_table(size_t *count)
@@ -511,12 +599,18 @@ const struct reac_box_model *reac_box_model_by_token(const char *token)
 }
 
 /* Map an input width to its matrix row (each verified width is one model). Falls
- * back to S-1608 for widths not in the matrix so the pure builders never fault. */
+ * back to S-1608 for widths not in the matrix so the pure builders never fault.
+ *
+ * A WIDTH NAMES ONLY A CAPTURED ROW (2026-09-17). The derived rows exist so a
+ * model nobody has seen can be ASKED FOR by token; letting a width reach one
+ * would make an experiment row answer for a real box on a real wire, which is
+ * the guess this fixed matrix exists to refuse. */
 const struct reac_box_model *reac_box_model_by_channels(int in_ch)
 {
 	size_t n = sizeof(BOX_MODELS) / sizeof(BOX_MODELS[0]);
 	for (size_t i = 0; i < n; i++)
-		if (BOX_MODELS[i].in_ch == in_ch)
+		if (BOX_MODELS[i].in_ch == in_ch &&
+		    BOX_MODELS[i].origin == REAC_BOX_CAPTURED)
 			return &BOX_MODELS[i];
 	return &BOX_MODELS[0];   /* default: S-1608 */
 }
@@ -536,10 +630,20 @@ const struct reac_box_model *reac_ctrl_identify_box(const uint8_t *frame, size_t
 	struct reac_ctrl_parsed p;
 	if (reac_ctrl_parse(frame, len, &p) != REAC_CTRL_CONFIG_ANNOUNCE)
 		return NULL;
+	/* MATCH AGAINST THE SYNTHESISED DECLARATION, not the stored one: a DERIVED
+	 * row has no stored bytes at all, and an all-zero array would match nothing
+	 * while reading exactly like a row that simply never appears on a wire. The
+	 * synthesis is byte-identical to the captured bytes for every captured row
+	 * (tests/test_box_table.c arm 1), so this recognises the three real boxes
+	 * exactly as before AND names an S-0816 the first time one is heard. */
 	size_t n; const struct reac_box_model *t = reac_box_model_table(&n);
-	for (size_t i = 0; i < n; i++)
-		if (memcmp(frame + REAC_CTRL_BLOCK_OFF, t[i].config_block, 32) == 0)
+	for (size_t i = 0; i < n; i++) {
+		uint8_t blk[32];
+		if (reac_box_model_block(&t[i], REAC_BOX_BLOCK_CONFIG, blk) != 1)
+			continue;
+		if (memcmp(frame + REAC_CTRL_BLOCK_OFF, blk, 32) == 0)
 			return &t[i];
+	}
 	return NULL;
 }
 
@@ -631,18 +735,20 @@ static const uint8_t TMPL_HEADAMP[REAC_CTRL_BLOCK_LEN] = {
 #define HEADAMP_REC_OFF 16   /* TAG..CKSUM,      block-relative (frame [34:40]) */
 #define HEADAMP_REC_LEN  6
 
-static const uint8_t *ctrl_model_block(const struct reac_box_model *m,
-                                       enum ctrl_block b)
+/* This scaffold's block vocabulary -> the model table's own. Two enums because
+ * they answer two questions: which block a TABLE ROW of this builder wants, and
+ * which block a MODEL emits. -1 is "not a matrix block at all". */
+static enum reac_box_block ctrl_block_to_box_block(enum ctrl_block b)
 {
 	switch (b) {
-	case BLOCK_CONFIG: return m->config_block;
-	case BLOCK_IDENT_FIRST: return m->identity_first;
-	case BLOCK_CC0014: return m->cc0014;
-	case BLOCK_CC0013: return m->cc0013;
-	case BLOCK_CC0016: return m->cc0016;
-	case BLOCK_CC001A: return m->cc001a;
-	case BLOCK_IDENT_LAST:  return m->identity_last;
-	default:           return NULL;   /* not a matrix block */
+	case BLOCK_CONFIG:      return REAC_BOX_BLOCK_CONFIG;
+	case BLOCK_IDENT_FIRST: return REAC_BOX_BLOCK_IDENT_FIRST;
+	case BLOCK_CC0014:      return REAC_BOX_BLOCK_CC0014;
+	case BLOCK_CC0013:      return REAC_BOX_BLOCK_CC0013;
+	case BLOCK_CC0016:      return REAC_BOX_BLOCK_CC0016;
+	case BLOCK_CC001A:      return REAC_BOX_BLOCK_CC001A;
+	case BLOCK_IDENT_LAST:  return REAC_BOX_BLOCK_IDENT_LAST;
+	default:                return (enum reac_box_block)-1;
 	}
 }
 
@@ -662,7 +768,7 @@ static void ctrl_lay_block(uint8_t *frame, const struct ctrl_frame *f,
                            const struct reac_box_model *m, const uint8_t *args)
 {
 	uint8_t *block = frame + REAC_CTRL_BLOCK_OFF;
-	const uint8_t *from;
+	uint8_t gen[REAC_CTRL_BLOCK_LEN];
 
 	memset(block, 0, REAC_CTRL_BLOCK_LEN);
 	switch ((enum ctrl_block)f->block) {
@@ -678,9 +784,13 @@ static void ctrl_lay_block(uint8_t *frame, const struct ctrl_frame *f,
 		memcpy(block, f->tmpl, REAC_CTRL_BLOCK_LEN);
 		break;
 	default:
-		from = ctrl_model_block(m, (enum ctrl_block)f->block);
-		if (from)
-			memcpy(block, from, REAC_CTRL_BLOCK_LEN);
+		/* SYNTHESISED, never the row's stored array: that array is the ORACLE
+		 * the generator is tested against, and a DERIVED row has none. Reading
+		 * it here would put 32 zero bytes on the wire for every model nobody
+		 * has captured — a frame that looks built and declares nothing. */
+		if (reac_box_model_block(m, ctrl_block_to_box_block(
+		                             (enum ctrl_block)f->block), gen) == 1)
+			memcpy(block, gen, REAC_CTRL_BLOCK_LEN);
 		break;
 	}
 	if (args && f->arg_len)
