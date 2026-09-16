@@ -95,6 +95,11 @@ PC
   live segment 73 minutes of correct probing into silence. The policy is reac-pw's
   reac_wake; this is only the write. ADDED SYMBOL, no struct touched: LIBREAC_ABI stays 3
   and tests/abi-layout.inc is unchanged.
+- The PROBING watchdog now prints the number of COMPLETED scene pushes and stops telling the
+  operator "do not bounce it yet". That sentence is true of the S-4000S it was measured from
+  and false of a box that has DROPPED; on 2026-09-16 it kept a live segment waiting an hour
+  for a frame that could not come. The push count is the only number that separates "our own
+  transfer never finished" from "the far end ignored a whole one", and nothing printed it.
 * Tue Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.4-1
 - reac_hunt: a segment PINNED master with a stagebox already mastering the wire now JOINS it
   as a slave instead of refusing (operator ruling 2026-09-16, "enroll any box, master or
