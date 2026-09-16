@@ -67,11 +67,23 @@ const struct reac_box_model *reac_box_master_model(unsigned width)
 	 * exact defect this function was written to refuse (its `_by_channels` sibling
 	 * falls back to the S-1608 and this one answers nothing at all). What we may
 	 * DECLARE as is a different question, and it is asked by token. */
-	for (size_t i = 0; i < n; i++)
-		if (t[i].in_ch > 0 && (unsigned)t[i].in_ch == width &&
-		    t[i].origin == REAC_BOX_CAPTURED)
-			return &t[i];
-	return NULL;
+	/* AND A WIDTH TWO ROWS SHARE NAMES NEITHER (2026-09-17). The S-4000H
+	 * declares 8 inputs and so does the S-0808, both from real wires, so the
+	 * first-match this used to do would answer "S-0808 8x8" for a box that is
+	 * 8x32 — a recognition invented out of a number, which is the whole thing
+	 * this function was written to refuse. A model comes from the byte-exact
+	 * declaration (reac_ctrl_identify_box); a width can only ever narrow. */
+	const struct reac_box_model *hit = NULL;
+	for (size_t i = 0; i < n; i++) {
+		if (t[i].in_ch <= 0 || (unsigned)t[i].in_ch != width)
+			continue;
+		if (t[i].origin == REAC_BOX_DERIVED)
+			continue;   /* nobody has heard one: it may not answer for a wire */
+		if (hit)
+			return NULL;   /* ambiguous: say nothing rather than a coin toss */
+		hit = &t[i];
+	}
+	return hit;
 }
 
 void reac_box_master_identity_publish(unsigned width, uint64_t mac48, int locked,
