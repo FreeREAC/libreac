@@ -104,9 +104,10 @@ static int build_config(const struct reac_box_model *m, uint8_t *out)
 	out[4] = m->selector;
 	out[5] = 0x00; out[6] = 0x00;
 	out[7] = m->headamp_strap;      /* the chassis strap; base = strap * 0x10 */
-	/* THE PLACEMENT IS DECLARED, because a sort would be a guess. A split
-	 * chassis lays its outputs first and marks its input groups 0x00; the three
-	 * Roland rows lay inputs first and mark them 0x02. reac_box_port_layout. */
+	/* THE DECLARATION'S ORDER IS DECLARED, because a sort would be a guess. A
+	 * split chassis writes its outputs first and marks its input groups 0x00;
+	 * the three Roland rows write inputs first and mark them 0x02. It is not
+	 * the fabric placement — see reac_box_port_layout. */
 	int k = 0;
 	if (m->port_layout == REAC_BOX_PORTS_SPLIT_OUT_FIRST) {
 		for (int i = 0; i < out_slots; i++)

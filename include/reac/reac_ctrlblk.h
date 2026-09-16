@@ -450,16 +450,22 @@ enum reac_box_origin {
 	REAC_BOX_DECLARED,
 };
 
-/* WHERE A CHASSIS PLACES ITS PORT GROUPS, and which code it marks an input
- * with. The twelve-slot table is a FABRIC PLACEMENT, not a sorted list: the
- * three Roland rows all lay inputs first, so nothing could tell a sort from a
- * layout until an S-4000H laid its OUTPUTS first and marked its inputs 0x00
- * (reac_ports.h). The two halves were captured together and no capture shows
- * them apart, so they are ONE declared shape rather than two flags a row could
- * mix into a layout nobody has seen. */
+/* THE ORDER A CHASSIS WRITES ITS DECLARATION IN, and which code it marks an
+ * input group with. The three Roland rows all write inputs first, so nothing
+ * could tell a sort from a declared order until an S-4000H wrote its OUTPUTS
+ * first and marked its inputs 0x00 (reac_ports.h). The two halves were captured
+ * together and no capture shows them apart, so they are ONE declared shape
+ * rather than two flags a row could mix into a layout nobody has seen.
+ *
+ * IT IS NOT THE FABRIC PLACEMENT, and the same box is the proof: the operator's
+ * S-4000H numbers its inputs 1-8 and its outputs from 9 (ruling 2026-09-17,
+ * the spec's third amendment) while declaring its outputs first. Nothing is
+ * decided from this order — the widths come from COUNTING codes, which is
+ * order-free — and the enrolment places inputs at the base as it always did.
+ * It exists so a captured declaration can be reproduced byte for byte. */
 enum reac_box_port_layout {
-	REAC_BOX_PORTS_IN_FIRST = 0,       /* 0x02 input groups, then outputs   */
-	REAC_BOX_PORTS_SPLIT_OUT_FIRST,    /* outputs, then 0x00 input groups   */
+	REAC_BOX_PORTS_IN_FIRST = 0,       /* declares 0x02 input groups, then outputs */
+	REAC_BOX_PORTS_SPLIT_OUT_FIRST,    /* declares outputs, then 0x00 input groups */
 };
 
 /* WHOSE IDENTITY THE ROW DECLARES. The operator's ruling 2026-09-17: what we
