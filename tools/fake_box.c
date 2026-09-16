@@ -26,6 +26,16 @@
  * has no discovery of its own.
  *
  *   fake_box <ifname> [seconds]
+ *
+ * DROPPED MODE (`FAKE_BOX_DROPPED=1`) is the OTHER box, and the difference between
+ * the two is the whole of reac-pw's wake ladder. An S-1608 that has torn its
+ * master down answers no frame at all: its decompiled FSM leaves that state on
+ * "PHY LINK-UP (the only establish trigger; a data gap does NOT)"
+ * (reac-firmware-re REAC-PROTOCOL-FROM-SOURCE §10.2). So in this mode the program
+ * COUNTS complete transfers and ignores every one of them until it has watched its
+ * own carrier go away and come back — after which it behaves exactly as above.
+ * The count it ignored is the measurement: it is how many whole pushes the master
+ * spent on a box that could not hear them.
  */
 
 /* AF_PACKET + SIOCGIFINDEX: built with -D_GNU_SOURCE (its own Makefile rule). */
@@ -73,6 +83,22 @@ static const uint8_t JOIN_BURST[3][32] = {
 #define BOX_CHANNELS 8
 #define COMMIT_DELAY_NS   8400000LL      /* +8.4 ms after the LAST, measured */
 #define JOIN_DELAY_NS  1489000000LL      /* +1.489 s after the group map     */
+
+/* Our own carrier, read the way reac_carrier.c reads it: the kernel's file, no
+ * netlink, no capability. -1 is UNKNOWN and is never treated as down — a box that
+ * mistook an unreadable probe for a link-down would wake itself and prove nothing. */
+static int my_carrier(const char *ifname)
+{
+	char path[IFNAMSIZ + 32];
+	if (snprintf(path, sizeof path, "/sys/class/net/%s/carrier", ifname) < 0)
+		return -1;
+	FILE *f = fopen(path, "re");
+	if (!f)
+		return -1;
+	int c = fgetc(f);
+	fclose(f);
+	return c == '1' ? 1 : (c == '0' ? 0 : -1);
+}
 
 static uint64_t mono_ns(void)
 {
@@ -132,6 +158,12 @@ int main(int argc, char **argv)
 	uint8_t master[6] = { 0 };
 	int have_master = 0, saw_first = 0, mids = 0, committed = 0, joined = 0;
 	long transfers = 0, ignored = 0, sent = 0;
+	/* DROPPED MODE: deaf to every frame until its own PHY comes back. */
+	const char *dropped_env = getenv("FAKE_BOX_DROPPED");
+	const int dropped = dropped_env && dropped_env[0] == '1';
+	int phy_edge = !dropped;      /* a box that never dropped needs no edge */
+	int carrier_was = my_carrier(argv[1]), saw_down = 0;
+	long deaf_transfers = 0;
 	uint64_t commit_at = 0, join_at = 0, next_stream = 0;
 	uint64_t stop = mono_ns() + (uint64_t)secs * 1000000000ull;
 
@@ -155,7 +187,12 @@ int main(int argc, char **argv)
 					} else if (p.seg == REAC_SEG_LAST) {
 						if (saw_first && mids == REAC_SCENE_CHUNKS) {
 							transfers++;
-							if (!committed)
+							/* THE WHOLE POINT OF THE MODE: a complete
+							 * transfer, correctly received, and it
+							 * changes nothing. */
+							if (!phy_edge)
+								deaf_transfers++;
+							else if (!committed)
 								commit_at = now + COMMIT_DELAY_NS;
 						} else {
 							ignored++;   /* the capture's negative control */
@@ -167,6 +204,27 @@ int main(int argc, char **argv)
 					join_at = now + JOIN_DELAY_NS;
 				}
 			}
+		}
+
+		/* OUR OWN PHY, polled on the same ~20 ms tick the receive timeout gives
+		 * us. A down we never saw cannot be followed by an up we believe in, so
+		 * both halves are required and in that order. */
+		if (!phy_edge) {
+			int c = my_carrier(argv[1]);
+			if (c == 0 && carrier_was != 0)
+				saw_down = 1;
+			if (c == 1 && saw_down) {
+				phy_edge = 1;
+				/* The master's next COMPLETE push is the one we answer; the
+				 * transfer in flight across the edge is not it. */
+				saw_first = 0; mids = 0;
+				fprintf(stderr, "fake_box: PHY LINK-UP after a link-down — "
+				        "this box was DEAF to %ld complete scene transfer(s) "
+				        "and is now a box that has just booted\n",
+				        deaf_transfers);
+			}
+			if (c >= 0)
+				carrier_was = c;
 		}
 
 		now = mono_ns();
@@ -204,8 +262,15 @@ int main(int argc, char **argv)
 		}
 	}
 	fprintf(stderr, "fake_box: %ld complete transfers seen, %ld ignored, "
-	        "%ld frames sent, committed=%d joined=%d\n",
-	        transfers, ignored, sent, committed, joined);
+	        "%ld frames sent, committed=%d joined=%d dropped=%d deaf_transfers=%ld "
+	        "phy_edge=%d\n",
+	        transfers, ignored, sent, committed, joined, dropped, deaf_transfers,
+	        phy_edge);
 	close(fd);
+	/* In dropped mode committing is not enough: it has to have taken an EDGE to get
+	 * there, and the master has to have spent whole pushes before it. A run that
+	 * commits without either is a fake box that was never dropped. */
+	if (dropped)
+		return (committed && phy_edge && deaf_transfers > 0) ? 0 : 3;
 	return committed ? 0 : 3;
 }
