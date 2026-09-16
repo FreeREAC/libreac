@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.1.4
+Version:        1.1.5
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,9 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Wed Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.5-1
+- No change to this library. Version moves with libreac-transport, which gains
+  reac_link_admin(). LIBREAC_ABI stays 3; tests/abi-layout.inc is unchanged.
 * Tue Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.4-1
 - reac_hunt: a segment PINNED master with a stagebox already mastering the wire now JOINS it
   as a slave instead of refusing (operator ruling 2026-09-16, "enroll any box, master or
