@@ -23,7 +23,9 @@ int reac_ports_parse(const uint8_t block[32], struct reac_box_ports *out)
 	int in_slots = 0, out_slots = 0;
 	for (int i = 0; i < REAC_PORTS_TABLE_SLOTS; i++) {
 		switch (block[REAC_PORTS_TABLE_OFF + i]) {
-		case REAC_PORT_SLOT_IN:    in_slots++;  break;
+		case REAC_PORT_SLOT_IN:
+		case REAC_PORT_SLOT_IN_SPLIT:
+			in_slots++;  break;
 		case REAC_PORT_SLOT_OUT:   out_slots++; break;
 		case REAC_PORT_SLOT_EMPTY: break;
 		default:
