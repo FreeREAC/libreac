@@ -5,7 +5,7 @@
  * difference is an ABI break; see the generator's header for the
  * rig incident that bought this file.
  */
-ABI_GENERATED_FOR(3)
+ABI_GENERATED_FOR(4)
 ABI_STRUCT_COUNT(61)
 
 ABI_STRUCT(pcap_source, 24, 8)
@@ -32,7 +32,7 @@ ABI_MEMBER(reac_box, established, 16)
 ABI_MEMBER(reac_box, pinned, 20)
 ABI_MEMBER(reac_box, name, 24)
 
-ABI_STRUCT(reac_box_model, 256, 8)
+ABI_STRUCT(reac_box_model, 296, 8)
 ABI_MEMBER(reac_box_model, token, 0)
 ABI_MEMBER(reac_box_model, display, 8)
 ABI_MEMBER(reac_box_model, in_ch, 16)
@@ -45,6 +45,16 @@ ABI_MEMBER(reac_box_model, cc0014, 124)
 ABI_MEMBER(reac_box_model, cc0013, 156)
 ABI_MEMBER(reac_box_model, cc0016, 188)
 ABI_MEMBER(reac_box_model, cc001a, 220)
+ABI_MEMBER(reac_box_model, selector, 252)
+ABI_MEMBER(reac_box_model, headamp_strap, 253)
+ABI_MEMBER(reac_box_model, tail, 254)
+ABI_MEMBER(reac_box_model, fw_milli, 266)
+ABI_MEMBER(reac_box_model, reac_major, 268)
+ABI_MEMBER(reac_box_model, reac_minor, 270)
+ABI_MEMBER(reac_box_model, reac_patch, 272)
+ABI_MEMBER(reac_box_model, name, 280)
+ABI_MEMBER(reac_box_model, origin, 288)
+ABI_MEMBER(reac_box_model, identity_shape, 289)
 
 ABI_STRUCT(reac_box_ports, 12, 4)
 ABI_MEMBER(reac_box_ports, in_ch, 0)

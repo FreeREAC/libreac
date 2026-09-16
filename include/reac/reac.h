@@ -192,6 +192,26 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * LIBREAC_ABI stays put); the minor bump is the one middle-digit increment a
  * new build product beside the existing one deserves.
  *
+ * 1.2.0 IS AN ABI BREAK, and again a measurement says so. `struct
+ * reac_box_model` (reac_ctrlblk.h) is a PUBLIC struct, and the TABLE of them is
+ * walked BY INDEX by every consumer that calls reac_box_model_table() — so its
+ * sizeof is part of the ABI in the strongest possible way: a consumer built
+ * against the old header steps 256 bytes into rows that are now 296 and reads
+ * the middle of its neighbour.
+ *
+ *   sizeof(struct reac_box_model)  256 -> 296
+ *
+ * What grew it is the 2026-09-17 ruling that a model row is its DECLARED FACTS
+ * (selector, strap, tail, firmware, REAC version, name, origin) and that every
+ * wire block is synthesised from them — which is what lets a model nobody has
+ * captured be a row instead of code. No member MOVED and no symbol was removed;
+ * the table's stride is the break, and stride is not visible in a diff.
+ *
+ * libreac-transport's own structs did not move (the ABI table's only difference
+ * is the row above), so libreac-transport.so.4 keeps its soname; it is rebuilt
+ * against the new header like every other consumer, which is what fixes its
+ * stride.
+ *
  * 1.1.0 IS AN ABI BREAK, and a measurement says so rather than the diff's
  * shape. `struct reac_identity` (reac_identity.h) is a PUBLIC struct a consumer
  * allocates, and the 0x0600 record it carries is now decoded into major/minor/
@@ -214,8 +234,8 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 1
-#define LIBREAC_VERSION_PATCH 5
+#define LIBREAC_VERSION_MINOR 2
+#define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
@@ -227,7 +247,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
  * number; packaging/make-tarball.sh refuses a tarball whose spec disagrees. */
-#define LIBREAC_ABI 3
+#define LIBREAC_ABI 4
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)
