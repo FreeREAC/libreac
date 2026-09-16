@@ -383,7 +383,84 @@ struct reac_box_model {
 	uint8_t     cc0013[32];        /* link 4 SINGLE, TAG 0x0302 box ready      */
 	uint8_t     cc0016[32];        /* link 4 SINGLE, TAG 0x0500 identity, 6 B  */
 	uint8_t     cc001a[32];        /* link 4 SINGLE, TAG 0x0500 identity, 10 B */
+
+	/* ---- THE DECLARED FACTS (2026-09-17). Everything above is synthesised
+	 * from these; see the block below this struct for the grammar. ---- */
+	uint8_t     selector;       /* config-announce model-family byte: 0x82 / 0x84 */
+	uint8_t     headamp_strap;  /* config block[7]; the head-amp CH base is x0x10 */
+	uint8_t     tail[11];       /* the model tail after the port table, block[20:31] */
+	uint16_t    fw_milli;       /* firmware x1000: 2200 is "2.200"                */
+	uint16_t    reac_major;     /* the REAC version the box CLAIMS (identity page) */
+	uint16_t    reac_minor;
+	uint16_t    reac_patch;
+	const char *name;           /* identity-page ASCII name; NULL = the selector names it */
+	uint8_t     origin;         /* enum reac_box_origin                            */
+	uint8_t     identity_shape; /* enum reac_box_identity_shape                    */
 };
+/* ---- THE ROW'S DECLARED FACTS, AND THE BLOCKS SYNTHESISED FROM THEM ----
+ * (docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §2, in reac-pw's tree.)
+ *
+ * A row used to BE its captured bytes, and that is exactly why a model nobody has
+ * captured could not be a row: it has no bytes. So every block above is DERIVED
+ * from the facts below by the grammar the corpus already pinned, and the captured
+ * arrays become the ORACLE for that derivation instead of its source —
+ * tests/test_box_table.c requires the synthesiser to reproduce every captured
+ * block of every captured row, byte for byte. That equality is the whole licence
+ * for trusting a row nobody has ever seen on a wire.
+ *
+ * The grammar, all of it:
+ *   config-announce  01 03 00 10, selector, 00 00, headamp strap, then the twelve
+ *                    4-channel port slots reac_ports.h decodes (0x02 in, 0x01 out,
+ *                    0x03 empty — always twelve), then the 11-byte model tail;
+ *   identity page    DT1 tag 0x0500 (reac_identity.h): addr 0x0000 is the firmware
+ *                    as four decimal digits, addr 0x0600 is the REAC version as
+ *                    four u16be (reserved, major, minor, patch), addr 0x1000 is a
+ *                    name_kind byte and the 16-byte NUL-padded ASCII name, split
+ *                    10 + 6 across the link-4 FIRST and LAST fragments;
+ *   two checksums    the Roland DT1 INNER (128 - sum(address+data) mod 128) first,
+ *                    then the REAC block check byte, so the 32 bytes sum to 0 mod
+ *                    256. That order is structural in reac_ctrlblk.c and is why
+ *                    the inner byte is one of the bytes the outer sum covers.
+ *   the two JOIN records 0014/0013 are model-GENERIC in the whole corpus: they are
+ *                    the table's constants, not a row's.
+ */
+
+/* Where a row's bytes come from. CAPTURED: a real box put them on a wire and the
+ * row carries them as the oracle. DERIVED: nobody has seen one — the row is its
+ * facts and nothing else, and every block it emits is synthesised. */
+enum reac_box_origin {
+	REAC_BOX_CAPTURED = 0,
+	REAC_BOX_DERIVED,
+};
+
+/* WHOSE IDENTITY THE ROW DECLARES. The operator's ruling 2026-09-17: what we
+ * present is OURS unless the row asks otherwise. A Roland-shaped row exists to be
+ * byte-identical to a real box; a FreeREAC row can never be mistaken for one (its
+ * REAC major is 9, which no Roland box has ever sent). */
+enum reac_box_identity_shape {
+	REAC_BOX_IDENTITY_ROLAND = 0,
+	REAC_BOX_IDENTITY_FREEREAC,
+};
+
+/* The blocks a row emits, in the synthesiser's own vocabulary. */
+enum reac_box_block {
+	REAC_BOX_BLOCK_CONFIG = 0,  /* config-announce      cdea 01 03 0010     */
+	REAC_BOX_BLOCK_CC0014,      /* cold-connect JOIN    cdea 04 03 0014     */
+	REAC_BOX_BLOCK_CC0013,      /* cold-connect READY   cdea 04 03 0013     */
+	REAC_BOX_BLOCK_CC0016,      /* identity: FIRMWARE   addr 0x0000         */
+	REAC_BOX_BLOCK_CC001A,      /* identity: REAC ver   addr 0x0600         */
+	REAC_BOX_BLOCK_IDENT_FIRST, /* identity: NAME, link-4 FIRST fragment    */
+	REAC_BOX_BLOCK_IDENT_LAST,  /* identity: NAME, link-4 LAST fragment     */
+};
+
+/* Synthesise one of a row's 32-byte control blocks into `out`. Returns 1 when a
+ * block was written, 0 when this row does not emit that block (the name record on
+ * a family whose selector already names it), and -1 on a bad argument or a row
+ * whose declared geometry cannot be expressed in the twelve slots. NO STATE, no
+ * allocation: the same kernel-portable rules as the rest of this header. */
+int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
+                         uint8_t out[32]);
+
 const struct reac_box_model *reac_box_model_by_token(const char *token);
 const struct reac_box_model *reac_box_model_by_channels(int in_ch);
 const struct reac_box_model *reac_box_model_table(size_t *count);
