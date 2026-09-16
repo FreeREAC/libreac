@@ -207,10 +207,12 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * captured be a row instead of code. No member MOVED and no symbol was removed;
  * the table's stride is the break, and stride is not visible in a diff.
  *
- * libreac-transport's own structs did not move (the ABI table's only difference
- * is the row above), so libreac-transport.so.4 keeps its soname; it is rebuilt
- * against the new header like every other consumer, which is what fixes its
- * stride.
+ * AND libreac-transport.so.4 BECOMES .so.5 in the same release, measured the same
+ * way: `struct reac_slave` and `struct reac_slave_cfg` each gained the model row a
+ * box declares (sizeof 584 -> 592 and 56 -> 64). Both are public and reac-pw
+ * allocates the cfg, so a binary built against the old header would hand the new
+ * engine an object eight bytes short of what it reads. The member is APPENDED in
+ * both, so nothing behind it moves — the stride is the break, again.
  *
  * 1.1.0 IS AN ABI BREAK, and a measurement says so rather than the diff's
  * shape. `struct reac_identity` (reac_identity.h) is a PUBLIC struct a consumer
