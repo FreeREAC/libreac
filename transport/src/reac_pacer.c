@@ -811,20 +811,36 @@ int reac_pacer_log_drain(struct reac_pacer *p, FILE *out)
 				        "administratively down, or gone. The box is emitting "
 				        "nothing either way.)\n", ts,
 				        p->ifname[0] ? p->ifname : "?");
-			else if (frames == 0)
-				/* A LINKED, SILENT BOX LOOKS EXACTLY LIKE THIS, and it is not a
-				 * box to touch. Measured 2026-09-14 (reac-captures
-				 * desk-arrival-q4-2026-09-14): a box whose desk vanished stops
-				 * transmitting after ~5.6 s and stays silent, and a COMPLETED
-				 * scene transfer captures it with its cable never touched — it
-				 * answers 8.4 ms after the last chunk. So silence is what our own
-				 * push has to end, not evidence about the far end. */
+			else if (frames == 0) {
+				/* WHAT WE HAVE ACTUALLY DONE, AND WHAT IS LEFT. This line used
+				 * to end "so do not bounce it yet", which is true of the
+				 * S-4000S it was written from (reac-captures
+				 * desk-arrival-q4-2026-09-14: a completed transfer captured a
+				 * linked, silent box with its cable never touched) and FALSE as
+				 * a general law. 2026-09-16, msi: an S-1608 that dropped while
+				 * the desk was suspended ignored ~1620 completed pushes over 73
+				 * minutes and two processes. Its own firmware says why — "PHY
+				 * LINK-UP (the only establish trigger; a data gap does NOT)",
+				 * REAC-PROTOCOL-FROM-SOURCE §10.2 — so no frame was ever going
+				 * to end that silence, and the sentence kept the operator
+				 * waiting for one.
+				 *
+				 * So the count of COMPLETED transfers is on the line now. It is
+				 * the only number that separates "our push never finished" from
+				 * "the far end ignored a whole one", and until now nothing
+				 * printed it anywhere. */
+				unsigned pushes = __atomic_load_n(&p->master.scene_complete,
+				                                  __ATOMIC_RELAXED);
 				fprintf(out, "reac-master: [%.6f] still PROBING: rx_box_frames=0 "
-				        "rx_joins=0 (carrier is up. A box that is LINKED AND SILENT "
-				        "looks like this — it goes quiet when its desk leaves and "
-				        "answers a COMPLETED scene push, so do not bounce it yet. "
-				        "A box that is not there looks the same: check it is "
-				        "powered and cabled to THIS segment.)\n", ts);
+				        "rx_joins=0 after %u COMPLETED scene push(es) (carrier is "
+				        "up. A box that is LINKED AND SILENT looks like this, and "
+				        "a whole push is what captures one — but a box that has "
+				        "DROPPED leaves that state on a PHY link-up and on "
+				        "nothing else, so if this count keeps climbing the wire "
+				        "needs an edge, not more frames. A box that is not there "
+				        "looks the same: check it is powered and cabled to THIS "
+				        "segment.)\n", ts, pushes);
+			}
 			else
 				fprintf(out, "reac-master: [%.6f] still PROBING: "
 				        "rx_box_frames=%llu rx_joins=%llu (%s — it is hearing us "
