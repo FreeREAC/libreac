@@ -166,3 +166,27 @@ recognized the box as `S-4000S (32 in / 8 out)` and established. What the rig
 still owes is the same thing with a REAL box, whose commit report we cannot yet
 prove is addressed to whoever completed the push rather than to the master MAC it
 remembers.
+
+## Amendment 2026-09-16 — §4's rig run was run, and it FAILED for an S-1608
+
+The one owed run happened by accident and the answer is on the record. Desk msi, reac-pw
+1.0.10 mastering `enp131s0` at 96 kHz with an S-1608 (`00:40:ab:c4:80:41`) enrolled; the
+desk went to s2idle for 77 minutes. On resume the daemon re-took the wire and pushed
+correctly for **73 minutes across two processes — about 1620 completed transfers, the NIC's
+own counter reading 8003 frames a second out and zero in** — for `rx_box_frames=0`. It never
+answered. Evidence, with a positive control on the reader:
+`reac-pw/docs/design/notes/2026-09-16-a-box-that-never-came-back.md`.
+
+So §1's "the box answers with its state-4 commit report, not a cold connect" is a fact about
+**that S-4000S**, not a law about boxes. The S-1608's decompiled FSM says why it cannot be
+one: `BOOT --> ANNOUNCE: PHY LINK-UP (the only establish trigger; a data gap does NOT)`
+(reac-firmware-re `REAC-PROTOCOL-FROM-SOURCE.md` §10.2). The same live window carries the
+control — at 15:51:12, seventy-three minutes in, a freshly powered S-4000S on that wire
+answered the same push and was ESTABLISHED in seven seconds.
+
+Nothing measured here is withdrawn: the push is byte-identical to the desk's, the burst-rate
+fix stands, and the completed push remains the FIRST thing tried. What is withdrawn is the
+advice built on top of it — this repo's watchdog no longer tells the operator not to bounce,
+and it now prints the completed-push count so the two cases can be told apart. The ladder
+that follows the push is reac-pw's
+`docs/design/specs/2026-09-16-a-dropped-box-wakes-on-a-phy-edge.md`.
