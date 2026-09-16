@@ -8,6 +8,7 @@
 #include "reac_handle_priv.h"
 #include <reac/transport/reac_rt.h>
 #include <reac/reac_ctrl.h>
+#include <reac/reac_ctrlblk.h>   /* the declared box-model row and its synthesised blocks */
 #include <reac/transport/reac_mac.h>
 
 #include <reac/reac.h>
@@ -69,9 +70,16 @@ void reac_slave_fsm_init(struct reac_slave *s, const struct reac_slave_cfg *cfg)
 	memset(s, 0, sizeof *s);
 	s->handle = NULL;
 	reac_fsm_init(&s->fsm);
-	s->box_channels = (cfg && cfg->box_channels > 0)
-		? (cfg->box_channels > REAC_MAX_CHANNELS ? REAC_MAX_CHANNELS : cfg->box_channels)
-		: REAC_SLAVE_BOX_CHANNELS_DEFAULT;
+	/* THE ROW IS THE ONE SOURCE WHEN THERE IS A ROW. A box role declares a model, and
+	 * the width it sends upstream is that row's — deriving it here rather than trusting
+	 * a second number in the cfg is what keeps the declaration and the frames from ever
+	 * disagreeing (derive, never store the derivation). */
+	s->model = cfg ? cfg->model : NULL;
+	s->box_channels = s->model
+		? reac_box_model_upstream_width(s->model)
+		: ((cfg && cfg->box_channels > 0)
+		   ? (cfg->box_channels > REAC_MAX_CHANNELS ? REAC_MAX_CHANNELS : cfg->box_channels)
+		   : REAC_SLAVE_BOX_CHANNELS_DEFAULT);
 	s->sample_rate = cfg ? cfg->sample_rate : 0;
 
 	/* Head-amp -> input gain: default UNITY on every input until the master sends a
@@ -79,7 +87,12 @@ void reac_slave_fsm_init(struct reac_slave *s, const struct reac_slave_cfg *cfg)
 	 * already zeroed sens/pad/phantom). Our wire-channel base is the box's fabric
 	 * slot offset the console addresses head-amp by: a 16-input S-1608 sits at 0x20,
 	 * every other width (S-0808/S-4000S) at 0x00 (m200-headamp-re/DECODE.md). */
-	s->ch_base = (s->box_channels == 16) ? 0x20 : 0x00;
+	/* THE HEAD-AMP BASE IS THE BOX'S OWN CHASSIS STRAP, and a declared row states it
+	 * (reac_ports.h: the per-width table it replaced agreed with the wire only because
+	 * width and strap are collinear across the three chassis we own). With no row the
+	 * legacy width rule stands, unchanged, for the callers that have no row. */
+	s->ch_base = s->model ? (int)s->model->headamp_strap * 0x10
+	                      : ((s->box_channels == 16) ? 0x20 : 0x00);
 	s->box_master = cfg && cfg->box_master;
 	s->bm_frame_box = cfg && cfg->box_master_frame_box;
 	s->bm_burst_chanmap = cfg && cfg->box_master_burst_chanmap;
@@ -224,6 +237,46 @@ void reac_slave_apply_input_gain(float *const planar[], int nch, int ns,
 		float *b = planar[c];
 		for (int i = 0; i < ns; i++)
 			b[i] *= g;              /* MULTIPLY-ONLY on the RT path */
+	}
+}
+
+/* WHAT WE DECLARE, THROUGH ONE DOOR. With a model row in the cfg every enrolment
+ * frame is built AS that row — its port table, its firmware, its REAC version, its
+ * name. With none (every caller before 1.2.0, and the box-master path) the width
+ * keys the captured matrix exactly as it always did, so this is a widening and not
+ * a change: reac_ctrl_build_as and the width-keyed builders emit the same bytes for
+ * a captured row at its own width (libreac tests/test_box_table.c). */
+static size_t slave_build_block(struct reac_slave *s, uint8_t *frame,
+                                enum reac_box_block b, uint16_t counter,
+                                float *const *planar, int ns)
+{
+	if (s->model)
+		return reac_ctrl_build_as(frame, s->model, b, s->fsm.master_mac, s->src,
+		                          counter, planar, ns);
+	switch (b) {
+	case REAC_BOX_BLOCK_CONFIG:
+		return reac_ctrl_build_config_announce(frame, s->fsm.master_mac, s->src,
+		                                       counter, s->box_channels);
+	case REAC_BOX_BLOCK_CC0014:
+		return reac_ctrl_build_coldconnect(frame, s->fsm.master_mac, s->src,
+		                                   counter, s->box_channels, planar, ns);
+	case REAC_BOX_BLOCK_CC0013:
+		return reac_ctrl_build_coldconnect_0013(frame, s->fsm.master_mac, s->src,
+		                                        counter, s->box_channels, planar, ns);
+	case REAC_BOX_BLOCK_CC0016:
+		return reac_ctrl_build_coldconnect_0016(frame, s->fsm.master_mac, s->src,
+		                                        counter, s->box_channels, planar, ns);
+	case REAC_BOX_BLOCK_CC001A:
+		return reac_ctrl_build_coldconnect_001a(frame, s->fsm.master_mac, s->src,
+		                                        counter, s->box_channels, planar, ns);
+	case REAC_BOX_BLOCK_IDENT_FIRST:
+		return reac_ctrl_build_identity_first(frame, s->fsm.master_mac, s->src,
+		                                      counter, s->box_channels);
+	case REAC_BOX_BLOCK_IDENT_LAST:
+		return reac_ctrl_build_identity_last(frame, s->fsm.master_mac, s->src,
+		                                     counter, s->box_channels);
+	default:
+		return 0;
 	}
 }
 
@@ -719,22 +772,22 @@ static void emit_decision(struct reac_slave *s, const struct reac_slave_decision
 			 * (live M-5000 test, 2026-07-11). One variant per join grid slot. */
 			switch (s->coldconnect_phase % 8) {
 			case 1:
-				len = reac_ctrl_build_coldconnect_0013(frame, s->fsm.master_mac, s->src,
-				          counter, s->box_channels, planar, REAC_SAMPLES_PER_PKT);
+				len = slave_build_block(s, frame, REAC_BOX_BLOCK_CC0013, counter,
+				          planar, REAC_SAMPLES_PER_PKT);
 				break;
 			case 2:
-				len = reac_ctrl_build_coldconnect_0016(frame, s->fsm.master_mac, s->src,
-				          counter, s->box_channels, planar, REAC_SAMPLES_PER_PKT);
+				len = slave_build_block(s, frame, REAC_BOX_BLOCK_CC0016, counter,
+				          planar, REAC_SAMPLES_PER_PKT);
 				break;
 			case 3:
-				len = reac_ctrl_build_coldconnect_001a(frame, s->fsm.master_mac, s->src,
-				          counter, s->box_channels, planar, REAC_SAMPLES_PER_PKT);
+				len = slave_build_block(s, frame, REAC_BOX_BLOCK_CC001A, counter,
+				          planar, REAC_SAMPLES_PER_PKT);
 				break;
 			case 4:
 				/* ANNOUNCE OUR SETUP — the master enrolls the box from this frame;
 				 * without it the desk never registers us (live M-5000 test). */
-				len = reac_ctrl_build_config_announce(frame, s->fsm.master_mac, s->src,
-				          counter, s->box_channels);
+				len = slave_build_block(s, frame, REAC_BOX_BLOCK_CONFIG, counter,
+				          NULL, 0);
 				break;
 			case 5:
 				/* the box also heartbeats DURING cold-connect, before any grant */
@@ -748,8 +801,8 @@ static void emit_decision(struct reac_slave *s, const struct reac_slave_decision
 				 * the generic family name (live M-200, 2026-07-11). Returns 0 for the
 				 * 0x82 family (named by selector) -> emit a plain upstream filler
 				 * instead. Case 7 carries the other half and MUST follow it. */
-				len = reac_ctrl_build_identity_first(frame, s->fsm.master_mac, s->src,
-				          counter, s->box_channels);
+				len = slave_build_block(s, frame, REAC_BOX_BLOCK_IDENT_FIRST,
+				          counter, NULL, 0);
 				if (len == 0)
 					len = reac_ctrl_build_upstream_filler(frame, s->fsm.master_mac,
 					          s->src, counter, s->box_channels, planar,
@@ -763,16 +816,16 @@ static void emit_decision(struct reac_slave *s, const struct reac_slave_decision
 				 * record on the wire nothing can verify, which is why one flag in
 				 * the model row gates both and both return 0 for the same models.
 				 * It rides the very next grid slot, so the pair stays in order. */
-				len = reac_ctrl_build_identity_last(frame, s->fsm.master_mac, s->src,
-				          counter, s->box_channels);
+				len = slave_build_block(s, frame, REAC_BOX_BLOCK_IDENT_LAST,
+				          counter, NULL, 0);
 				if (len == 0)
 					len = reac_ctrl_build_upstream_filler(frame, s->fsm.master_mac,
 					          s->src, counter, s->box_channels, planar,
 					          REAC_SAMPLES_PER_PKT);
 				break;
 			default:
-				len = reac_ctrl_build_coldconnect(frame, s->fsm.master_mac, s->src,
-				          counter, s->box_channels, planar, REAC_SAMPLES_PER_PKT);
+				len = slave_build_block(s, frame, REAC_BOX_BLOCK_CC0014, counter,
+				          planar, REAC_SAMPLES_PER_PKT);
 				break;
 			}
 			s->coldconnect_phase++;

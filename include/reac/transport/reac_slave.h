@@ -49,6 +49,7 @@
 #include <reac/transport/reac_rt.h>
 
 struct reac_ctrl_parsed;   /* reac_ctrl.h — a parsed received frame */
+struct reac_box_model;     /* reac_ctrlblk.h — the row a box role declares */
 
 /* How many of our input channels we return upstream (a box's width: S-1608 = 16,
  * S-0808 = 8). 628 B / 340 B box-width frames per reac_ctrl_build_upstream_filler. */
@@ -119,6 +120,14 @@ struct reac_slave_cfg {
 	 * ESTABLISHED and return instantly on somebody else's success. "[iface] " or ""
 	 * for a lone segment, exactly as every other per-segment line is tagged. */
 	const char *tag;
+	/* THE MODEL ROW WE PRESENT, when the daemon is running the BOX role
+	 * (reac-pw docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §1). NULL —
+	 * every caller before 1.2.0 — keeps the old behaviour exactly: the declaration
+	 * is keyed by `box_channels` through the captured matrix. A row handed in here
+	 * is what the enrolment DECLARES: its port table, its firmware, its REAC
+	 * version and its name, which is the only way a model nobody has captured, or
+	 * one whose width another row already claims, can present itself to a mixer. */
+	const struct reac_box_model *model;
 };
 
 /* The slave engine. The FSM is the brain; everything else is the I/O the FSM's
@@ -208,6 +217,11 @@ struct reac_slave {
 	_Atomic uint64_t tx_frames;         /* upstream frames we emitted */
 	_Atomic uint64_t tx_errors;
 	_Atomic int      established;        /* 1 once the FSM reaches ESTABLISHED */
+	/* THE ROW WE DECLARE (1.2.0), appended rather than placed: a new member in the
+	 * middle moves every one behind it, and this struct is public. NULL is every
+	 * caller before the box role — the declaration is then keyed by box_channels
+	 * through the captured matrix, exactly as it always was. */
+	const struct reac_box_model *model;
 };
 
 /* ---- the PURE decision core (no I/O; the offline-testable heart) ---------- */
