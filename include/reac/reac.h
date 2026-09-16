@@ -215,7 +215,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * becomes .so.4. Same rule, one library along. */
 #define LIBREAC_VERSION_MAJOR 1
 #define LIBREAC_VERSION_MINOR 1
-#define LIBREAC_VERSION_PATCH 4
+#define LIBREAC_VERSION_PATCH 5
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
