@@ -461,6 +461,32 @@ enum reac_box_block {
 int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
                          uint8_t out[32]);
 
+/* THE UPSTREAM FRAME'S WIDTH FOR A ROW, which is not always its input count.
+ * The braid packs channel PAIRS, so the narrowest frame a box can put on the
+ * wire carries two channels — and a row may declare ZERO inputs (an S-4000D is
+ * outputs only). Such a box still has to speak: it floods, it is granted, and it
+ * heartbeats. So its frame is the minimum pair while its DECLARATION says zero
+ * inputs, which are two different facts about it.
+ *
+ * SAID PLAINLY BECAUSE IT IS AN ASSUMPTION: no capture of an output-only box
+ * exists anywhere in this project. What a real S-4000D puts on the wire is the
+ * open question of the 2026-09-17 spec's §9, and this is what we will try. */
+int reac_box_model_upstream_width(const struct reac_box_model *m);
+
+/* Build one of a model's box->master control frames AS THAT MODEL — the door a
+ * box-role daemon announces itself through. The existing width-keyed builders
+ * (reac_ctrl_build_config_announce and friends) resolve the row from `in_ch` and
+ * therefore can only ever emit a CAPTURED model; this one takes the row, so a
+ * model nobody has seen — or one whose width another row already claims — can
+ * declare itself. `planar`/`ns` carry audio for the rows that place any (the
+ * cold-connect variants); NULL/0 is silence. Returns the frame length, or 0 when
+ * the row does not emit that block (the name record on a family whose selector
+ * names it) or the geometry cannot reach the wire. */
+size_t reac_ctrl_build_as(uint8_t *out, const struct reac_box_model *m,
+                          enum reac_box_block b, const uint8_t master[6],
+                          const uint8_t src[6], uint16_t counter,
+                          float *const *planar, int ns);
+
 const struct reac_box_model *reac_box_model_by_token(const char *token);
 const struct reac_box_model *reac_box_model_by_channels(int in_ch);
 const struct reac_box_model *reac_box_model_table(size_t *count);

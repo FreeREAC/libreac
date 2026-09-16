@@ -27,6 +27,7 @@
  *          FreeREAC row claims REAC major 9, which no Roland box has ever sent,
  *          and every CAPTURED row is Roland-shaped.
  */
+#include <reac/reac_ctrl.h>
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_identity.h>
 #include <reac/reac_ports.h>
@@ -195,6 +196,44 @@ int main(void)
 	CHK((m = reac_box_model_by_channels(8)) && strcmp(m->token, "s0808") == 0);
 	CHK((m = reac_box_model_by_channels(32)) && strcmp(m->token, "s4000s") == 0);
 	CHK((m = reac_box_model_by_channels(40)) && m->origin == REAC_BOX_CAPTURED);
+
+	/* ---- THE ROW REACHES THE WIRE. A width can only name a CAPTURED row, so
+	 * this is the door a derived model declares itself through: build the
+	 * announce AS the 40-channel experiment row and require the frame to carry
+	 * that row's declaration and to be recognised back as that row. ---- */
+	{
+		static const uint8_t MASTER[6] = { 0x00, 0x40, 0xab, 0x01, 0x02, 0x03 };
+		static const uint8_t SRC[6]    = { 0x00, 0x40, 0xab, 0x0f, 0x0e, 0x0d };
+		uint8_t frame[2048], want[32];
+		const struct reac_box_model *fr = reac_box_model_by_token("fr4000");
+		CHK(fr && reac_box_model_upstream_width(fr) == 40);
+		size_t len = reac_ctrl_build_as(frame, fr, REAC_BOX_BLOCK_CONFIG,
+		                                MASTER, SRC, 1, NULL, 0);
+		CHK(len == reac_ctrl_box_frame_len(40));
+		CHK(reac_box_model_block(fr, REAC_BOX_BLOCK_CONFIG, want) == 1);
+		CHK(memcmp(frame + 18, want, 32) == 0);
+		CHK(reac_ctrl_identify_box(frame, len) == fr);
+		/* The identity the mixer will read back is OURS, not a Roland box's. */
+		CHK(reac_ctrl_build_as(frame, fr, REAC_BOX_BLOCK_IDENT_FIRST,
+		                       MASTER, SRC, 2, NULL, 0) > 0);
+		CHK(memcmp(frame + 18 + 21, "FR-4000", 7) == 0);
+		/* An output-only row still speaks: the declaration says zero inputs and
+		 * the frame carries the minimum pair (an assumption, named in the spec). */
+		const struct reac_box_model *d = reac_box_model_by_token("fr0040");
+		CHK(d && d->in_ch == 0 && reac_box_model_upstream_width(d) == 2);
+		CHK(reac_ctrl_build_as(frame, d, REAC_BOX_BLOCK_CONFIG,
+		                       MASTER, SRC, 3, NULL, 0) == reac_ctrl_box_frame_len(2));
+		CHK(reac_box_model_block(d, REAC_BOX_BLOCK_CONFIG, want) == 1);
+		CHK(memcmp(frame + 18, want, 32) == 0);
+		/* And a CAPTURED row built through this door is the same bytes the
+		 * width-keyed builder has always emitted — one declaration, two doors. */
+		const struct reac_box_model *s16 = reac_box_model_by_token("s1608");
+		uint8_t legacy[2048];
+		size_t l1 = reac_ctrl_build_as(frame, s16, REAC_BOX_BLOCK_CONFIG,
+		                               MASTER, SRC, 4, NULL, 0);
+		size_t l2 = reac_ctrl_build_config_announce(legacy, MASTER, SRC, 4, 16);
+		CHK(l1 == l2 && l1 > 0 && memcmp(frame, legacy, l1) == 0);
+	}
 
 	/* Bad arguments refuse; they never write a half block. */
 	uint8_t blk[32];

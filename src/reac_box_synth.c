@@ -17,6 +17,7 @@
  * KERNEL-PORTABLE, like reac_identity and reac_ctrlblk: no allocation, no
  * floating point, caller-owned buffers, failure as a return value. */
 
+#include <reac/reac.h>          /* REAC_MAX_CHANNELS */
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_identity.h>
 #include <reac/reac_ports.h>
@@ -242,4 +243,16 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
 	default:
 		return -1;
 	}
+}
+
+/* The frame width a row can actually put on the wire — see the header: the braid
+ * packs PAIRS, so an output-only row still speaks at the minimum pair while its
+ * declaration says zero inputs. An odd or over-wide declaration is refused (0)
+ * rather than rounded: a width the frame cannot carry must not reach a builder
+ * as a plausible number. */
+int reac_box_model_upstream_width(const struct reac_box_model *m)
+{
+	if (!m || m->in_ch < 0 || m->in_ch > REAC_MAX_CHANNELS || (m->in_ch & 1))
+		return 0;
+	return m->in_ch < 2 ? 2 : m->in_ch;
 }
