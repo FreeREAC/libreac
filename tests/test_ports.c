@@ -36,6 +36,17 @@ static const uint8_t BLK_S4000S[32] = {
 	0x01, 0x01, 0x03, 0x03, 0x00, 0x03, 0x00, 0x00,
 	0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4c };
 
+/* S-4000H-0832, captured LIVE on VLAN 13 2026-09-17 (box 00:40:ab:c4:25:80,
+ * vlan13-0832.pcap t=+1.4579, the only config-announce in the file): 8 OUTPUT
+ * groups FIRST, then 2 groups marked 0x00 — the fourth slot code, and the
+ * chassis's 8 inputs — then 2 empty. Its tail is the S-4000S's, which is what
+ * says the same chassis is underneath. */
+static const uint8_t BLK_S4000H[32] = {
+	0x01, 0x03, 0x00, 0x10, 0x84, 0x00, 0x00, 0x00,
+	0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+	0x00, 0x00, 0x03, 0x03, 0x00, 0x03, 0x00, 0x00,
+	0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x56 };
+
 int main(void)
 {
 	struct reac_box_ports pt;
@@ -47,6 +58,16 @@ int main(void)
 	CHK(pt.in_ch == 8 && pt.out_ch == 8);
 	CHK(reac_ports_parse(BLK_S4000S, &pt) == 0);
 	CHK(pt.in_ch == 32 && pt.out_ch == 8);
+
+	/* THE FOURTH SLOT CODE, AND THE LIVE DEFECT IT CAUSED. The S-4000H declares
+	 * its input groups 0x00 and lays them AFTER its outputs; the decoder refused
+	 * the whole table on the unknown code, so reac_master_set_box was never
+	 * called, the master held an ungranted window and dropped back to PROBING
+	 * with box-undeclared — the operator's `state=probing model=none width=0/0`
+	 * for minutes. 8 in / 32 out is what the chassis is (operator, 2026-09-17). */
+	CHK(reac_ports_parse(BLK_S4000H, &pt) == 0);
+	CHK(pt.in_ch == 8 && pt.out_ch == 32);
+	CHK(pt.headamp_base == 0x00);          /* strap 0 */
 
 	/* Geometry needs no model row: an unnamed variant (a tail byte no matrix
 	 * block carries) still declares 32x8 — dynamic detection over enumeration. */
@@ -80,8 +101,15 @@ int main(void)
 	wrong[REAC_PORTS_TABLE_OFF + 5] = 0x04;
 	CHK(reac_ports_parse(wrong, &pt) == -1);
 	memcpy(wrong, BLK_S1608, 32);
-	wrong[REAC_PORTS_TABLE_OFF + 0] = 0x00;
+	wrong[REAC_PORTS_TABLE_OFF + 0] = 0x05;
 	CHK(reac_ports_parse(wrong, &pt) == -1);
+	/* 0x00 USED TO BE THAT CASE and is asserted the other way now: a real box
+	 * put it on a wire, so it is a captured code and an S-1608 declaring one
+	 * group of it declares 4 more inputs, not a corrupt table. */
+	memcpy(wrong, BLK_S1608, 32);
+	wrong[REAC_PORTS_TABLE_OFF + 6] = 0x00;   /* an EMPTY slot becomes an input */
+	CHK(reac_ports_parse(wrong, &pt) == 0);
+	CHK(pt.in_ch == 20 && pt.out_ch == 8);
 
 	/* A refusal leaves the out-struct untouched — INCLUDING THE BASE. A block
 	 * that does not parse is not a box, so nothing about it may be written:

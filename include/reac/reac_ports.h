@@ -12,6 +12,7 @@
  *     0x02  4-input group
  *     0x01  4-output group
  *     0x03  empty slot
+ *     0x00  4-input group, as an S-4000H SPLIT declares one (see below)
  *
  * Evidence — the three byte-verified model blocks, each captured from a real
  * box (matrix-m200-s1608 / -s0808 2026-07-11; S-4000S from s4000s-coldboot-
@@ -21,8 +22,28 @@
  *     S-1608   02 x4, 01 x2, 03 x6   -> 16 in / 8 out   (4+2+6 = 12)
  *     S-0808   02 x2, 01 x2, 03 x8   ->  8 in / 8 out   (2+2+8 = 12)
  *     S-4000S  02 x8, 01 x2, 03 x2   -> 32 in / 8 out   (8+2+2 = 12)
+ *     S-4000H  01 x8, 00 x2, 03 x2   ->  8 in / 32 out  (8+2+2 = 12)
  *
- * All six width facts reproduce and every table sums to exactly 12 slots. The
+ * All eight width facts reproduce and every table sums to exactly 12 slots.
+ *
+ * THE FOURTH CODE, AND WHY IT IS AN INPUT (captured 2026-09-17, box
+ * 00:40:ab:c4:25:80 alone on VLAN 13, vlan13-0832.pcap t=+1.4579 — the
+ * daemon's own master was the peer). This decoder refused 0x00 as "a table
+ * nobody has captured", which is what kept the box off the graph for minutes:
+ * no parse -> no reac_master_set_box -> the master's ungranted window expired
+ * into box-undeclared and back to PROBING, over and over. The operator's
+ * ruling the same day names the chassis 8 in / 32 out, and the two 0x00 groups
+ * are the only slots those 8 inputs can be: 8 output groups + 2 + 2 empty is
+ * the whole twelve. WHAT SEPARATES 0x00 FROM 0x02 IS NOT DECIDED — one
+ * capture, one chassis, and a splitter's inputs may be marked apart from a
+ * head-amp-owned input. Both count as inputs here; whether a head-amp record
+ * reaches a 0x00 group is a rig question (the 2026-09-17 spec's §9 step 6),
+ * and it must be answered by looking at a preamp, never at a meter.
+ *
+ * ALSO CAPTURED: THE TABLE IS A PLACEMENT, NOT A SORTED LIST. The three Roland
+ * rows put inputs first, so nothing could tell a sort from a layout; this
+ * chassis puts its OUTPUT groups first. A decoder COUNTS codes and is
+ * order-free, so only the synthesiser cares — reac_ctrlblk.h's port_layout. The
  * bytes BEFORE the table (block[4..7]) are the model-family selector + flags
  * (0x82 / 0x84 ...), and the bytes after it are model tail data — neither is
  * needed for geometry, which is the point: geometry comes from the declaration,
@@ -45,6 +66,7 @@
 #define REAC_PORT_SLOT_OUT   0x01
 #define REAC_PORT_SLOT_IN    0x02
 #define REAC_PORT_SLOT_EMPTY 0x03
+#define REAC_PORT_SLOT_IN_SPLIT 0x00
 
 struct reac_box_ports {
 	int in_ch;    /* declared input width  (4 per input slot)  */
