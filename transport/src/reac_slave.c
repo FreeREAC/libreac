@@ -13,6 +13,7 @@
 
 #include <reac/reac.h>
 #include <reac/reac_encode.h>  /* reac_downstream_build — the MIXER frame (0.5.6) */
+#include <reac/reac_code.h>    /* reac_code_emit — the promisc-failed line */
 
 #include <stdlib.h>
 #include <string.h>
@@ -1106,7 +1107,8 @@ int reac_slave_open(struct reac_slave *s, const struct reac_slave_cfg *cfg,
 		mr.mr_ifindex = ifr.ifr_ifindex;
 		mr.mr_type    = PACKET_MR_PROMISC;
 		if (setsockopt(fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr, sizeof mr) < 0)
-			fprintf(stderr, "reac_slave: PACKET_MR_PROMISC failed — a box's unicast to "
+			reac_code_emit(stderr, "reac_slave", RC_E_PROMISC_FAILED,
+			                "PACKET_MR_PROMISC failed — a box's unicast to "
 			                "our announced address may not reach us\n");
 	}
 
