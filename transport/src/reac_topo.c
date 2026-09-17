@@ -357,7 +357,25 @@ static struct sock_filter reac_topo_bpf[] = {
 int reac_topo_tap_open(struct reac_topo_tap *t, const char *parent)
 {
 	t->handle = NULL;
-	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, htons(ETH_P_ALL));
+	/* PROTOCOL 0 — THE SOCKET IS DEAF UNTIL IT IS BOUND (#18). A packet socket created
+	 * with a NON-ZERO protocol registers its receive hook on EVERY interface inside
+	 * socket() itself, so everything below — the filter, PACKET_AUXDATA, the ifindex
+	 * lookup — happens while the queue fills from every link on the host. Measured
+	 * 2026-09-17 on a veth pair: 88 632 foreign frames over 400 opens, ~220 per open.
+	 * On the rig (2026-09-14) it was one frame per VLAN per start, and each one was
+	 * treated as evidence that this parent carried a tagged trunk: a cold-cable NIC was
+	 * refused a master for ever, from the daemon's own masters on ANOTHER parent.
+	 *
+	 * With protocol 0 the kernel registers no hook at all (net/packet/af_packet.c:
+	 * packet_create hooks only when proto != 0), and bind() below installs it with the
+	 * interface AND the protocol together — the one atomic step packet(7) offers. The
+	 * filter is still attached first, so the hook is never live without it.
+	 *
+	 * ETH_P_ALL MOVES TO THE BIND, IT DOES NOT GO AWAY. A socket bound to 0x8819 reads
+	 * vlan_tci = none for a tagged frame and would report every trunk as an access port
+	 * (reac_topo.h's measurement); ETH_P_ALL on the bound device is what keeps the tag
+	 * and the outgoing frames visible. */
+	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, 0);
 	if (fd < 0)
 		return -1;
 
