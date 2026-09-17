@@ -227,6 +227,16 @@ etf_probe: tools/etf_probe.c transport/src/reac_etf.c
 fake_box: tools/fake_box.c libreac.a
 	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) $< libreac.a -lm -o $@
 
+# topo_bind_probe answers ONE question about the topology tap: can it hear an
+# interface it was never bound to (#18)? It builds against the real
+# reac_topo_tap_open(), so what it measures is the library, not a re-statement of
+# it. It needs a namespace before it can say anything -- tools/topo-veth-bind-probe.sh
+# makes one, needs no root, and is NOT part of `make test`: a build container
+# usually has neither iproute2 nor CAP_SYS_ADMIN, and it says so rather than
+# passing quietly.
+topo_bind_probe: tools/topo_bind_probe.c transport/src/reac_topo.c transport/src/reac_handle.c
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src $^ -o $@
+
 # --- libreac-transport: sockets, pacer, RT threads, VLAN/topology, ring, segment lock ---
 # The pieces of reac-pw that never touch PipeWire
 # (docs/design/specs/2026-09-11-reac-transport-library.md). A second, PARALLEL object
@@ -274,7 +284,7 @@ test-transport: tests/test_tap.c libreac-transport.a libreac.a
 	tools/conformance-tap-silent.sh
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_abi_layout test_reac_etf test_reac_etf_qdisc etf_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_abi_layout test_reac_etf test_reac_etf_qdisc etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
