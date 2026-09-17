@@ -5,6 +5,7 @@
  */
 #include <reac/transport/reac_ifscan.h>
 #include "reac_handle_priv.h"
+#include "reac_transport_tunables_priv.h"  /* the daemon's REAC_IFACES_ALLOW_WIRELESS */
 
 #include <errno.h>
 #include <poll.h>
@@ -328,7 +329,8 @@ static void msg_link(struct reac_ifscan *s, const struct nlmsghdr *nh, uint64_t 
 	 * too, so this is not a second filter layered on top; it is what "ether" now means. */
 	int wireless = reac_ifscan_is_wireless(NULL, name);
 	int wireless_ok = !wireless ||
-	                  reac_ifscan_wireless_allowed(getenv("REAC_IFACES_ALLOW_WIRELESS"), name);
+	                  reac_ifscan_wireless_allowed(
+	                          reac_transport_tunables_get()->allow_wireless, name);
 	int ether = ifi->ifi_type == ARPHRD_ETHER && !(ifi->ifi_flags & IFF_LOOPBACK) && wireless_ok;
 	reac_ifscan_observe(s, name, ifi->ifi_index, ether,
 	                    (ifi->ifi_flags & IFF_LOWER_UP) ? 1 : 0, now_ns);
