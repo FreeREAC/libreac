@@ -23,6 +23,8 @@
 #include <reac/reac_upstream.h>
 /* reac_s24le_to_f32 — the one conversion pair (exact inverse of the TX side) */
 #include <reac/reac_sample.h>
+#include <reac/reac_code.h>      /* reac_code_emit — the capture-open-failed line */
+#include "reac_transport_tunables_priv.h"  /* the daemon's REAC_DEBUG override */
 
 static uint64_t mono_ns(void)
 {
@@ -217,9 +219,10 @@ static void *rx_loop(void *arg)
 			 * either way — a feeder thread that returns NULL silently is
 			 * exactly the "runs deaf, looks alive" failure this exists to
 			 * rule out. */
-			fprintf(stderr, "reac-pw: --live '%s': capture open failed at feeder "
-			        "start (interface present a moment ago, gone now?) — RX is "
-			        "NOT running\n", rx->cfg.source);
+			reac_code_emit(stderr, "reac-pw", RC_E_CAPTURE_FAILED,
+			                "--live '%s': capture open failed at feeder start "
+			                "(interface present a moment ago, gone now?) — RX is "
+			                "NOT running\n", rx->cfg.source);
 			return NULL;
 		}
 		reac_capture_set_nonblock(&cap, 0); /* blocking; EINTR/stop-flag exits */
@@ -414,7 +417,7 @@ static void *rx_loop(void *arg)
 		 * "decoded fine, audio lost downstream" (frames_ok climbs). ~every 2 s. */
 		static int dbg = -1;
 		if (dbg < 0)
-			dbg = getenv("REAC_DEBUG") != NULL;
+			dbg = reac_transport_tunables_get()->debug;
 		if (dbg && now - last_stat_ns >= 2000000000ull) {
 			last_stat_ns = now;
 			/* NAMED BY ITS SOURCE, because one daemon runs several feeders. The

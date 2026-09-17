@@ -234,10 +234,16 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * libreac-transport's soname moves with it, for the reason .so.3 already moved
  * once: `struct reac_pacer` EMBEDS a reac_identity, so it grew too (24304 ->
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
- * becomes .so.4. Same rule, one library along. */
+ * becomes .so.4. Same rule, one library along.
+ *
+ * 1.3.0: reac_tunables.h (docs/design/specs/
+ * 2026-09-17-tunables-api-and-shared-refusal-codes.md) — new public surface, no
+ * existing struct/symbol moves or changes size, so this is a minor, not an ABI
+ * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
+ * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 2
-#define LIBREAC_VERSION_PATCH 2
+#define LIBREAC_VERSION_MINOR 3
+#define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what

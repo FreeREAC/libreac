@@ -99,7 +99,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_no_getenv_conformance.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -124,6 +124,9 @@ test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c
 	./test_facts
 	$(CC) $(CFLAGS) $(INC) tests/test_identity.c libreac.a -lm -o test_identity
 	./test_identity
+	# Library reads no environment (2026-09-17-tunables-api-and-shared-refusal-codes.md).
+	$(CC) $(CFLAGS) $(INC) tests/test_no_getenv_conformance.c -o test_no_getenv_conformance
+	./test_no_getenv_conformance
 	# THE TABLE IS DATA. Every block synthesised from a row's declared facts, with
 	# the three captured rows' real bytes as the oracle for the synthesis - which
 	# is the only thing that licenses a row for a model nobody has ever seen.

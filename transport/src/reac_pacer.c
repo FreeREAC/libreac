@@ -14,6 +14,8 @@
 
 #include <reac/reac.h>     /* REAC_FRAME_BYTES, REAC_HDR_COUNTER_OFF, ... */
 #include <reac/reac_ports.h> /* the box's declared port table (config-announce) */
+#include <reac/reac_tunables.h>  /* the daemon's REACPW_GUARD_FLOOR_FRAMES/NO_HEADAMP */
+#include <reac/reac_code.h>      /* reac_code_emit — the ignored-override line */
 
 #include <stdlib.h>
 #include <string.h>
@@ -91,12 +93,19 @@ int reac_frame_ring_push(struct reac_frame_ring *r, const uint8_t *frame, uint16
 	return 1;
 }
 
+/* PROCESS-WIDE, set once by the daemon before any pacer runs (reac_tunables.h). */
+static struct reac_pacer_tunables g_pacer_tunables = REAC_PACER_TUNABLES_DEFAULT;
+
+void reac_pacer_tunables_set(const struct reac_pacer_tunables *t)
+{
+	g_pacer_tunables = t ? *t : (struct reac_pacer_tunables)REAC_PACER_TUNABLES_DEFAULT;
+}
+
 /* The floor, resolved once. See reac_pacer.h for why this is overridable: it makes
  * the spec's M5 ring-depth sweep a restart per step instead of a rebuild per step.
- * A value outside [MIN, MAX], or one that does not parse cleanly, keeps the
- * compiled floor and SAYS SO -- a typo'd sweep step that silently ran at the
- * default would produce a whole row of measurements attributed to the wrong
- * depth, which is worse than no measurement. */
+ * A tunable outside [MIN, MAX] keeps the compiled floor and SAYS SO -- a typo'd sweep
+ * step that silently ran at the default would produce a whole row of measurements
+ * attributed to the wrong depth, which is worse than no measurement. */
 uint32_t reac_pacer_guard_floor(void)
 {
 	static uint32_t resolved;
@@ -105,23 +114,21 @@ uint32_t reac_pacer_guard_floor(void)
 		return resolved;
 	done = 1;
 	resolved = REAC_PACER_GUARD_FLOOR_FRAMES;
-	const char *e = getenv("REACPW_GUARD_FLOOR_FRAMES");
-	if (e && *e) {
-		char *end;
-		unsigned long v = strtoul(e, &end, 10);
-		if (*end == '\0' && v >= REAC_PACER_GUARD_FLOOR_MIN &&
-		    v <= REAC_PACER_GUARD_FLOOR_MAX) {
-			resolved = (uint32_t)v;
-			fprintf(stderr, "reac-pacer: guard floor %u frames "
-			        "(REACPW_GUARD_FLOOR_FRAMES, default %u)\n",
-			        resolved, REAC_PACER_GUARD_FLOOR_FRAMES);
+	unsigned int v = g_pacer_tunables.guard_floor_frames;
+	if (v != 0) {
+		if (v >= REAC_PACER_GUARD_FLOOR_MIN && v <= REAC_PACER_GUARD_FLOOR_MAX) {
+			resolved = v;
+			reac_code_emit(stderr, "reac-pacer", RC_S_KNOB_SET,
+			                "guard floor %u frames (REACPW_GUARD_FLOOR_FRAMES, "
+			                "default %u)\n", resolved, REAC_PACER_GUARD_FLOOR_FRAMES);
 		} else {
-			fprintf(stderr, "reac-pacer: IGNORING REACPW_GUARD_FLOOR_FRAMES='%s' "
-			        "— not an integer in [%u, %u]. The guard floor stays at %u "
-			        "frames; any measurement taken now belongs to the DEFAULT "
-			        "depth, not the one you asked for.\n",
-			        e, REAC_PACER_GUARD_FLOOR_MIN, REAC_PACER_GUARD_FLOOR_MAX,
-			        resolved);
+			reac_code_emit(stderr, "reac-pacer", RC_S_KNOB_IGNORED,
+			                "REACPW_GUARD_FLOOR_FRAMES=%u — not in [%u, %u]. The "
+			                "guard floor stays at %u frames; any measurement taken "
+			                "now belongs to the DEFAULT depth, not the one you "
+			                "asked for.\n",
+			                v, REAC_PACER_GUARD_FLOOR_MIN, REAC_PACER_GUARD_FLOOR_MAX,
+			                resolved);
 		}
 	}
 	return resolved;
@@ -400,9 +407,10 @@ static void note_transition(struct reac_pacer *p, enum reac_master_state from,
 	 * off by default, never a service mode — a master that pushes no head-amp
 	 * leaves the operator's phantom and gain unasserted. */
 	if (to == REAC_M_ESTABLISHED && from != REAC_M_ESTABLISHED &&
-	    getenv("REACPW_NO_HEADAMP")) {
-		fprintf(stderr, "reac-pw: REACPW_NO_HEADAMP — not arming the head-amp "
-		        "scene; the box keeps whatever its own commit promoted\n");
+	    g_pacer_tunables.no_headamp) {
+		reac_code_emit(stderr, "reac-pw", RC_S_HEADAMP_SUPPRESSED,
+		                "REACPW_NO_HEADAMP — not arming the head-amp scene; the box "
+		                "keeps whatever its own commit promoted\n");
 	} else if (to == REAC_M_ESTABLISHED && from != REAC_M_ESTABLISHED) {
 		if (!p->master.commit_seen)
 			fprintf(stderr, "reac-pw: head-amp armed with NO commit report seen "
@@ -1872,16 +1880,18 @@ static enum reac_etf_refusal pacer_arm_etf(struct reac_pacer *p, const char *ifn
 	char kind[32] = { 0 };
 	enum reac_etf_qdisc_state q = reac_etf_qdisc_state(p->ifindex, kind, sizeof kind);
 	if (q == REAC_ETF_QDISC_NONE) {
-		fprintf(stderr, "reac-pacer: %s carries root qdisc '%s' and no etf qdisc "
-		        "anywhere; a SCM_TXTIME launch time would be stamped on every frame "
-		        "and ignored by the kernel. See docs/ETF-PACING.md for the exact "
-		        "tc command for this device.\n", ifname ? ifname : "?",
-		        kind[0] ? kind : "(none)");
+		reac_code_emit(stderr, "reac-pacer", RC_E_ETF_REFUSED,
+		                "%s carries root qdisc '%s' and no etf qdisc anywhere; a "
+		                "SCM_TXTIME launch time would be stamped on every frame and "
+		                "ignored by the kernel. See docs/ETF-PACING.md for the exact "
+		                "tc command for this device.\n", ifname ? ifname : "?",
+		                kind[0] ? kind : "(none)");
 		return REAC_ETF_REFUSE_NO_QDISC;
 	}
 	if (q == REAC_ETF_QDISC_UNREADABLE)
-		fprintf(stderr, "reac-pacer: could not read %s's qdisc table over netlink — "
-		        "arming ETF anyway, because an unreadable probe is not evidence of "
+		reac_code_emit(stderr, "reac-pacer", RC_E_QDISC_READ_FAILED,
+		                "could not read %s's qdisc table over netlink — "
+		                "arming ETF anyway, because an unreadable probe is not evidence of "
 		        "an absent qdisc. If the cadence does not tighten, check "
 		        "`tc qdisc show dev %s` by hand.\n",
 		        ifname ? ifname : "?", ifname ? ifname : "?");
@@ -2073,8 +2083,9 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 		mr.mr_ifindex = p->ifindex;
 		mr.mr_type    = PACKET_MR_PROMISC;
 		if (setsockopt(fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr, sizeof mr) < 0)
-			fprintf(stderr, "reac_pacer: PACKET_MR_PROMISC failed — the master "
-			                "may not see a box's unicast to our spoofed MAC\n");
+			reac_code_emit(stderr, "reac_pacer", RC_E_PROMISC_FAILED,
+			                "PACKET_MR_PROMISC failed — the master may not see a "
+			                "box's unicast to our spoofed MAC\n");
 	}
 
 	/* Best-effort (Linux >=4.20): don't echo our own 8000 fps broadcast into
@@ -2113,20 +2124,20 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 			unsigned lead_us = reac_pacer_lead_us_resolve(cfg->ifname, NULL,
 			                                              &llay, &lok);
 			if (!lok)
-				fprintf(stderr, "reac-pacer: REACPW_PACER_LEAD_US is out of "
-				        "[%u, %u] us or unreadable (%s) — using the measured "
-				        "default %u us\n", REAC_ETF_LEAD_US_MIN,
-				        REAC_ETF_LEAD_US_MAX, reac_conf_layer_name(llay),
-				        REAC_ETF_LEAD_US_DEFAULT);
+				reac_code_emit(stderr, "reac-pacer", RC_S_KNOB_IGNORED,
+				                "REACPW_PACER_LEAD_US is out of [%u, %u] us or "
+				                "unreadable (%s) — using the measured default %u us\n",
+				                REAC_ETF_LEAD_US_MIN, REAC_ETF_LEAD_US_MAX,
+				                reac_conf_layer_name(llay), REAC_ETF_LEAD_US_DEFAULT);
 			enum reac_etf_refusal r = pacer_arm_etf(p, cfg->ifname, lead_us);
 			if (r != REAC_ETF_OK && lay != REAC_CONF_NONE) {
 				/* THE OPERATOR ASKED: REFUSE, never fall back. Giving them the
 				 * thread backend while they believe they are measuring ETF
 				 * poisons the comparison this backend exists for. */
-				fprintf(stderr, "reac-pacer: ETF backend REFUSED (%s, asked "
-				        "for by %s). Fix the precondition or set "
-				        "REACPW_PACER=thread.\n",
-				        reac_etf_refusal_name(r), reac_conf_layer_name(lay));
+				reac_code_emit(stderr, "reac-pacer", RC_E_ETF_REFUSED,
+				                "ETF backend REFUSED (%s, asked for by %s). Fix "
+				                "the precondition or set REACPW_PACER=thread.\n",
+				                reac_etf_refusal_name(r), reac_conf_layer_name(lay));
 				reac_handle_close(&p->handle);
 				reac_frame_ring_free(&p->ring);
 				return -1;
