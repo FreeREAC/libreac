@@ -92,9 +92,14 @@ int main(void)
 	CHK(bm->in_ch == 8 && bm->out_ch == 32);
 	CHK(bm->origin == REAC_BOX_DECLARED);
 	CHK(bm->wire_upstream_ch == 32);      /* what it actually puts on the wire */
-	/* A WIDTH NAMES NO MODEL: two captured rows are 8 inputs wide now. */
-	CHK(reac_box_master_model(8) == NULL);
-	CHK(reac_box_master_model(16) != NULL);   /* still unambiguous */
+	/* AND A WIDTH STILL DOES NOT NAME THIS BOX. The slave path has nothing but a
+	 * width to go on (a stagebox on M declares nothing), and 8 inputs is what the
+	 * S-0808 is: that row keeps the number, this one is named by its declaration
+	 * or not at all. Asserted BOTH ways so the row cannot quietly take it. */
+	const struct reac_box_model *by_width = reac_box_master_model(8);
+	CHK(by_width != NULL && strcmp(by_width->token, "s0808") == 0);
+	CHK(by_width != bm);
+	CHK(reac_box_model_by_channels(8) != bm);
 
 	/* ---- ARM 3: one MAC, one verdict ---- */
 	struct reac_hunt h;
