@@ -25,7 +25,22 @@
  * a segment carrying a real desk, which is why it takes an interface name and
  * has no discovery of its own.
  *
- *   fake_box <ifname> [seconds]
+ *   fake_box <ifname> [seconds] [model-token]
+ *
+ * A MODEL TOKEN MAKES IT ANOTHER BOX (added 1.2.1, for the S-4000H-0832). With no
+ * token it is the capture's S-4000S-3208 and every byte is unchanged. With one it
+ * declares that TABLE ROW instead — `reac_box_model_block`'s config-announce, and
+ * an upstream return at `reac_box_model_upstream_width`, which for a row whose
+ * wire width was measured is that width and NOT its input count: the S-4000H
+ * declares 8 inputs and returns 32 channels. A token no row answers is refused,
+ * loudly, rather than falling back to the default box — a harness that silently
+ * tested the wrong chassis would be worse than one that did not run.
+ *
+ * ITS CONTROL FRAMES STAY 8 CHANNELS WIDE whatever the row, because that is what
+ * both captured chassis do: the S-4000S's commit report and the S-4000H's
+ * config-announce both arrived in a 340 B frame (vlan13-0832.pcap t=+1.4579),
+ * while the S-4000H's own JOIN records and its stream came at 32. The frame
+ * carrying a declaration is not sized by what it declares.
  *
  * DROPPED MODE (`FAKE_BOX_DROPPED=1`) is the OTHER box, and the difference between
  * the two is the whole of reac-pw's wake ladder. An S-1608 that has torn its
@@ -80,6 +95,8 @@ static const uint8_t JOIN_BURST[3][32] = {
 	  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 },
 };
 
+/* The width every DECLARATION frame is carried in — see the header; the stream and
+ * the JOIN burst use the row's own wire width instead. */
 #define BOX_CHANNELS 8
 #define COMMIT_DELAY_NS   8400000LL      /* +8.4 ms after the LAST, measured */
 #define JOIN_DELAY_NS  1489000000LL      /* +1.489 s after the group map     */
@@ -107,9 +124,10 @@ static uint64_t mono_ns(void)
 	return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
-static size_t build(uint8_t *out, const uint8_t dst[6], const uint8_t blk[32])
+static size_t build_at(uint8_t *out, const uint8_t dst[6], const uint8_t blk[32],
+                      int n_ch)
 {
-	size_t len = reac_ctrl_box_frame_len(BOX_CHANNELS);
+	size_t len = reac_ctrl_box_frame_len(n_ch);
 	memset(out, 0, len);
 	memcpy(out, dst, 6);
 	memcpy(out + 6, BOX_MAC, 6);
@@ -122,13 +140,49 @@ static size_t build(uint8_t *out, const uint8_t dst[6], const uint8_t blk[32])
 	return len;
 }
 
+static size_t build(uint8_t *out, const uint8_t dst[6], const uint8_t blk[32])
+{
+	return build_at(out, dst, blk, BOX_CHANNELS);
+}
+
 int main(int argc, char **argv)
 {
 	if (argc < 2) {
-		fprintf(stderr, "usage: %s <ifname> [seconds]\n", argv[0]);
+		fprintf(stderr, "usage: %s <ifname> [seconds] [model-token]\n", argv[0]);
 		return 2;
 	}
 	int secs = argc > 2 ? atoi(argv[2]) : 30;
+
+	/* WHICH BOX THIS IS. No token: the capture's S-4000S-3208, byte for byte, as
+	 * it always was. A token: that row, declared from its own facts. An unknown
+	 * token STOPS — a harness pointed at a chassis that does not exist must fail
+	 * where it was asked, not quietly test the default one. */
+	const struct reac_box_model *model = NULL;
+	uint8_t model_blk[32];
+	int stream_ch = BOX_CHANNELS;
+	if (argc > 3 && argv[3][0]) {
+		model = reac_box_model_by_token(argv[3]);
+		if (!model) {
+			fprintf(stderr, "fake_box: no table row named '%s'\n", argv[3]);
+			return 2;
+		}
+		if (reac_box_model_block(model, REAC_BOX_BLOCK_CONFIG, model_blk) != 1) {
+			fprintf(stderr, "fake_box: row '%s' declares a geometry the "
+			        "twelve slots cannot hold\n", argv[3]);
+			return 2;
+		}
+		stream_ch = reac_box_model_upstream_width(model);
+		if (stream_ch <= 0) {
+			fprintf(stderr, "fake_box: row '%s' has no width it can put on "
+			        "a wire\n", argv[3]);
+			return 2;
+		}
+		fprintf(stderr, "fake_box: declaring as %s — %d in / %d out, "
+		        "upstream %d channels (%zu B)\n", model->display,
+		        model->in_ch, model->out_ch, stream_ch,
+		        reac_ctrl_box_frame_len(stream_ch));
+	}
+	const uint8_t *declaration = model ? model_blk : COMMIT_REPORT;
 
 	int fd = socket(AF_PACKET, SOCK_RAW, htons(0x8819));
 	if (fd < 0) { perror("socket"); return 1; }
@@ -154,7 +208,7 @@ int main(int argc, char **argv)
 	to.sll_ifindex = ifindex;
 	to.sll_halen = 6;
 
-	uint8_t rx[REAC_FRAME_BYTES + 64], tx[REAC_FRAME_BYTES];
+	uint8_t rx[REAC_FRAME_BYTES + 64], tx[REAC_FRAME_BYTES + 64];
 	uint8_t master[6] = { 0 };
 	int have_master = 0, saw_first = 0, mids = 0, committed = 0, joined = 0;
 	long transfers = 0, ignored = 0, sent = 0;
@@ -230,7 +284,7 @@ int main(int argc, char **argv)
 		now = mono_ns();
 		memcpy(to.sll_addr, master, 6);
 		if (commit_at && now >= commit_at && have_master) {
-			size_t len = build(tx, master, COMMIT_REPORT);
+			size_t len = build(tx, master, declaration);
 			if (sendto(fd, tx, len, 0, (struct sockaddr *)&to, sizeof to) > 0)
 				sent++;
 			committed = 1; commit_at = 0;
@@ -241,7 +295,10 @@ int main(int argc, char **argv)
 		}
 		if (join_at && now >= join_at) {
 			for (int i = 0; i < 3; i++) {
-				size_t len = build(tx, master, JOIN_BURST[i]);
+				/* The burst rides the box's OWN width: the S-4000H sent
+				 * its three records in 1204 B frames, the S-4000S in 340 B
+				 * ones, each its own return width. */
+				size_t len = build_at(tx, master, JOIN_BURST[i], stream_ch);
 				if (sendto(fd, tx, len, 0, (struct sockaddr *)&to, sizeof to) > 0)
 					sent++;
 			}
@@ -253,7 +310,7 @@ int main(int argc, char **argv)
 		if (committed && now >= next_stream) {
 			size_t len = reac_ctrl_build_upstream_filler(tx, master, BOX_MAC,
 			                                             (uint16_t)sent,
-			                                             BOX_CHANNELS, NULL,
+			                                             stream_ch, NULL,
 			                                             REAC_SAMPLES_PER_PKT);
 			if (len && sendto(fd, tx, len, 0, (struct sockaddr *)&to,
 			                  sizeof to) > 0)
