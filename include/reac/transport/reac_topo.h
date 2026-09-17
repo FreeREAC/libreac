@@ -27,7 +27,9 @@
  *     visible, and it is the whole basis of the detector.
  *
  * Hence: ONE ETH_P_ALL SOCKET PER PHYSICAL PARENT, BPF-filtered to 0x8819, read-only,
- * never transmitting. The filter matters — without it an ETH_P_ALL socket on a trunk
+ * never transmitting, AND DEAF UNTIL IT IS BOUND — the protocol is given to bind() and not
+ * to socket(), because a packet socket created with a protocol hears every interface on
+ * the host until the bind lands (#18; the reasoning is at reac_topo_tap_open()). The filter matters — without it an ETH_P_ALL socket on a trunk
  * copies every frame on the link to userspace. It accepts the accelerated case (the tag in
  * metadata, ethertype 0x8819 at offset 12) and the in-buffer case (0x8100/0x88a8 at 12,
  * 0x8819 behind it) alike, because whether a driver strips the tag is a driver's business
