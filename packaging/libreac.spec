@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.2.1
+Version:        1.2.2
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,18 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.2.2-1
+- THE TOPOLOGY TAP IS DEAF UNTIL IT IS BOUND (#18). reac_topo_tap_open() created
+  its packet socket with a protocol, and a packet socket created with a protocol
+  hears EVERY interface on the host from socket() until bind() -- the BPF filter,
+  PACKET_AUXDATA and the ifindex lookup all happen inside that window. Measured on
+  a veth pair: 88 632 foreign frames over 400 opens. On the rig it was one frame
+  per VLAN per start, and the classifier read each one as evidence that THIS
+  parent carried a tagged trunk, so a cold-cable NIC was refused a master for
+  ever. The protocol now goes to bind(), which installs the interface and the
+  protocol together; ETH_P_ALL is unchanged, it only moved. ABI unchanged: no
+  public struct gained, lost or moved a member (test_abi_layout, 61 structs / 578
+  offsets). Proven by tools/topo-veth-bind-probe.sh, which fails on 1.2.1.
 * Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.2.1-1
 - A REAL S-4000H-0832 ON VLAN 13 COULD NOT JOIN, AND FOUR THINGS WERE WRONG.
   Its config-announce marks input groups 0x00 and writes its outputs first;
