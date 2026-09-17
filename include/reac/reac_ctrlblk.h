@@ -397,13 +397,6 @@ struct reac_box_model {
 	uint8_t     origin;         /* enum reac_box_origin                            */
 	uint8_t     identity_shape; /* enum reac_box_identity_shape                    */
 	uint8_t     port_layout;    /* enum reac_box_port_layout                       */
-	/* THE WIDTH OF THE FRAMES THIS CHASSIS ACTUALLY SENDS, when somebody has
-	 * measured one. It is NOT in_ch: the S-4000H declares 8 inputs and returns
-	 * 1204 B = 32 channels (12 773 frames, vlan13-0832.pcap) — the chassis's
-	 * fabric width, not its preamp count. ZERO MEANS NOBODY HAS MEASURED ONE
-	 * and reac_box_model_upstream_width derives it from in_ch as before; it is
-	 * a measurement, so it is never defaulted to a plausible number. */
-	uint8_t     wire_upstream_ch;
 };
 /* ---- THE ROW'S DECLARED FACTS, AND THE BLOCKS SYNTHESISED FROM THEM ----
  * (docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §2, in reac-pw's tree.)
@@ -439,15 +432,6 @@ struct reac_box_model {
 enum reac_box_origin {
 	REAC_BOX_CAPTURED = 0,
 	REAC_BOX_DERIVED,
-	/* A real box put its DECLARATION on a wire and we hold those bytes, but its
-	 * identity page has never been captured — the S-4000H, live on VLAN 13
-	 * 2026-09-17, which in four seconds sent its config-announce and the three
-	 * JOIN records and no 0016/001a/name record at all. The declaration is the
-	 * oracle for the synthesiser exactly as a CAPTURED row's is; the firmware,
-	 * the REAC version and the name are ABSENT, stay zero, and emit no block.
-	 * Copying a sibling chassis's page would be a guess wearing a capture's
-	 * clothes. The 2026-09-17 spec's §9 names the capture that would close it. */
-	REAC_BOX_DECLARED,
 };
 
 /* THE ORDER A CHASSIS WRITES ITS DECLARATION IN, and which code it marks an

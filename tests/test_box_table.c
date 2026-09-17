@@ -55,33 +55,11 @@ int main(void)
 	const struct reac_box_model *t = reac_box_model_table(&n);
 	CHK(t && n >= 3);
 
-	int derived_seen = 0, captured_seen = 0, declared_seen = 0;
+	int derived_seen = 0, captured_seen = 0;
 
 	for (size_t i = 0; i < n; i++) {
 		const struct reac_box_model *m = &t[i];
 		uint8_t blk[32];
-
-		/* ---- ARM 1b: a DECLARED row's declaration is the oracle, and its
-		 * identity page DOES NOT EXIST. The S-4000H sent this block on a live
-		 * wire and never sent an identity record; a row that answered one
-		 * anyway would be inventing a firmware number. ---- */
-		if (m->origin == REAC_BOX_DECLARED) {
-			declared_seen++;
-			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CONFIG, blk) == 1);
-			CHK(same_bytes("config", m->token, blk, m->config_block));
-			/* The two JOIN records are the table's CONSTANTS, and this row is a
-			 * fourth model saying so: the S-4000H's 0014/0013 arrived byte-for-
-			 * byte identical to the S-1608's. */
-			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC0014, blk) == 1);
-			CHK(same_bytes("cc0014", m->token, blk, m->cc0014));
-			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC0013, blk) == 1);
-			CHK(same_bytes("cc0013", m->token, blk, m->cc0013));
-			CHK(m->fw_milli == 0 && m->reac_major == 0);
-			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC0016, blk) == 0);
-			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC001A, blk) == 0);
-			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_IDENT_FIRST, blk) == 0);
-			CHK(reac_box_model_block(m, REAC_BOX_BLOCK_IDENT_LAST, blk) == 0);
-		}
 
 		/* ---- ARM 1: the captured rows are the oracle ---- */
 		if (m->origin == REAC_BOX_CAPTURED) {
@@ -149,10 +127,7 @@ int main(void)
 		for (size_t j = 0; j < i; j++)
 			CHK(strcmp(t[j].token, m->token) != 0);
 
-		/* ---- ARM 3: the identity page round-trips through the decoder ----
-		 * A DECLARED row has no page at all and is asserted empty in arm 1b. */
-		if (m->origin == REAC_BOX_DECLARED)
-			continue;
+		/* ---- ARM 3: the identity page round-trips through the decoder ---- */
 		struct reac_identity id;
 		reac_identity_init(&id);
 		CHK(reac_box_model_block(m, REAC_BOX_BLOCK_CC0016, blk) == 1);
@@ -189,8 +164,7 @@ int main(void)
 
 	}
 
-	CHK(captured_seen == 3);
-	CHK(declared_seen == 1);          /* the S-4000H, live 2026-09-17 */
+	CHK(captured_seen == 4);          /* the S-4000S-0832 joined them 2026-09-17 */
 	CHK(derived_seen >= 6);
 
 	/* ---- ARM 4: the rows nobody has seen, by name ---- */
@@ -199,22 +173,19 @@ int main(void)
 	CHK((m = reac_box_model_by_token("s2416")) && m->in_ch == 24 && m->out_ch == 16);
 	CHK((m = reac_box_model_by_token("s4000d")) && m->in_ch == 0 && m->out_ch == 32);
 	CHK((m = reac_box_model_by_token("s4000m")) && m->in_ch == 32 && m->out_ch == 0);
-	/* THE S-4000H IS NO LONGER A GUESS. It was 16/16 DERIVED — the widths its
-	 * name suggested — until a real one declared 8 in / 32 out on VLAN 13. Its
-	 * declaration is the oracle; its identity page does not exist yet; and its
-	 * upstream frame is 32 channels wide while it declares 8 inputs. */
-	CHK((m = reac_box_model_by_token("s4000h")) && m->in_ch == 8 && m->out_ch == 32);
-	CHK(m->origin == REAC_BOX_DECLARED);
-	CHK(m->identity_shape == REAC_BOX_IDENTITY_ROLAND);
-	CHK(m->port_layout == REAC_BOX_PORTS_SPLIT_OUT_FIRST);
-	CHK(reac_box_model_upstream_width(m) == 32);
-	CHK(m->has_identity_record == 0 && m->name == NULL);
+	/* THE 0832 SPLIT IS NO LONGER A GUESS — and the S-4000H token it briefly had
+	 * is gone with it: the M-200 displays this chassis as an S-4000S, which is
+	 * what a box sending no name record must be called. */
+	CHK(reac_box_model_by_token("s4000h") == NULL);
 	/* The S-4000S split the corpus HAS, and the one it does not. */
 	CHK((m = reac_box_model_by_token("s4000s")) && m->in_ch == 32 && m->out_ch == 8);
 	CHK(m->origin == REAC_BOX_CAPTURED);
 	CHK((m = reac_box_model_by_token("s4000s-0832")) && m->in_ch == 8 && m->out_ch == 32);
-	CHK(m->origin == REAC_BOX_DERIVED);
+	CHK(m->origin == REAC_BOX_CAPTURED);
 	CHK(m->identity_shape == REAC_BOX_IDENTITY_ROLAND);   /* the same chassis */
+	CHK(m->port_layout == REAC_BOX_PORTS_SPLIT_OUT_FIRST);
+	CHK(m->has_identity_record == 0 && m->name == NULL);
+	CHK(reac_box_model_upstream_width(m) == 8);   /* its granted return, measured */
 
 	/* THE OPERATOR'S EXPERIMENT: the protocol's full 40-channel width, either
 	 * way round, with no Roland model behind it. 40 and not 48 — the port table
