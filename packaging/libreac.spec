@@ -116,19 +116,24 @@ make test
   ANY unrecognised code costs only its own four channels — a box enrols on what
   it declares (operator ruling 2026-09-17), and reac_ports_unknown says out loud
   what could not be read.
-- The model table's s4000h row was a 16/16 guess and is now the captured 8/32
-  declaration, origin REAC_BOX_DECLARED: a real box's declaration, and NO
-  identity page, because in four seconds it sent none. A row with fw_milli 0
-  emits no identity block rather than inventing a firmware number.
-- reac_box_master_model refuses a width two captured rows share (S-0808 and the
-  S-4000H are both 8 inputs) — a number may narrow, only a byte-exact
-  declaration names.
+- The model table's s4000s-0832 row was a DERIVED guess and is now CAPTURED, from
+  two wires: its declaration from the box on VLAN 13 and its identity page from an
+  M-200 power-cycle (fw 2.500, REAC 2.102 — byte-identical to the S-4000S-3208's,
+  one chassis with two straps, which is why the desk displays it as an S-4000S).
+  The short-lived s4000h token is gone: the H is a front-panel label and the box
+  sends no name record. A row also declares the ORDER it writes its port table in,
+  because this chassis writes its outputs first.
+- reac_box_master_model still answers only CAPTURED rows and the S-0808 keeps
+  width 8; if two captured rows ever share a width it must answer neither, which
+  is law in the spec and not a branch nobody can test.
 - reac_hunt_observe answers with the disco TABLE's entry for the MAC, so one box
   is one verdict: the same box read `box (8 ch)` then `unknown (32 ch)` a
   millisecond apart on the live wire.
-- LIBREAC_ABI stays 4 and tests/abi-layout.inc is unchanged: the two new
-  reac_box_model fields fit its tail padding, and the unknown-group read is a
+- LIBREAC_ABI stays 4 and tests/abi-layout.inc is unchanged: the new
+  reac_box_model field fits its tail padding, and the unknown-group read is a
   function rather than a member on public struct reac_box_ports.
+- tools/fake_box takes a model token, so a harness can put any table row on a
+  veth: `fake_box <if> <secs> s4000s-0832`.
 * Wed Sep 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.1.5-1
 - No change to this library. Version moves with libreac-transport, which gains
   reac_link_admin(). LIBREAC_ABI stays 3; tests/abi-layout.inc is unchanged.
