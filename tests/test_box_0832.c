@@ -3,8 +3,8 @@
 
 /* THE LIVE DEFECT OF 2026-09-17, AS THE WIRE PRODUCED IT.
  *
- * An S-4000H-0832 (8 in / 32 out) alone on VLAN 13 with this daemon mastering
- * it. The operator saw two lines and then nothing for minutes:
+ * An 8-in / 32-out split (chassis label S-4000H; a real M-200 displays it as an
+ * S-4000S) alone on VLAN 13 with this daemon mastering it. The operator saw two lines and then nothing for minutes:
  *
  *     REAC heard — box 00:40:ab:c4:25:80 (8 ch): this interface is a segment
  *     REAC heard — unknown 00:40:ab:c4:25:80 (32 ch): this interface is a segment
@@ -17,7 +17,8 @@
  *          port table's 0x00 groups made reac_ports_parse refuse the whole
  *          table, so reac_master_set_box was never called at all.
  *   ARM 2  the declaration NAMES the box, byte for byte, as the model table's
- *          s4000h row — which was a 16/16 guess with no bytes in it.
+ *          s4000s-0832 row — which was a DERIVED row with no bytes in it, and is
+ *          now captured from this wire and from an M-200 power-cycle.
  *   ARM 3  the classifier answers ONE verdict for one MAC across every frame
  *          the box sent. It answered per frame: box/8 then unknown/32.
  *   ARM 4  the master reaches ESTABLISHED at the DECLARED width and stays
@@ -88,10 +89,27 @@ int main(void)
 	/* ---- ARM 2: the declaration NAMES the box ---- */
 	const struct reac_box_model *bm = reac_ctrl_identify_box(frame, clen);
 	CHK(bm != NULL);
-	CHK(strcmp(bm->token, "s4000h") == 0);
+	CHK(strcmp(bm->token, "s4000s-0832") == 0);
 	CHK(bm->in_ch == 8 && bm->out_ch == 32);
-	CHK(bm->origin == REAC_BOX_DECLARED);
-	CHK(bm->wire_upstream_ch == 32);      /* what it actually puts on the wire */
+	CHK(bm->origin == REAC_BOX_CAPTURED);
+	/* ITS GRANTED RETURN IS 8, measured on a real M-200 (217 905 frames of
+	 * 340 B). The 1204 B frames below are what it floods UNGRANTED. */
+	CHK(reac_box_model_upstream_width(bm) == 8);
+	/* AND ITS IDENTITY PAGE IS THE S-4000S-3208's, byte for byte — one chassis,
+	 * two straps, and the reason the M-200 displays this box as an S-4000S.
+	 * Captured from the power-cycle, not copied: m200-s4000h-coldboot.pcap. */
+	{
+		const struct reac_box_model *s32 = reac_box_model_by_token("s4000s");
+		uint8_t a[32], b[32];
+		CHK(s32 && reac_box_model_block(bm, REAC_BOX_BLOCK_CC0016, a) == 1);
+		CHK(reac_box_model_block(s32, REAC_BOX_BLOCK_CC0016, b) == 1);
+		CHK(memcmp(a, b, 32) == 0);
+		CHK(reac_box_model_block(bm, REAC_BOX_BLOCK_CC001A, a) == 1);
+		CHK(reac_box_model_block(s32, REAC_BOX_BLOCK_CC001A, b) == 1);
+		CHK(memcmp(a, b, 32) == 0);
+		CHK(bm->fw_milli == 2500);
+		CHK(bm->reac_major == 2 && bm->reac_minor == 1 && bm->reac_patch == 2);
+	}
 	/* AND A WIDTH STILL DOES NOT NAME THIS BOX. The slave path has nothing but a
 	 * width to go on (a stagebox on M declares nothing), and 8 inputs is what the
 	 * S-0808 is: that row keeps the number, this one is named by its declaration
@@ -193,9 +211,10 @@ int main(void)
 	CHK(m.alloc.width == 8);
 	CHK(m.cfg.out_channels == 8);         /* the cfea width byte is the box's */
 
-	printf("OK: the S-4000H-0832's own frames — declared 8/32 at strap 0, named "
-	       "s4000h byte-exact, ONE verdict across %d sightings, ESTABLISHED at "
-	       "slot %ld and sustained for %ld slots on its 32-channel return\n",
-	       sightings, established_at, (long)fps * 6 - established_at);
+	printf("OK: the 0832 split's own frames — declared 8/32 at strap 0, named "
+	       "s4000s-0832 byte-exact (identity page = the S-4000S-3208's, fw 2.500 "
+	       "REAC 2.102), ONE verdict across %d sightings, ESTABLISHED at slot %ld "
+	       "and sustained for %ld slots while it returned its ungranted 32-channel "
+	       "frames\n", sightings, established_at, (long)fps * 6 - established_at);
 	return 0;
 }
