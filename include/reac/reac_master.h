@@ -493,6 +493,13 @@ struct reac_master {
 void reac_master_init(struct reac_master *m, const uint8_t src[6],
                       const struct reac_console_cfg *cfg, int fps);
 
+/* Set the process-wide tunables every reac_master instance reads (grant-on-declare,
+ * the grant dwell overrides, no-enroll, est-scene) — reac_tunables.h. Call once, before
+ * any reac_master_init'd instance runs; NULL resets to REAC_MASTER_TUNABLES_DEFAULT
+ * (this file's own byte-identical default behaviour). */
+struct reac_master_tunables;
+void reac_master_tunables_set(const struct reac_master_tunables *t);
+
 /* Is a real box's declaration currently in force? 0 = none known (the startup
  * state, and the state after every drop). The grant sweep is empty while this is
  * 0, and the master will not enroll anything — see reac_master_next's GRANTING

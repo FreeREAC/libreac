@@ -2,13 +2,12 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 #include <reac/reac_master.h>
-#include <reac/reac_envflag.h>   /* one reading of a boolean knob (this one defaults ON) */
 #include <reac/reac_master_fsm.h> /* the pure (state, event) -> edge decision table */
 #include <reac/reac_ctrl.h>   /* reac_ctrl_checksum_apply, REAC_CTRL_* offsets */
 #include <reac/reac_grant.h>  /* the generated enrollment sweep + slot allocator */
+#include <reac/reac_tunables.h>  /* the daemon's REACPW_GRANT_* / NO_ENROLL / EST_SCENE overrides */
 
 #include <reac/reac.h>   /* REAC_FRAME_BYTES, REAC_END_MARKER_*, ... */
-#include <stdlib.h>      /* getenv (the REACPW_* env overrides) */
 #include <string.h>
 
 /* ------------------------------------------------------------------------- *
@@ -484,12 +483,20 @@ const char *reac_master_drop_name(enum reac_master_drop_reason r)
  *
  * The settle keeps the ordering the golden shows: the width-correct ENROLL goes out
  * first (enroll_pending, ~1 ms after recognition), then the grant burst. */
+
+/* PROCESS-WIDE, set once by the daemon before any master runs (reac_tunables.h). Starts
+ * at REAC_MASTER_TUNABLES_DEFAULT, which reproduces exactly what the deleted getenv
+ * calls below produced when every REACPW_* was unset. */
+static struct reac_master_tunables g_master_tunables = REAC_MASTER_TUNABLES_DEFAULT;
+
+void reac_master_tunables_set(const struct reac_master_tunables *t)
+{
+	g_master_tunables = t ? *t : (struct reac_master_tunables)REAC_MASTER_TUNABLES_DEFAULT;
+}
+
 static int grant_on_declare(void)
 {
-	static int cached = -1;
-	if (cached < 0)
-		cached = reac_envflag("REACPW_GRANT_ON_DECLARE", 1);
-	return cached;
+	return g_master_tunables.grant_on_declare ? 1 : 0;
 }
 
 /* Slots to hold after the width-correct ENROLL before the grant burst — 50 ms,
@@ -518,34 +525,14 @@ static int dwell_ends_now(struct reac_master *m)
 
 static int grant_dwell_override_ms(void)
 {
-	static int cached = -2;
-	if (cached == -2) {
-		const char *v = getenv("REACPW_GRANT_DWELL_MS");
-		cached = -1;
-		if (v && *v) {
-			char *end = NULL;
-			long ms = strtol(v, &end, 10);
-			if (end && *end == '\0' && ms > 0 && ms < 600000)
-				cached = (int)ms;
-		}
-	}
-	return cached;
+	long ms = g_master_tunables.grant_dwell_ms;
+	return (ms > 0 && ms < 600000) ? (int)ms : -1;
 }
 
 static int grant_dwell_override_s(void)
 {
-	static int cached = -2;   /* -2 = unread, -1 = unset/invalid, >0 = seconds */
-	if (cached == -2) {
-		const char *v = getenv("REACPW_GRANT_DWELL_S");
-		cached = -1;
-		if (v && v[0]) {
-			char *end = NULL;
-			long n = strtol(v, &end, 10);
-			if (end && *end == '\0' && n > 0 && n <= 3600)
-				cached = (int)n;
-		}
-	}
-	return cached;
+	long s = g_master_tunables.grant_dwell_s;
+	return (s > 0 && s <= 3600) ? (int)s : -1;
 }
 
 /* TEST KNOB (default UNSET = today's behaviour, byte-identical): REACPW_NO_ENROLL=1
@@ -569,13 +556,7 @@ static int grant_dwell_override_s(void)
  * per-model question. Read once + cached like the file's other getenv knobs. */
 static int no_enroll(void)
 {
-	static int cached = -1;
-	if (cached < 0) {
-		const char *v = getenv("REACPW_NO_ENROLL");
-		cached = (v && (v[0] == '1' || v[0] == 'y' || v[0] == 'Y' ||
-		                v[0] == 't' || v[0] == 'T')) ? 1 : 0;
-	}
-	return cached;
+	return g_master_tunables.no_enroll ? 1 : 0;
 }
 
 /* TEST KNOB (default UNSET = today's behaviour, byte-identical): REACPW_EST_SCENE=1
@@ -603,13 +584,7 @@ static int no_enroll(void)
  * the file's other getenv knobs. */
 static int est_scene_stream(void)
 {
-	static int cached = -1;
-	if (cached < 0) {
-		const char *v = getenv("REACPW_EST_SCENE");
-		cached = (v && (v[0] == '1' || v[0] == 'y' || v[0] == 'Y' ||
-		                v[0] == 't' || v[0] == 'T')) ? 1 : 0;
-	}
-	return cached;
+	return g_master_tunables.est_scene ? 1 : 0;
 }
 
 /* The slot, within the cycle, that burst chunk `k` (0-based, k = 0 is body chunk
