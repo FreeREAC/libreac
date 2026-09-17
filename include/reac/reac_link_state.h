@@ -256,11 +256,12 @@ void reac_box_mac_publish(uint64_t mac48, reac_prop_set_fn set, void *ctx);
  * refuses for the same reason. A width no row matches returns NULL, and NULL publishes
  * nothing: absence is a fact a consumer reads as one.
  *
- * A WIDTH TWO ROWS SHARE NAMES NEITHER OF THEM (2026-09-17). The S-4000H-0832 declares
- * 8 inputs and so does the S-0808, both captured from real wires, so "the first row of
- * that width" would answer S-0808 8x8 for a box that is 8x32. An ambiguous width is
- * NULL, exactly like an unknown one — the only thing that NAMES a box is its byte-exact
- * declaration, and a number may narrow but never identify. */
+ * A ROW WITH NO IDENTITY PAGE DOES NOT ANSWER A WIDTH (2026-09-17). The S-4000H-0832 is
+ * 8 inputs wide like the S-0808 and is REAC_BOX_DECLARED — a declaration captured from a
+ * real wire, no identity page — so admitting it would make every 8-wide box master
+ * ambiguous and cost a recognition that works. What names that chassis is its
+ * DECLARATION, byte for byte, on the master path where it sends one; here, where the
+ * peer is a stagebox on M and sends none, only the fully captured rows may answer. */
 const struct reac_box_model *reac_box_master_model(unsigned width);
 
 /* THE WHOLE IDENTITY OF A JOINED BOX MASTER, composed and STAMPED in one act — the same
