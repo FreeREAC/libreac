@@ -519,14 +519,74 @@ static const struct reac_box_model BOX_MODELS[] = {
 	 * a tail CAN be non-zero. What a real mixer does with one of these rows is an
 	 * open question with a rig step behind it (the spec's §9). ---- */
 
-	/* The S-4000S's other strap. Same chassis, same firmware, the split
-	 * reversed — the corpus has the 3208 and has never seen an 0832, so it is
-	 * DERIVED while keeping the Roland identity its chassis really carries. */
+	/* ---- THE S-4000S's OTHER STRAP, LIVE ON TWO WIRES 2026-09-17 ----
+	 *
+	 * Its chassis is labelled S-4000H, and a real M-200 driving it displays
+	 * "S-4000S, 08 in / 32 out, fw 2.500, REAC 2.102" (the operator read that off
+	 * the desk the same day). Which is right: the 0x84 family's DEFAULT label IS
+	 * S-4000S, this box sends no name record, and so a desk can only call it
+	 * that. The token and the display follow the wire; the H on the front panel
+	 * is a chassis label and not a REAC identity.
+	 *
+	 * THE DECLARATION IS CAPTURED, byte for byte — box 00:40:ab:c4:25:80 alone on
+	 * VLAN 13 with this daemon mastering it (vlan13-0832.pcap t=+1.4579, the
+	 * file's one config-announce): 8 OUTPUT groups first, then two groups marked
+	 * 0x00 (its 8 inputs, reac_ports.h), then two empty. Its tail is the
+	 * S-4000S-3208's byte for byte, which is what says one chassis is underneath
+	 * both straps. THIS ROW WAS A 32/8-SHAPED GUESS UNTIL THAT FRAME ARRIVED.
+	 *
+	 * THE IDENTITY PAGE IS CAPTURED TOO, from the power-cycle on that M-200
+	 * (m200-s4000h-coldboot.pcap t=+57.438, the file's only 0016/001a): firmware
+	 * "2500" and REAC 0000:0002:0001:0002 = 2.102, BYTE-IDENTICAL to the
+	 * S-4000S-3208's records, which is the same chassis answering. It matches
+	 * what the M-200 displays for this box — S-4000S, 08 in / 32 out, fw 2.500,
+	 * REAC 2.102 — and the label comes from the 0x84 selector because the box
+	 * sends no name record at all. (The earlier 60 s capture of the same pair,
+	 * m200-s4000h-enrol.pcap, holds none of this: it is pure steady state, and
+	 * reading a session already up as an enrolment is how an absent identity
+	 * page gets mistaken for a box that has none.)
+	 *
+	 * ITS RETURN IS 8 CHANNELS WHEN GRANTED: 217 905 frames of 340 B on that
+	 * M-200, its declared inputs. The 1204 B (32-channel) frames it sent US are
+	 * what an UNGRANTED box floods at — a state, not a chassis width, and reading
+	 * them as one is the mistake this row exists to end. */
 	{ .token = "s4000s-0832", .display = "S-4000S-0832 (8 in / 32 out)",
 	  .in_ch = 8, .out_ch = 32,
-	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
+	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_CAPTURED,
 	  .identity_shape = REAC_BOX_IDENTITY_ROLAND,
-	  .fw_milli = 2500, .reac_major = 2, .reac_minor = 1, .reac_patch = 2 },
+	  .port_layout = REAC_BOX_PORTS_SPLIT_OUT_FIRST,
+	  .fw_milli = 2500, .reac_major = 2, .reac_minor = 1, .reac_patch = 2,
+	  .tail = { 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 },
+	  .config_block = {
+		0x01, 0x03, 0x00, 0x10, 0x84, 0x00, 0x00, 0x00,
+		0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
+		0x00, 0x00, 0x03, 0x03, 0x00, 0x03, 0x00, 0x00,
+		0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x56 },
+	  .has_identity_record = 0,   /* the 0x84 constant already reads S-4000S,
+	                               * which is what the M-200 displays */
+	  .cc0014 = {                 /* captured from THIS box, and byte-identical to
+	                               * the S-1608's: a fourth model saying the two
+	                               * JOIN records are the table's constants */
+		0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe,
+		0x0f, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
+		0x01, 0x00, 0x06, 0x00, 0x01, 0x00, 0x78, 0xf7,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+	  .cc0013 = {
+		0x04, 0x03, 0x00, 0x13, 0x00, 0x02, 0x00, 0xfe,
+		0x0e, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
+		0x03, 0x02, 0x00, 0x01, 0x00, 0x7a, 0xf7, 0x00,
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 },
+	  .cc0016 = {        /* firmware "2500", coldboot t=+57.438 */
+		0x04, 0x03, 0x00, 0x16, 0x00, 0x02, 0x00, 0xfe,
+		0x11, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
+		0x05, 0x00, 0x00, 0x00, 0x02, 0x05, 0x00, 0x00,
+		0x74, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfc },
+	  .cc001a = {        /* REAC 0000:0002:0001:0002 = 2.102, same frame */
+		0x04, 0x03, 0x00, 0x1a, 0x00, 0x02, 0x00, 0xfe,
+		0x15, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
+		0x05, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x02,
+		0x00, 0x01, 0x00, 0x02, 0x70, 0xf7, 0x00, 0xf4 },
+	},
 
 	/* The operator named these two as the models we have never seen. Their
 	 * identity is OURS: a FreeREAC name, this daemon's own firmware number, and
@@ -554,50 +614,6 @@ static const struct reac_box_model BOX_MODELS[] = {
 	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
 	  .has_identity_record = 1, .name = "FR-4000M",
 	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
-	/* ---- THE S-4000H, LIVE ON THE WIRE 2026-09-17 ----
-	 * Captured from box 00:40:ab:c4:25:80, alone on VLAN 13 with this daemon as
-	 * its master (vlan13-0832.pcap, t=+1.4579, the file's one config-announce).
-	 * The row REPLACES a 16/16 DERIVED guess the same day's spec had written
-	 * down: this chassis is 8 in / 32 out (operator, 2026-09-17) and its
-	 * declaration says so — 8 output groups FIRST, then two groups marked 0x00.
-	 *
-	 * ITS TAIL IS THE S-4000S'S, byte for byte, which is what says the same
-	 * chassis is underneath the other strap.
-	 *
-	 * DECLARED, NOT CAPTURED: in four seconds it sent this declaration, the
-	 * three JOIN records and a heartbeat — and no identity record of any kind,
-	 * so its firmware, REAC version and name are UNKNOWN and stay zero. The
-	 * likely reason is that we never granted (the identity page is polled by
-	 * the grant sweep's group B), which is a capture the rig day can take.
-	 *
-	 * ITS UPSTREAM IS 32 CHANNELS WIDE while it declares 8 inputs: 12 773
-	 * frames of 1204 B in the same capture. Which 32 slots carry the 8 preamps
-	 * is NOT known — nothing was plugged in and the box was never granted. */
-	{ .token = "s4000h", .display = "S-4000H-0832 (8 in / 32 out)",
-	  .in_ch = 8, .out_ch = 32,
-	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DECLARED,
-	  .identity_shape = REAC_BOX_IDENTITY_ROLAND,
-	  .port_layout = REAC_BOX_PORTS_SPLIT_OUT_FIRST,
-	  .wire_upstream_ch = 32,
-	  .tail = { 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 },
-	  .config_block = {
-		0x01, 0x03, 0x00, 0x10, 0x84, 0x00, 0x00, 0x00,
-		0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-		0x00, 0x00, 0x03, 0x03, 0x00, 0x03, 0x00, 0x00,
-		0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x56 },
-	  .has_identity_record = 0,   /* no identity record was ever heard from it */
-	  .cc0014 = {
-		0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe,
-		0x0f, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
-		0x01, 0x00, 0x06, 0x00, 0x01, 0x00, 0x78, 0xf7,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-	  .cc0013 = {
-		0x04, 0x03, 0x00, 0x13, 0x00, 0x02, 0x00, 0xfe,
-		0x0e, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x12,
-		0x03, 0x02, 0x00, 0x01, 0x00, 0x7a, 0xf7, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 },
-	},
-
 	/* ---- THE EXPERIMENT (operator, 2026-09-17: "test if we can emulate a 40
 	 * channels input or output box"). No Roland model is behind these. 40 is the
 	 * AUDIO FABRIC's full width and it is not 48: the port table spans twelve

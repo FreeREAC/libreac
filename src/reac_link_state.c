@@ -67,19 +67,13 @@ const struct reac_box_model *reac_box_master_model(unsigned width)
 	 * exact defect this function was written to refuse (its `_by_channels` sibling
 	 * falls back to the S-1608 and this one answers nothing at all). What we may
 	 * DECLARE as is a different question, and it is asked by token. */
-	/* A ROW WITH NO IDENTITY PAGE DOES NOT ANSWER A WIDTH EITHER (2026-09-17).
-	 * This path is the SLAVE half — we joined a stagebox strapped to master mode,
-	 * and such a box sends no declaration at all (reac_link_state.h), so a width
-	 * is the only evidence there is and the CAPTURED rows are what it may name.
-	 * The S-4000H-0832 is 8 inputs wide like the S-0808, so admitting it here
-	 * would make an 8-wide box master ambiguous and cost the recognition that
-	 * works today; it is REAC_BOX_DECLARED — a declaration, no identity page —
-	 * and what names it is that declaration, on the master path, byte for byte.
-	 *
-	 * IF TWO FULLY CAPTURED ROWS EVER SHARE A WIDTH, THIS MUST ANSWER NEITHER.
-	 * That is the 2026-09-17 spec's rule and it is not implemented as a branch
-	 * here, because no such pair exists and an untested branch is decoration:
-	 * the pair itself is what would write it, with the capture that made it. */
+	/* AND IF TWO CAPTURED ROWS EVER SHARE A WIDTH, THIS MUST ANSWER NEITHER.
+	 * They do not today — the S-4000S-0832 is 8 inputs like the S-0808, but this
+	 * path is the SLAVE half, where the peer is a stagebox strapped to master
+	 * mode and declares nothing, and no 0832 has ever been heard as one. The
+	 * rule is law (the 2026-09-17 spec) and deliberately not a branch here: the
+	 * pair that would exercise it does not exist, and a branch no test can reach
+	 * is decoration. The capture that creates the pair writes the branch. */
 	for (size_t i = 0; i < n; i++)
 		if (t[i].in_ch > 0 && (unsigned)t[i].in_ch == width &&
 		    t[i].origin == REAC_BOX_CAPTURED)

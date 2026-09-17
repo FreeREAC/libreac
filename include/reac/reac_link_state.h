@@ -257,7 +257,7 @@ void reac_box_mac_publish(uint64_t mac48, reac_prop_set_fn set, void *ctx);
  * nothing: absence is a fact a consumer reads as one.
  *
  * A ROW WITH NO IDENTITY PAGE DOES NOT ANSWER A WIDTH (2026-09-17). The S-4000H-0832 is
- * 8 inputs wide like the S-0808 and is REAC_BOX_DECLARED — a declaration captured from a
+ * 8 inputs wide like the S-0808 — but the two are told apart by their DECLARATIONS, on a
  * real wire, no identity page — so admitting it would make every 8-wide box master
  * ambiguous and cost a recognition that works. What names that chassis is its
  * DECLARATION, byte for byte, on the master path where it sends one; here, where the

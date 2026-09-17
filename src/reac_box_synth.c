@@ -236,18 +236,9 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
 	case REAC_BOX_BLOCK_CC0013:
 		memcpy(out, JOIN_0013, BLK);
 		return 1;
-	/* NO FIRMWARE NUMBER, NO FIRMWARE RECORD. A row whose identity page was
-	 * never captured (REAC_BOX_DECLARED) has fw_milli 0, and emitting "0.000"
-	 * and a REAC version of 0.000 would put an invented page on the wire and
-	 * feed an invented one back to every reader. 0 is "this row does not emit
-	 * that block", the same answer the name record already gives. */
 	case REAC_BOX_BLOCK_CC0016:
-		if (m->fw_milli == 0)
-			return 0;
 		return build_firmware(m, out);
 	case REAC_BOX_BLOCK_CC001A:
-		if (m->fw_milli == 0)
-			return 0;
 		return build_reac_version(m, out);
 	case REAC_BOX_BLOCK_IDENT_FIRST:
 		/* A family whose selector already names it sends NEITHER fragment; the
@@ -272,13 +263,12 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
  * as a plausible number. */
 int reac_box_model_upstream_width(const struct reac_box_model *m)
 {
-	if (!m)
+	if (!m || m->in_ch < 0 || m->in_ch > REAC_MAX_CHANNELS || (m->in_ch & 1))
 		return 0;
-	/* A MEASURED WIDTH WINS OVER THE DERIVATION, because the derivation is only
-	 * ever a guess about a chassis nobody has heard. The S-4000H declares 8
-	 * inputs and puts 32 channels on the wire. */
-	int w = m->wire_upstream_ch ? (int)m->wire_upstream_ch : m->in_ch;
-	if (w < 0 || w > REAC_MAX_CHANNELS || (w & 1))
-		return 0;
-	return w < 2 ? 2 : w;
+	/* THE DECLARED INPUTS ARE THE RETURN WIDTH, and the S-4000S-0832 is what
+	 * proves it rather than what breaks it: ungranted on our own wire it flooded
+	 * 1204 B (32 channels, the fabric), and ESTABLISHED on a real M-200 it
+	 * returns 340 B — 8 channels, its declared inputs, 217 905 frames of them
+	 * (m200-s4000h-enrol.pcap). The wide flood is a state, not a chassis fact. */
+	return m->in_ch < 2 ? 2 : m->in_ch;
 }
