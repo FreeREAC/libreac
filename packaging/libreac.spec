@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.2.2
+Version:        1.3.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,18 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.0-1
+- THE LIBRARY READS NO ENVIRONMENT (operator ruling 2026-09-17: discovery and publish).
+  Every getenv in libreac and its transport (grant on declare, grant dwell, no-enroll, est
+  scene, guard floor, no-headamp, allow-wireless, pacer, pacer lead, debug) is gone;
+  include/reac/reac_tunables.h declares one tunables struct per subsystem with the defaults
+  the unset variables produced, byte for byte, and one setter each
+  (reac_master_tunables_set, reac_pacer_tunables_set, reac_transport_tunables_set), called
+  by the daemon once before the transport starts. tests/test_no_getenv_conformance.c refuses
+  a getenv outside reac_conf.c and asserts it scanned the tree first.
+- REFUSAL LINES CARRY CODES: include/reac/reac_code.h (header-only) declares the stable
+  tokens and reac_code_emit; six library refusal lines use it. New symbols only, no
+  signature moved: LIBREAC_ABI stays 4 (VERSION_MINOR 2 -> 3).
 * Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.2.2-1
 - THE TOPOLOGY TAP IS DEAF UNTIL IT IS BOUND (#18). reac_topo_tap_open() created
   its packet socket with a protocol, and a packet socket created with a protocol

@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.2.2
+Version:        1.3.0
 %global abi 5
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,10 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.0-1
+- The transport's pacer and rx read no environment: their four knobs come from
+  reac_transport_tunables_set / reac_pacer_tunables_set (include/reac/reac_tunables.h),
+  defaults byte-identical to the unset variables. New symbols only; ABI unchanged.
 * Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.2.2-1
 - reac_topo.c carries the fix for #18: the tap's socket is created deaf
   (protocol 0) and made live by its bind, so it can no longer hear a link it was
