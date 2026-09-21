@@ -99,11 +99,20 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
 	./test_capture
+	# THE SNIFFER IS DEAF UNTIL IT IS BOUND (#19). A live measurement, not a claim
+	# about the code: two veth pairs in a user+net namespace of its own making (no
+	# root), a 0x8819 flood on one, reac_capture_open() opened 400 times on the
+	# other, every queued frame's ifindex read from the kernel. It carries a
+	# far-end witness and an own-link control, so a silent flooder and a deaf
+	# capture are each reported as NOT A RESULT instead of a pass; an environment
+	# with no `ip` or no user namespace prints SKIPPED and says nothing was tested.
+	$(CC) $(CFLAGS) $(INC) tests/test_sniffer_binds_first.c libreac.a -lm -o test_sniffer_binds_first
+	./test_sniffer_binds_first
 	$(CC) $(CFLAGS) $(INC) tests/test_braid.c libreac.a -lm -o test_braid
 	./test_braid
 	$(CC) $(CFLAGS) $(INC) tests/test_upstream.c libreac.a -lm -o test_upstream
@@ -303,7 +312,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c libreac-transport.a librea
 	./test_rx_twin
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_etf test_reac_etf_qdisc etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
