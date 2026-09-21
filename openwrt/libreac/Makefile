@@ -48,8 +48,8 @@ endef
 # Source is vendored under ./src + ./include (populated from the repo at build).
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)/reac
-	$(CP) ./src/reac.c ./src/reac_decode.c ./src/reac_upstream.c ./src/reac_encode.c ./src/reac_capture.c ./src/pcap_source.c $(PKG_BUILD_DIR)/
-	$(CP) ./include/reac/reac.h ./include/reac/reac_decode.h ./include/reac/reac_braid.h ./include/reac/reac_sample.h ./include/reac/reac_upstream.h ./include/reac/reac_encode.h ./include/reac/reac_capture.h ./include/reac/pcap_source.h $(PKG_BUILD_DIR)/reac/
+	$(CP) ./src/reac.c ./src/reac_decode.c ./src/reac_upstream.c ./src/reac_encode.c ./src/reac_packet_socket.c ./src/reac_capture.c ./src/pcap_source.c $(PKG_BUILD_DIR)/
+	$(CP) ./include/reac/reac.h ./include/reac/reac_decode.h ./include/reac/reac_braid.h ./include/reac/reac_sample.h ./include/reac/reac_upstream.h ./include/reac/reac_encode.h ./include/reac/reac_packet_socket.h ./include/reac/reac_capture.h ./include/reac/pcap_source.h $(PKG_BUILD_DIR)/reac/
 endef
 
 define Build/Compile
@@ -57,12 +57,16 @@ define Build/Compile
 	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/reac_decode.c -o $(PKG_BUILD_DIR)/reac_decode.o
 	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/reac_upstream.c -o $(PKG_BUILD_DIR)/reac_upstream.o
 	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/reac_encode.c -o $(PKG_BUILD_DIR)/reac_encode.o
+	# reac_capture.c opens its socket through this door since #19 — the protocol goes
+	# to bind() and never to socket(), in one place both libraries call.
+	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/reac_packet_socket.c -o $(PKG_BUILD_DIR)/reac_packet_socket.o
 	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/reac_capture.c -o $(PKG_BUILD_DIR)/reac_capture.o
 	$(TARGET_CC) $(TARGET_CFLAGS) -std=c11 -fPIC -I$(PKG_BUILD_DIR) -c $(PKG_BUILD_DIR)/pcap_source.c -o $(PKG_BUILD_DIR)/pcap_source.o
 	$(TARGET_CC) $(TARGET_LDFLAGS) -shared -Wl,-soname,libreac.so.$(PKG_ABI) \
 		-o $(PKG_BUILD_DIR)/libreac.so.$(PKG_VERSION) \
 		$(PKG_BUILD_DIR)/reac.o $(PKG_BUILD_DIR)/reac_decode.o \
 		$(PKG_BUILD_DIR)/reac_upstream.o $(PKG_BUILD_DIR)/reac_encode.o \
+		$(PKG_BUILD_DIR)/reac_packet_socket.o \
 		$(PKG_BUILD_DIR)/reac_capture.o $(PKG_BUILD_DIR)/pcap_source.o -lm
 	ln -sf libreac.so.$(PKG_VERSION) $(PKG_BUILD_DIR)/libreac.so.$(PKG_ABI)
 	ln -sf libreac.so.$(PKG_ABI) $(PKG_BUILD_DIR)/libreac.so
@@ -71,7 +75,7 @@ endef
 # headers + lib into the SDK staging dir, so dependent packages can build against it
 define Build/InstallDev
 	$(INSTALL_DIR) $(1)/usr/include/reac
-	$(CP) ./include/reac/reac.h ./include/reac/reac_decode.h ./include/reac/reac_braid.h ./include/reac/reac_sample.h ./include/reac/reac_upstream.h ./include/reac/reac_encode.h ./include/reac/reac_capture.h ./include/reac/pcap_source.h $(1)/usr/include/reac/
+	$(CP) ./include/reac/reac.h ./include/reac/reac_decode.h ./include/reac/reac_braid.h ./include/reac/reac_sample.h ./include/reac/reac_upstream.h ./include/reac/reac_encode.h ./include/reac/reac_packet_socket.h ./include/reac/reac_capture.h ./include/reac/pcap_source.h $(1)/usr/include/reac/
 	$(INSTALL_DIR) $(1)/usr/lib
 	$(CP) $(PKG_BUILD_DIR)/libreac.so* $(1)/usr/lib/
 endef

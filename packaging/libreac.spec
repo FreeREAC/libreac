@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.3.1
+Version:        1.3.2
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,36 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.2-1
+- THE SNIFFER IS DEAF UNTIL IT IS BOUND (#19, which is #18 in the one socket that never
+  got #18's fix). reac_capture_open() gave the protocol to socket() and bound two syscalls
+  later, with an SIOCGIFINDEX ioctl in between -- and a packet socket created with a
+  protocol registers its receive hook on EVERY interface on the host until the bind lands.
+  On the desk, 2026-09-21 22:17:45: a point-to-point cable with a COLD S-0808 on it logged
+  an S-1608's MAC as heard, while that box mastered another NIC at 8000 fps, and two
+  latches in reac-pw turned the one frame into nine minutes with eight inputs off the desk.
+  The interface is now resolved with if_nametoindex (no socket needed, which is what forced
+  the old order), the socket is created with protocol 0 and the protocol arrives at bind()
+  with the interface -- packet(7)'s one atomic step.
+- ONE DOOR, so the next socket cannot be written the way these two were:
+  include/reac/reac_packet_socket.h (reac_packet_socket_deaf / _bind / _bound), used by
+  reac_capture and by libreac-transport's tx, slave, pacer and topo sites. reac_tx's socket
+  had a protocol and NO bind at all -- a permanent sniffer for every 0x8819 frame on the
+  host, queueing into a buffer nothing ever read; it is bound with protocol 0 now, pinned
+  and deaf, which is all a sendto() path needs.
+- Proven, not argued: tests/test_sniffer_binds_first runs 400 reac_capture_open() on one
+  veth pair while a 0x8819 flood runs on another, inside a user+net namespace it makes
+  itself, and reads each queued frame's ifindex from the kernel. Before: leak=4067 of 4067
+  frames read. After: leak=0, with the far-end witness (1284 frames really flying) and the
+  own-link control (1 frame read back) both above zero, so the zero is not a deaf socket.
+  No `ip` or no user namespace prints SKIPPED and says nothing was tested.
+- tools/conformance-packet-socket.sh joins `make test`: in src/ and transport/src/ the only
+  socket(AF_PACKET is the door's own, and anywhere one is opened the protocol argument is
+  0. It plants a good/bad pair in a temp file every run and requires exactly the bad one to
+  be caught, so neither a blind detector nor one that flags everything can report a clean
+  tree. ABI unchanged: no public struct gains, loses or moves a member (test_abi_layout,
+  61 structs / 578 offsets, LIBREAC_ABI 4). The new header is internal to the two
+  libraries; three added functions, nothing removed.
 * Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.1-1
 - The FCS residue leaves the parsers: ingest strips the capture path's +2 at the door, once; a residue-length frame is REFUSED by reac_upstream/reac_disco (2 bytes were silently parsed clean before). Facts header 46 -> 47 (PORT_SLOT_IN_SPLIT). test_wire_invariants gates the merge on the deduplicated capture corpus.
 

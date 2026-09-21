@@ -24,7 +24,7 @@ INC     := -Iinclude
 # The operator's ruling: a daemon is sockets and PipeWire, it does not speak REAC control.
 # Every file in the second list is PURE - no socket, no thread, no clock - which is what let
 # them move here unchanged from reac-pw, where they had already been written that way.
-OBJS = reac.o reac_ctrlblk.o reac_box_synth.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o \
+OBJS = reac.o reac_ctrlblk.o reac_box_synth.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_packet_socket.o reac_capture.o pcap_source.o \
        reac_fsm.o reac_master.o reac_master_fsm.o reac_hunt.o reac_arbitration.o \
        reac_grant.o reac_headamp_tx.o reac_ctrl.o reac_scene_body.o \
        reac_link_state.o reac_disco.o reac_boxreg.o reac_clock.o reac_link.o reac_macaddr.o
@@ -99,11 +99,20 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
 	./test_capture
+	# THE SNIFFER IS DEAF UNTIL IT IS BOUND (#19). A live measurement, not a claim
+	# about the code: two veth pairs in a user+net namespace of its own making (no
+	# root), a 0x8819 flood on one, reac_capture_open() opened 400 times on the
+	# other, every queued frame's ifindex read from the kernel. It carries a
+	# far-end witness and an own-link control, so a silent flooder and a deaf
+	# capture are each reported as NOT A RESULT instead of a pass; an environment
+	# with no `ip` or no user namespace prints SKIPPED and says nothing was tested.
+	$(CC) $(CFLAGS) $(INC) tests/test_sniffer_binds_first.c libreac.a -lm -o test_sniffer_binds_first
+	./test_sniffer_binds_first
 	$(CC) $(CFLAGS) $(INC) tests/test_braid.c libreac.a -lm -o test_braid
 	./test_braid
 	$(CC) $(CFLAGS) $(INC) tests/test_upstream.c libreac.a -lm -o test_upstream
@@ -170,6 +179,13 @@ test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c
 	# with the announce on every chassis we own, so no test built from our own
 	# captures can catch its return; only the shape of the code can.
 	tools/conformance-headamp-base.sh
+	# ANOTHER SOURCE-SHAPE ARM, for the same reason. test_sniffer_binds_first
+	# measures the sniffer that had the defect; nothing measures the NEXT socket
+	# somebody opens, and #19 IS #18 written again five days later in another
+	# file. This one refuses a packet socket created with a protocol anywhere in
+	# the tree, and it carries a planted good/bad pair so it cannot pass (or fail)
+	# vacuously.
+	tools/conformance-packet-socket.sh
 	@$(MAKE) --no-print-directory facts-drift-check
 
 # THE CAPTURE CORPUS IS A REGRESSION SUITE. The unit suite above runs on
@@ -183,6 +199,7 @@ corpus_check: tools/corpus_check.c libreac.a
 
 conformance:
 	tools/conformance-headamp-base.sh
+	tools/conformance-packet-socket.sh
 	# THE HARNESS IS AN INSTRUMENT, AND AN INSTRUMENT IS GATED LIKE ONE. The
 	# pacer comparison (2026-09-13-reac-kernel-module-backend.md, lane 1) is
 	# decided by a table; a table whose two columns cannot be made to differ
@@ -245,8 +262,10 @@ fake_box: tools/fake_box.c libreac.a
 # makes one, needs no root, and is NOT part of `make test`: a build container
 # usually has neither iproute2 nor CAP_SYS_ADMIN, and it says so rather than
 # passing quietly.
-topo_bind_probe: tools/topo_bind_probe.c transport/src/reac_topo.c transport/src/reac_handle.c
-	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src $^ -o $@
+# libreac.a because the tap opens its socket through the shared packet-socket door
+# (src/reac_packet_socket.c) since #19 — the same door reac_capture_open() now uses.
+topo_bind_probe: tools/topo_bind_probe.c transport/src/reac_topo.c transport/src/reac_handle.c libreac.a
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src $^ -lm -o $@
 
 # --- libreac-transport: sockets, pacer, RT threads, VLAN/topology, ring, segment lock ---
 # The pieces of reac-pw that never touch PipeWire
@@ -303,7 +322,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c libreac-transport.a librea
 	./test_rx_twin
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_etf test_reac_etf_qdisc etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 

@@ -57,6 +57,7 @@
 #include <reac/reac.h>
 #include <reac/reac_ctrl.h>
 #include <reac/reac_ctrlblk.h>
+#include <reac/reac_packet_socket.h>
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -184,21 +185,15 @@ int main(int argc, char **argv)
 	}
 	const uint8_t *declaration = model ? model_blk : COMMIT_REPORT;
 
-	int fd = socket(AF_PACKET, SOCK_RAW, htons(0x8819));
-	if (fd < 0) { perror("socket"); return 1; }
-	struct ifreq ifr;
-	memset(&ifr, 0, sizeof ifr);
-	snprintf(ifr.ifr_name, IFNAMSIZ, "%s", argv[1]);
-	if (ioctl(fd, SIOCGIFINDEX, &ifr) < 0) { perror("SIOCGIFINDEX"); return 1; }
-	int ifindex = ifr.ifr_ifindex;
-	struct sockaddr_ll bind_ll;
-	memset(&bind_ll, 0, sizeof bind_ll);
-	bind_ll.sll_family = AF_PACKET;
-	bind_ll.sll_protocol = htons(0x8819);
-	bind_ll.sll_ifindex = ifindex;
-	if (bind(fd, (struct sockaddr *)&bind_ll, sizeof bind_ll) < 0) {
-		perror("bind"); return 1;
-	}
+	/* DEAF UNTIL IT IS BOUND, through the library's own door (reac_packet_socket.h).
+	 * This tool sits on a cable and answers masters: a socket that hears every
+	 * interface for the length of an ioctl would let a fake box answer a master it
+	 * shares no wire with. */
+	unsigned idx = if_nametoindex(argv[1]);
+	if (idx == 0) { perror("if_nametoindex"); return 1; }
+	int ifindex = (int)idx;
+	int fd = reac_packet_socket_bound(ifindex, 0x8819, 0);
+	if (fd < 0) { perror("packet socket"); return 1; }
 	struct timeval tv = { 0, 20000 };
 	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
 

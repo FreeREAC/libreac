@@ -49,27 +49,31 @@
 
 static int bind_packet_socket(const char *ifname, int *ifindex_out)
 {
-	int fd = socket(AF_PACKET, SOCK_RAW, htons(PROBE_ETHERTYPE));
+	/* PROTOCOL 0 AT socket(), THE PROTOCOL AT bind() (libreac #18/#19): a packet
+	 * socket created with a protocol is live on EVERY interface on the host until the
+	 * bind lands. This file reaches libreac not at all — it is the ETF instrument and
+	 * builds from transport/src/reac_etf.c alone — so it states the rule itself
+	 * instead of linking the library's door for it; tools/conformance-packet-socket.sh
+	 * holds both forms to the same line. */
+	unsigned idx = if_nametoindex(ifname);
+	if (idx == 0)
+		return -1;
+	int fd = socket(AF_PACKET, SOCK_RAW, 0);
 	if (fd < 0)
 		return -1;
-	struct ifreq ifr;
-	memset(&ifr, 0, sizeof ifr);
-	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
-	if (ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
-		close(fd);
-		return -1;
-	}
 	struct sockaddr_ll sll;
 	memset(&sll, 0, sizeof sll);
 	sll.sll_family   = AF_PACKET;
 	sll.sll_protocol = htons(PROBE_ETHERTYPE);
-	sll.sll_ifindex  = ifr.ifr_ifindex;
+	sll.sll_ifindex  = (int)idx;
 	if (bind(fd, (struct sockaddr *)&sll, sizeof sll) < 0) {
+		int saved = errno;
 		close(fd);
+		errno = saved;
 		return -1;
 	}
 	if (ifindex_out)
-		*ifindex_out = ifr.ifr_ifindex;
+		*ifindex_out = (int)idx;
 	return fd;
 }
 

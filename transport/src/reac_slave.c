@@ -14,6 +14,7 @@
 #include <reac/reac.h>
 #include <reac/reac_encode.h>  /* reac_downstream_build — the MIXER frame (0.5.6) */
 #include <reac/reac_code.h>    /* reac_code_emit — the promisc-failed line */
+#include <reac/reac_packet_socket.h> /* the one door every AF_PACKET socket goes through */
 
 #include <stdlib.h>
 #include <string.h>
@@ -1065,29 +1066,19 @@ int reac_slave_open(struct reac_slave *s, const struct reac_slave_cfg *cfg,
 	 * layered config files, which the engine thread must never do. */
 	s->prio = reac_rt_prio_resolve(cfg->prio, NULL, &s->prio_src);
 
-	int fd = socket(AF_PACKET, SOCK_RAW, htons(REAC_ETHERTYPE));
+	/* DEAF UNTIL IT IS BOUND, so recv() can only ever yield this NIC's 0x8819 frames —
+	 * including during the open itself (reac_packet_socket.h, #18/#19). The ifindex is
+	 * resolved before the socket exists: the SIOCGIFINDEX ioctl this replaces needed an
+	 * open socket, and that is what used to force the protocol to socket() and make
+	 * every slave open a host-wide sniffer for the length of two syscalls. */
+	unsigned idx = if_nametoindex(cfg->ifname);
+	if (idx == 0)
+		return -1;
+	s->ifindex = (int)idx;
+
+	int fd = reac_packet_socket_bound(s->ifindex, REAC_ETHERTYPE, 0);
 	if (fd < 0)
 		return -1;
-
-	struct ifreq ifr;
-	memset(&ifr, 0, sizeof ifr);
-	strncpy(ifr.ifr_name, cfg->ifname, IFNAMSIZ - 1);
-	if (ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
-		close(fd);
-		return -1;
-	}
-	s->ifindex = ifr.ifr_ifindex;
-
-	/* Bind to the interface so recv() yields only this NIC's 0x8819 frames. */
-	struct sockaddr_ll sll;
-	memset(&sll, 0, sizeof sll);
-	sll.sll_family = AF_PACKET;
-	sll.sll_protocol = htons(REAC_ETHERTYPE);
-	sll.sll_ifindex = s->ifindex;
-	if (bind(fd, (struct sockaddr *)&sll, sizeof sll) < 0) {
-		close(fd);
-		return -1;
-	}
 
 	/* Short RX timeout so recv() returns periodically to self-clock the flood/dwell
 	 * even before any master frame arrives (~5 ms — well under the 600-frame HOLD
@@ -1104,7 +1095,7 @@ int reac_slave_open(struct reac_slave *s, const struct reac_slave_cfg *cfg,
 	if (s->box_master) {
 		struct packet_mreq mr;
 		memset(&mr, 0, sizeof mr);
-		mr.mr_ifindex = ifr.ifr_ifindex;
+		mr.mr_ifindex = s->ifindex;
 		mr.mr_type    = PACKET_MR_PROMISC;
 		if (setsockopt(fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr, sizeof mr) < 0)
 			reac_code_emit(stderr, "reac_slave", RC_E_PROMISC_FAILED,
