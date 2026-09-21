@@ -524,6 +524,14 @@ void reac_pacer_read_identity(const struct reac_pacer *p, struct reac_identity *
 
 void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len)
 {
+	/* INGEST'S ONE JOB BEFORE ANYTHING PARSES: strip the capture path's +2. A
+	 * mirrored or trunked tap leaves two bytes of the frame's own Ethernet FCS
+	 * after the end marker; a plain NIC never does (<reac/reac.h> carries the
+	 * census). Everything below reads the frame's GEOMETRY off its length and
+	 * refuses a residue length as no geometry at all, so the strip lives at the
+	 * door — here — and in no parser. */
+	len = reac_frame_clean_len(len);
+
 	/* PASSIVE DISCOVERY first, and independently (task #178). The socket is already
 	 * promiscuous (see the PACKET_ADD_MEMBERSHIP rationale below), so every 0x8819
 	 * frame on this segment arrives here — including the ones the master classifier
