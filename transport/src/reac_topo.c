@@ -5,6 +5,7 @@
  * feeds them; see reac_topo.h for the measurements this is built on.
  */
 #include <reac/transport/reac_topo.h>
+#include <reac/reac_packet_socket.h> /* the one door every AF_PACKET socket goes through */
 #include "reac_handle_priv.h"
 
 #include <dirent.h>
@@ -367,15 +368,17 @@ int reac_topo_tap_open(struct reac_topo_tap *t, const char *parent)
 	 * refused a master for ever, from the daemon's own masters on ANOTHER parent.
 	 *
 	 * With protocol 0 the kernel registers no hook at all (net/packet/af_packet.c:
-	 * packet_create hooks only when proto != 0), and bind() below installs it with the
+	 * packet_create hooks only when proto != 0), and the bind below installs it with the
 	 * interface AND the protocol together — the one atomic step packet(7) offers. The
-	 * filter is still attached first, so the hook is never live without it.
+	 * filter is still attached first, so the hook is never live without it; that is why
+	 * this site takes the two halves of the door separately instead of
+	 * reac_packet_socket_bound().
 	 *
 	 * ETH_P_ALL MOVES TO THE BIND, IT DOES NOT GO AWAY. A socket bound to 0x8819 reads
 	 * vlan_tci = none for a tagged frame and would report every trunk as an access port
 	 * (reac_topo.h's measurement); ETH_P_ALL on the bound device is what keeps the tag
 	 * and the outgoing frames visible. */
-	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, 0);
+	int fd = reac_packet_socket_deaf(SOCK_NONBLOCK);
 	if (fd < 0)
 		return -1;
 
@@ -396,12 +399,7 @@ int reac_topo_tap_open(struct reac_topo_tap *t, const char *parent)
 	unsigned idx = if_nametoindex(parent);
 	if (idx == 0)
 		goto fail;
-	struct sockaddr_ll sll;
-	memset(&sll, 0, sizeof sll);
-	sll.sll_family = AF_PACKET;
-	sll.sll_protocol = htons(ETH_P_ALL);
-	sll.sll_ifindex = (int)idx;
-	if (bind(fd, (struct sockaddr *)&sll, sizeof sll) != 0)
+	if (reac_packet_socket_bind(fd, (int)idx, ETH_P_ALL) != 0)
 		goto fail;
 	t->handle = reac_handle_adopt(fd);
 	if (!t->handle)
