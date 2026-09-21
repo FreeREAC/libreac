@@ -24,7 +24,7 @@ INC     := -Iinclude
 # The operator's ruling: a daemon is sockets and PipeWire, it does not speak REAC control.
 # Every file in the second list is PURE - no socket, no thread, no clock - which is what let
 # them move here unchanged from reac-pw, where they had already been written that way.
-OBJS = reac.o reac_ctrlblk.o reac_box_synth.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_capture.o pcap_source.o \
+OBJS = reac.o reac_ctrlblk.o reac_box_synth.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_packet_socket.o reac_capture.o pcap_source.o \
        reac_fsm.o reac_master.o reac_master_fsm.o reac_hunt.o reac_arbitration.o \
        reac_grant.o reac_headamp_tx.o reac_ctrl.o reac_scene_body.o \
        reac_link_state.o reac_disco.o reac_boxreg.o reac_clock.o reac_link.o reac_macaddr.o
