@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.3.0
+Version:        1.3.1
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,9 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.1-1
+- The FCS residue leaves the parsers: ingest strips the capture path's +2 at the door, once; a residue-length frame is REFUSED by reac_upstream/reac_disco (2 bytes were silently parsed clean before). Facts header 46 -> 47 (PORT_SLOT_IN_SPLIT). test_wire_invariants gates the merge on the deduplicated capture corpus.
+
 * Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.0-1
 - THE LIBRARY READS NO ENVIRONMENT (operator ruling 2026-09-17: discovery and publish).
   Every getenv in libreac and its transport (grant on declare, grant dwell, no-enroll, est
