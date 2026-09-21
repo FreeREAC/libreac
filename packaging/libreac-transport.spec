@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.3.0
+Version:        1.3.1
 %global abi 5
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,9 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.1-1
+- The FCS residue leaves the parsers: ingest strips the capture path's +2 at the door, once; a residue-length frame is REFUSED by reac_upstream/reac_disco (2 bytes were silently parsed clean before). Facts header 46 -> 47 (PORT_SLOT_IN_SPLIT). test_wire_invariants gates the merge on the deduplicated capture corpus.
+
 * Thu Sep 17 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.0-1
 - The transport's pacer and rx read no environment: their four knobs come from
   reac_transport_tunables_set / reac_pacer_tunables_set (include/reac/reac_tunables.h),
