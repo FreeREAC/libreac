@@ -113,6 +113,20 @@ currently strip it themselves — `src/reac_upstream.c:18`, `src/reac_disco.c:14
 ones that should be handed clean bytes instead, and `tests/test_braid.c:87-91` is the
 fixture that pins the strip.
 
+**TAKEN AND DONE, 2026-09-21** — ruled by the operator the same day ("the FCS residue
+provably does not even appear on a normal REAC network and should be removed from the
+grammar"). reac-protocol `lane/residue-out-of-grammar`: `has_fcs_residue` and `clean_len`
+are out of the grammar, `len_audio` is `raw_len - 52` so a buffer carrying anything past
+the end marker is REFUSED rather than tolerated, the FCS_RESIDUE fact is retired (a
+capture-path artifact is not a protocol fact) and FRAME_OVERHEAD is re-pinned to
+`instances/len_audio/value`. libreac `lane/residue-ingest-only`: the doors strip
+(`reac_rx`'s loop, `reac_tap`'s survey, `reac_pacer_rx_ingest`, `reac_hunt_observe`,
+`tools/corpus_check`) and the parsers refuse a residue length (`reac_upstream_channels`,
+and `reac_disco_classify` reads the geometry off `len` as given). `tests/test_rx_twin.c`
+holds the door with a no-twin control; `tests/test_braid.c`'s fifth block holds the
+parsers. `reac_frame_clean_len()` and `REAC_FRAME_BYTES_OHRCA` stay exactly where they
+were — they are ingest's, and now they are only ingest's.
+
 ## Disposition
 
 `transport/src/reac_pacer.c` unchanged. reac-pw's `fix/master-tx-frame-doubling` is a
