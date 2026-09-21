@@ -16,6 +16,7 @@
 #include <reac/reac_ports.h> /* the box's declared port table (config-announce) */
 #include <reac/reac_tunables.h>  /* the daemon's REACPW_GUARD_FLOOR_FRAMES/NO_HEADAMP */
 #include <reac/reac_code.h>      /* reac_code_emit — the ignored-override line */
+#include <reac/reac_packet_socket.h> /* the one door every AF_PACKET socket goes through */
 
 #include <stdlib.h>
 #include <string.h>
@@ -2047,33 +2048,25 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 	if (reac_frame_ring_init(&p->ring, depth, REAC_PACER_SLOT_SZ) != 0)
 		return -1;
 
-	/* SOCK_NONBLOCK so the RT pacer thread's sendto() can never block on a backed-up
+	/* CREATED DEAF AND BOUND IN ONE STEP (reac_packet_socket.h, #18/#19). This fd also
+	 * RXes the box's upstream control frames for the per-slot drain, so the protocol is
+	 * real — it just belongs to the bind, where the interface goes with it. With it at
+	 * socket() the master spent the ifindex lookup as a sniffer for every 0x8819 frame
+	 * in the machine, which is how a cold cable came to report a box on another NIC.
+	 * The lookup moves first because if_nametoindex() needs no socket, where the
+	 * SIOCGIFINDEX ioctl it replaces did — that ioctl is the reason the window existed.
+	 *
+	 * SOCK_NONBLOCK so the RT pacer thread's sendto() can never block on a backed-up
 	 * NIC tx queue (it also passes MSG_DONTWAIT per-send; either alone suffices). */
-	int fd = socket(AF_PACKET, SOCK_RAW | SOCK_NONBLOCK, htons(REAC_ETHERTYPE));
-	if (fd < 0) {
+	unsigned idx = if_nametoindex(cfg->ifname);
+	if (idx == 0) {
 		reac_frame_ring_free(&p->ring);
 		return -1;
 	}
-	struct ifreq ifr;
-	memset(&ifr, 0, sizeof ifr);
-	strncpy(ifr.ifr_name, cfg->ifname, IFNAMSIZ - 1);
-	if (ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
-		close(fd);
-		reac_frame_ring_free(&p->ring);
-		return -1;
-	}
-	p->ifindex = ifr.ifr_ifindex;
+	p->ifindex = (int)idx;
 
-	/* Bind to the interface (the reac_slave_open pattern): this fd also RXes
-	 * the box's upstream control frames for the per-slot drain, and unbound it
-	 * would deliver 0x8819 from EVERY NIC. */
-	struct sockaddr_ll bsll;
-	memset(&bsll, 0, sizeof bsll);
-	bsll.sll_family = AF_PACKET;
-	bsll.sll_protocol = htons(REAC_ETHERTYPE);
-	bsll.sll_ifindex = p->ifindex;
-	if (bind(fd, (struct sockaddr *)&bsll, sizeof bsll) < 0) {
-		close(fd);
+	int fd = reac_packet_socket_bound(p->ifindex, REAC_ETHERTYPE, SOCK_NONBLOCK);
+	if (fd < 0) {
 		reac_frame_ring_free(&p->ring);
 		return -1;
 	}

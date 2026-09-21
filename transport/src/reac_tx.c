@@ -10,6 +10,7 @@
 
 #include <reac/reac.h>         /* REAC_FRAME_BYTES, REAC_ETHERTYPE */
 #include <reac/reac_encode.h>  /* reac_downstream_build — the frame builder */
+#include <reac/reac_packet_socket.h> /* the one door every AF_PACKET socket goes through */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,18 +59,20 @@ int reac_tx_open(struct reac_tx *tx, const char *ifname)
 	 * be a fixed 00:40:ab:c4:80:f6 here. */
 	reac_mac_default_src(ifname, tx->src);
 
-	int fd = socket(AF_PACKET, SOCK_RAW, htons(REAC_ETHERTYPE));
+	/* THIS SOCKET ONLY EVER SENDS, SO IT ASKS FOR NO PROTOCOL AT ALL. sendto() takes
+	 * the interface from the sockaddr_ll below and the ethertype from the frame's own
+	 * bytes; a protocol here would buy nothing and cost everything — with one at
+	 * socket() and no bind at all, this fd was a sniffer for every 0x8819 frame on
+	 * every interface in the machine, queueing into a buffer nothing ever read
+	 * (reac_packet_socket.h, #18/#19). Bound with protocol 0: pinned to this NIC and
+	 * deaf. */
+	unsigned idx = if_nametoindex(ifname);
+	if (idx == 0)
+		return -1;
+	int fd = reac_packet_socket_bound((int)idx, 0, 0);
 	if (fd < 0)
 		return -1;
-
-	struct ifreq ifr;
-	memset(&ifr, 0, sizeof ifr);
-	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
-	if (ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
-		close(fd);
-		return -1;
-	}
-	tx->ifindex = ifr.ifr_ifindex;
+	tx->ifindex = (int)idx;
 	tx->handle = reac_handle_adopt(fd);
 	if (!tx->handle) {
 		close(fd);
