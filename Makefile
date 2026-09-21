@@ -254,8 +254,10 @@ fake_box: tools/fake_box.c libreac.a
 # makes one, needs no root, and is NOT part of `make test`: a build container
 # usually has neither iproute2 nor CAP_SYS_ADMIN, and it says so rather than
 # passing quietly.
-topo_bind_probe: tools/topo_bind_probe.c transport/src/reac_topo.c transport/src/reac_handle.c
-	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src $^ -o $@
+# libreac.a because the tap opens its socket through the shared packet-socket door
+# (src/reac_packet_socket.c) since #19 — the same door reac_capture_open() now uses.
+topo_bind_probe: tools/topo_bind_probe.c transport/src/reac_topo.c transport/src/reac_handle.c libreac.a
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src $^ -lm -o $@
 
 # --- libreac-transport: sockets, pacer, RT threads, VLAN/topology, ring, segment lock ---
 # The pieces of reac-pw that never touch PipeWire
