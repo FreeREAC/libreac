@@ -84,14 +84,11 @@ static void feed_frame(struct reac_rx *rx, const struct reac_mode *mode,
 		ns = nch > 0 ? reac_upstream_decode(frame, len, s24) : -1;
 	} else {
 		nch = mode->n_channels;
-		/* Decode the standard 1492 B frame. A 1494 B frame is that same frame
-		 * plus 2 bytes after C2 EA: decode the embedded REAC_FRAME_BYTES and
-		 * ignore them. reac_frame_inspect requires exactly REAC_FRAME_BYTES, so
-		 * never hand it the 1494 length. Those 2 bytes are the low 16 bits of
-		 * the frame's own Ethernet FCS left behind by the capture path — not a
-		 * protocol field, in either direction (#82, and libreac's <reac/reac.h>
-		 * since 0.5.0). Never emit them. */
-		ns = reac_decode(frame, REAC_FRAME_BYTES, mode, s24); /* out[(ch*ns+s)*3] */
+		/* Decode the standard 1492 B frame. `len` is the clean length and the
+		 * gate has already required it to BE 1492, so this is that frame; a
+		 * capture path's +2 was stripped at the door and never reaches a parser
+		 * (#82, and libreac's <reac/reac.h> since 0.5.0). Never emit them. */
+		ns = reac_decode(frame, len, mode, s24); /* out[(ch*ns+s)*3] */
 	}
 	if (ns < 0) {
 		atomic_fetch_add_explicit(&rx->frames_bad, 1, memory_order_relaxed);
@@ -150,16 +147,17 @@ void reac_rx_peer_reset(struct reac_rx *rx, const uint8_t mac[6], unsigned sessi
  * decode? DOWNSTREAM accepts only the fixed 1492 B broadcast. UPSTREAM
  * accepts box-shaped returns and locks onto the first box's src MAC so a
  * second box (or the master's own broadcast) can't interleave counters and
- * audio from two sources into one ring. */
+ * audio from two sources into one ring.
+ *
+ * `len` IS ALREADY CLEAN — the loop strips the capture path's +2 before it
+ * calls anything, and reac_upstream_channels() refuses a residue length. */
 static int gate_accepts(struct reac_rx *rx, const uint8_t *frame, size_t len)
 {
 	if (rx->cfg.accept == REAC_RX_ACCEPT_DOWNSTREAM)
-		/* 1492 = the frame; 1494 = the same frame with 2 bytes of Ethernet FCS
-		 * residue kept after the C2 EA end marker by the capture path (see the
-		 * note in feed_frame and #82). Accept both — the mirror twin arrives as
-		 * one of each and the dup guard below collapses the pair. */
-		return len == (size_t)REAC_FRAME_BYTES ||
-		       len == (size_t)REAC_FRAME_BYTES_OHRCA;
+		/* 1492 = the frame. `len` is the CLEAN length (the loop strips a capture
+		 * path's +2 at the door), so the mirror twin's two copies both arrive
+		 * here as 1492 and the dup guard below collapses the pair. */
+		return len == (size_t)REAC_FRAME_BYTES;
 	if (reac_upstream_channels(len) < 0)
 		return 0;
 	if (!rx->up_src_locked) {
@@ -329,7 +327,14 @@ static void *rx_loop(void *arg)
 			continue;
 		if (!reac_frame_is_reac(frame, (size_t)n))
 			continue;
-		if (!gate_accepts(rx, frame, (size_t)n)) {
+		/* THE DOOR, AND THE ONLY PLACE THE CAPTURE PATH'S +2 IS HANDLED. A
+		 * mirrored/trunked tap leaves two bytes of the frame's own Ethernet FCS
+		 * after the C2 EA marker (never a plain NIC: 0 in 592,762 frames, census
+		 * 2026-09-21 in <reac/reac.h>). Everything below this line — the gate,
+		 * the duplicate guard, the decode — works on the CLEAN frame, because
+		 * the parsers refuse a residue length rather than stripping it again. */
+		size_t clean = reac_frame_clean_len((size_t)n);
+		if (!gate_accepts(rx, frame, clean)) {
 			/* the other direction's stream (or another box): not ours */
 			atomic_fetch_add_explicit(&rx->frames_other, 1, memory_order_relaxed);
 			continue;
@@ -344,7 +349,6 @@ static void *rx_loop(void *arg)
 		 * Feeding both copies doubles every 12-sample block into a granular
 		 * stutter and doubles the effective rate. Runs before the counter/ppm/
 		 * decode so the rate estimator and the ring see the real cadence. */
-		size_t clean = reac_frame_clean_len((size_t)n);
 		if (rx->have_prev_frame && clean == rx->prev_clean_len &&
 		    memcmp(frame, rx->prev_frame, clean) == 0) {
 			atomic_fetch_add_explicit(&rx->frames_dup, 1, memory_order_relaxed);
@@ -389,7 +393,7 @@ static void *rx_loop(void *arg)
 
 		uint64_t now = mono_ns();
 		update_ppm(rx, counter, now);
-		feed_frame(rx, mode, frame, (size_t)n);
+		feed_frame(rx, mode, frame, clean);
 
 		/* THE PACE ALARM. Not gated on REAC_DEBUG: a stream labelled at twice the
 		 * rate it carries raises no xrun and no error — PipeWire believes the label
