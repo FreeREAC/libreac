@@ -112,7 +112,9 @@ _Static_assert(REAC_PORT_SLOT_IN == 0x02,
                "REAC_PORT_SLOT_IN has drifted from protocol-facts.yaml PORT_SLOT_IN");
 _Static_assert(REAC_PORT_SLOT_EMPTY == 0x03,
                "REAC_PORT_SLOT_EMPTY has drifted from protocol-facts.yaml PORT_SLOT_EMPTY");
+_Static_assert(REAC_PORT_SLOT_IN_SPLIT == 0x00,
+               "REAC_PORT_SLOT_IN_SPLIT has drifted from protocol-facts.yaml PORT_SLOT_IN_SPLIT");
 
-#define REAC_FACTS_ASSERTIONS 46
+#define REAC_FACTS_ASSERTIONS 47
 
 #endif /* REAC_FACTS_ASSERT_H */
