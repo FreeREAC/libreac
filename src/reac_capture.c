@@ -4,12 +4,12 @@
 #define _DEFAULT_SOURCE
 #define _GNU_SOURCE
 #include "reac/reac_capture.h"
+#include "reac/reac_packet_socket.h"
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/socket.h>
-#include <sys/ioctl.h>
 #include <net/if.h>
 #include <netinet/in.h>
 
@@ -24,27 +24,18 @@
 int reac_capture_open(struct reac_capture *c, const char *ifname)
 {
 	c->fd = -1;
-	int fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_REAC));
+	/* THE INTERFACE IS RESOLVED BEFORE THE SOCKET EXISTS. It used to be an ioctl on
+	 * the socket itself, which forced the socket open first — and a socket opened with
+	 * a protocol hears every link on the host until the bind (reac_packet_socket.h,
+	 * #19: a cold S-0808's cable reported an S-1608 that was on another NIC). This
+	 * needs no fd, so the socket is created deaf and bound in one move. */
+	unsigned idx = if_nametoindex(ifname);
+	if (idx == 0)
+		return -1;
+
+	int fd = reac_packet_socket_bound((int)idx, ETH_P_REAC, 0);
 	if (fd < 0)
 		return -1;
-
-	struct ifreq ifr;
-	memset(&ifr, 0, sizeof ifr);
-	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
-	if (ioctl(fd, SIOCGIFINDEX, &ifr) < 0) {
-		close(fd);
-		return -1;
-	}
-
-	struct sockaddr_ll sll;
-	memset(&sll, 0, sizeof sll);
-	sll.sll_family = AF_PACKET;
-	sll.sll_protocol = htons(ETH_P_REAC);
-	sll.sll_ifindex = ifr.ifr_ifindex;
-	if (bind(fd, (struct sockaddr *)&sll, sizeof sll) < 0) {
-		close(fd);
-		return -1;
-	}
 
 	c->fd = fd;
 	return 0;
