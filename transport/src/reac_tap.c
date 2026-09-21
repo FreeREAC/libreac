@@ -99,6 +99,10 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
 		return REAC_TAP_NOT_REAC;
 	s->frames_seen++;
 
+	/* THE DOOR STRIPS THE CAPTURE PATH'S +2, once, for everything below — this
+	 * survey exists to read MIRRORED captures, which is exactly where the residue
+	 * lives (<reac/reac.h>, census 2026-09-21). No parser behind this line
+	 * tolerates a residue length, so `clean` is what they are all given. */
 	const size_t clean = reac_frame_clean_len(len);
 	const uint8_t *src = frame + 6;
 
@@ -126,7 +130,7 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
 		s->frames_ungeometric++;
 		for (unsigned i = 0; i < s->n; i++)
 			if (memcmp(s->stream[i].src, src, 6) == 0)
-				note_model(&s->stream[i], frame, len);
+				note_model(&s->stream[i], frame, clean);
 		return REAC_TAP_NOT_REAC;
 	}
 
@@ -169,7 +173,7 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
 		st->last_ts_usec = ts_usec;
 	}
 	st->frames++;
-	note_model(st, frame, len);
+	note_model(st, frame, clean);
 	return idx;
 }
 

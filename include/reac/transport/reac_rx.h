@@ -23,10 +23,11 @@
 #include <pthread.h>
 #include <reac/transport/reac_ring.h>
 #include <reac/transport/reac_pace_watch.h>
-/* REAC_FRAME_BYTES_OHRCA + reac_frame_clean_len(): the OHRCA +2 length rule
- * moved to its one home in libreac (>= 0.3.0) — it applies to both directions,
- * not just this RX gate. What the 2 bytes are is still open (#80); the rule is
- * about length normalization and holds either way. */
+/* reac_frame_clean_len(): the capture path's +2 is stripped HERE, at the door,
+ * for everything behind it — one home in libreac (>= 0.3.0), both directions.
+ * The 2 bytes are the frame's own Ethernet FCS and belong to the tap, not to
+ * the protocol (<reac/reac.h> carries the identity measurement and the
+ * 2026-09-21 census), so no parser behind this door tolerates them. */
 #include <reac/reac.h>
 
 enum reac_rx_kind {

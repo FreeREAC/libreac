@@ -42,8 +42,20 @@ extern "C" {
  * it appears on non-OHRCA M-200 rigs and is absent from OHRCA ones. The variable
  * is the capture rig — mirroring BOTH RX and TX of a port, so a transiting frame
  * is seen twice (same src MAC, same counter, identical payload), one copy clean
- * and one with the residue. Strip it with reac_frame_clean_len(); never model it
- * as a protocol field and never emit it. */
+ * and one with the residue.
+ *
+ * CONFIRMED BY CENSUS, 2026-09-21 (all 104 pcaps of the corpus, VLAN tag
+ * honoured): 0 residue-length frames in 592,762 frames captured off a plain
+ * NIC, across 25 captures; every residue frame sits in a mirrored or trunked
+ * capture. So it does not occur on a REAC network at all.
+ *
+ * IT IS THEREFORE INGEST'S, AND ONLY INGEST'S. The doors that take wire bytes
+ * strip it with reac_frame_clean_len() — reac_rx's loop, reac_tap's survey,
+ * reac_pacer_rx_ingest, reac_hunt_observe, tools/corpus_check — and every
+ * parser behind them REFUSES a residue length instead of stripping it again, so
+ * a reader that forgot is a red test rather than a silent two-byte tolerance.
+ * reac-protocol's grammar has no vocabulary for it either (spec/reac.ksy,
+ * 2026-09-21). Never model it as a protocol field and never emit it. */
 #define REAC_FRAME_BYTES_OHRCA (REAC_FRAME_BYTES + 2)  /* 1494: a 1492 frame plus FCS residue */
 
 /* UPSTREAM (stagebox -> master) frame geometry — box-width sized:
@@ -132,13 +144,14 @@ int reac_rate_snap(double pps);
  * bytes 12..13. Returns 1 if REAC, 0 otherwise. */
 int reac_frame_is_reac(const uint8_t *frame, size_t len);
 
-/* Strip the +2 FCS residue from a frame length, if present. One rule
- * covers both directions: a clean REAC frame is 52 + n*36 bytes (n = channel
- * width, 40 downstream / the box width upstream), so a length that is 52 + n*36
- * + 2 carries the trailer and comes back reduced by 2 (1494 -> 1492,
- * 1206 -> 1204, ...). Any other length (including every clean length) is
- * returned unchanged — the caller still validates the result as a frame; this
- * only normalizes a capture that kept two bytes of the FCS. */
+/* INGEST'S STRIP OF THE CAPTURE PATH'S +2 FCS residue, and the only place the
+ * residue is ever handled. Call it AT THE DOOR, on wire bytes, before anything
+ * parses them. One rule covers both directions: a clean REAC frame is 52 + n*36
+ * bytes (n = channel width, 40 downstream / the box width upstream), so a length
+ * that is 52 + n*36 + 2 carries the residue and comes back reduced by 2
+ * (1494 -> 1492, 1206 -> 1204, ...). Any other length (including every clean
+ * length) is returned unchanged — the caller still validates the result as a
+ * frame. */
 size_t reac_frame_clean_len(size_t len);
 
 /* The 16-bit little-endian sequence counter at bytes 14..15. The counter

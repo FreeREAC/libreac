@@ -47,3 +47,4 @@ test_reac_etf_qdisc
 etf_probe
 topo_bind_probe
 test_no_getenv_conformance
+test_rx_twin
