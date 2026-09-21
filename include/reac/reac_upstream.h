@@ -44,10 +44,14 @@ extern "C" {
 #endif
 
 /* Channel count carried by an upstream frame of `len` bytes, derived from the
- * frame size (an OHRCA +2 CRC trailer, if present, is stripped first). Returns
- * -1 unless clean len = 52 + nch*36 with nch even (the braid packs channel
- * pairs), 2 <= nch < 40. The 40-ch solution (1492 B) is the DOWNSTREAM
- * broadcast, never a box return, and is rejected. */
+ * frame size. Returns -1 unless len = 52 + nch*36 with nch even (the braid
+ * packs channel pairs), 2 <= nch < 40. The 40-ch solution (1492 B) is the
+ * DOWNSTREAM broadcast, never a box return, and is rejected.
+ *
+ * PASS A CLEAN LENGTH. A capture path's +2 (342 / 630 / 1206) is refused like
+ * any other off-law length: stripping it is INGEST's job — reac_frame_clean_len()
+ * at the door — and a parser that stripped it itself would hide a reader that
+ * forgot. See <reac/reac.h> for the measurement behind that split. */
 int reac_upstream_channels(size_t len);
 
 /* Decode a validated upstream frame's audio region into planar 24-bit LE PCM,

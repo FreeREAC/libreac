@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* Unit test: the braid layout oracle + the sample conversion pair + the FCS-residue
- * +2 trailer strip.
+/* Unit test: the braid layout oracle + the sample conversion pair + INGEST's
+ * FCS-residue +2 strip.
  *
  * 1. reac_braid_pos is BIJECTIVE over the whole n_ch*36-byte audio region for
  *    every even width 2..40 (each byte written exactly once) — the property the
@@ -13,8 +13,11 @@
  *    16-bit-word swap — see reac_braid.h for the evidence trail).
  * 3. reac_f32_to_s24le / reac_s24le_to_f32 are exact inverses over the full
  *    24-bit range (every s24 value round-trips), and the encode clamps.
- * 4. reac_frame_clean_len strips exactly the +2 FCS residue (1494->1492, 1206->1204,
- *    630->628) and leaves clean/invalid lengths untouched.
+ * 4. reac_frame_clean_len — INGEST's rule, and the only place the capture path's
+ *    +2 is handled — strips exactly it (1494->1492, 1206->1204, 630->628) and
+ *    leaves clean/invalid lengths untouched. The parsers behind the door refuse a
+ *    residue length instead of stripping it a second time: pinned here so the two
+ *    roles cannot quietly merge again (the census is in <reac/reac.h>).
  */
 #include <stdio.h>
 #include <string.h>
@@ -22,6 +25,7 @@
 
 #include <reac/reac.h>
 #include <reac/reac_braid.h>
+#include <reac/reac_upstream.h>
 #include <reac/reac_sample.h>
 
 static int fails;
@@ -83,7 +87,7 @@ int main(void)
 	reac_f32_to_s24le(-2.0f, b);
 	CHK(b[0] == 0x00 && b[1] == 0x00 && b[2] == 0x80);   /* -8388608 */
 
-	/* 4. +2 FCS-residue strip */
+	/* 4. INGEST's +2 FCS-residue strip — the door's rule */
 	CHK(reac_frame_clean_len(REAC_FRAME_BYTES_OHRCA) == (size_t)REAC_FRAME_BYTES);
 	CHK(reac_frame_clean_len(1206) == 1204);  /* S-4000 32-ch trailered */
 	CHK(reac_frame_clean_len(630) == 628);    /* S-1608 16-ch trailered */
@@ -94,11 +98,27 @@ int main(void)
 	CHK(reac_frame_clean_len(0) == 0);        /* short lengths untouched */
 	CHK(reac_frame_clean_len(53) == 53);
 
+	/* 5. AND THE PARSERS DO NOT STRIP. The door above is the only place the
+	 * capture path's +2 is handled; a parser handed a residue length refuses it,
+	 * so a reader that forgot to strip is a failure rather than a silent
+	 * two-byte tolerance. Geometry, width and role all agree on that. */
+	CHK(reac_upstream_channels(1206) == -1);  /* S-4000 32-ch, unstripped */
+	CHK(reac_upstream_channels(1204) == 32);  /* the frame itself */
+	CHK(reac_upstream_channels(630) == -1);   /* S-1608 16-ch, unstripped */
+	CHK(reac_upstream_channels(628) == 16);
+	CHK(reac_upstream_channels(342) == -1);   /* S-0808 8-ch, unstripped */
+	CHK(reac_upstream_channels(340) == 8);
+	CHK(reac_frame_channels(REAC_FRAME_BYTES_OHRCA) == 0); /* 1494 is no geometry */
+	CHK(reac_frame_channels(REAC_FRAME_BYTES) == REAC_MAX_CHANNELS);
+	CHK(!reac_frame_is_master_downstream(REAC_FRAME_BYTES_OHRCA));
+	CHK(reac_frame_is_master_downstream(REAC_FRAME_BYTES));
+
 	if (fails) {
 		fprintf(stderr, "%d check(s) failed\n", fails);
 		return 1;
 	}
 	printf("OK: braid_pos bijective for widths 2..40 + reference byte map, "
-	       "f32<->s24 exact round-trip + clamp, FCS-residue +2 strip\n");
+	       "f32<->s24 exact round-trip + clamp, ingest's FCS-residue +2 strip, "
+	       "and the parsers refusing a residue length\n");
 	return 0;
 }

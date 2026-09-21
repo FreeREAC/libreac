@@ -3,7 +3,7 @@
 
 /* Passive REAC sighting classifier + table. See reac_disco.h for the why. */
 #include <reac/reac_disco.h>
-#include <reac/reac.h>   /* reac_frame_channels / reac_frame_clean_len */
+#include <reac/reac.h>   /* reac_frame_channels */
 
 #include <stdio.h>
 #include <string.h>
@@ -141,8 +141,14 @@ static int classify_core(struct reac_disco_peer_lock *lock, const uint8_t *frame
 	/* Byte-exact config-block match or NULL. Never reac_box_model_by_channels: its
 	 * S-1608 default (reac_ctrl.c:394) would name a box that was never identified. */
 	out->model = reac_ctrl_identify_box(frame, len);
-	/* The geometry, straight off the length: what the peer IS, beside what it claims. */
-	out->channels = reac_frame_channels(reac_frame_clean_len(len));
+	/* The geometry, straight off the length: what the peer IS, beside what it claims.
+	 * `len` IS THE FRAME'S LENGTH — this classifier no longer strips a capture path's
+	 * +2 on its caller's behalf. The doors that take wire bytes do that
+	 * (reac_pacer_rx_ingest, reac_hunt_observe, reac_rx, reac_tap; <reac/reac.h>
+	 * carries the census that put the residue outside the protocol), so a
+	 * residue-carrying buffer reaching here reads as NO geometry — like every other
+	 * length that is not 52 + n*36, which is what it is. */
+	out->channels = reac_frame_channels(len);
 	return 0;
 }
 

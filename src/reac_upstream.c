@@ -10,12 +10,14 @@
 
 int reac_upstream_channels(size_t len)
 {
-	/* Some captures leave 2 bytes of Ethernet FCS after the end marker (a 2-byte
-	 * CRC-16 trailer AFTER the C2 EA end marker: the upstream analogue of the downstream
-	 * 1492->1494 (+2). Strip it so the box-width math below sees the clean frame;
-	 * without this the S-4000's 1206 B (52 + 32*36 + 2) fails the %36 check, an RX
-	 * gate rejects every frame, and capture is silent. */
-	len = reac_frame_clean_len(len);
+	/* THE LENGTH MUST ALREADY BE CLEAN. A REAC frame is 52 + n*36, full stop; the
+	 * +2 some capture paths leave after the C2 EA end marker is the CAPTURE's and
+	 * does not occur on the wire (0 residue frames in 592,762 off a plain NIC,
+	 * census 2026-09-21). INGEST strips it — reac_frame_clean_len() in reac_rx,
+	 * reac_tap, reac_pacer_rx_ingest, reac_hunt_observe — and this parser refuses
+	 * what ingest failed to strip, because a parser that strips silently accepts a
+	 * frame two bytes longer than the protocol's own law and hides a reader bug.
+	 * 1206 / 630 / 342 therefore come back -1, exactly like 1205 or 629. */
 	if (len < REAC_UPSTREAM_OVERHEAD + 2 * REAC_UPSTREAM_BYTES_PER_CH)
 		return -1;
 	if ((len - REAC_UPSTREAM_OVERHEAD) % REAC_UPSTREAM_BYTES_PER_CH != 0)
@@ -37,10 +39,9 @@ int reac_upstream_decode(const uint8_t *raw, size_t len, uint8_t *out)
 		return -1;
 	if (raw[12] != 0x88 || raw[13] != 0x19)
 		return -1;
-	/* End-marker check against the CLEAN frame length (excludes any +2 FCS residue);
-	 * the audio region [50 : 50+nch*36] the loop below reads is unaffected by the trailer. */
-	size_t clean_len = REAC_UPSTREAM_OVERHEAD + (size_t)nch * REAC_UPSTREAM_BYTES_PER_CH;
-	if (raw[clean_len - 2] != REAC_END_MARKER_0 || raw[clean_len - 1] != REAC_END_MARKER_1)
+	/* The end marker is the frame's last two bytes — `len` is clean (see
+	 * reac_upstream_channels) so the frame ends where the buffer does. */
+	if (raw[len - 2] != REAC_END_MARKER_0 || raw[len - 1] != REAC_END_MARKER_1)
 		return -1;
 
 	const uint8_t *audio = raw + REAC_L2_HEADER_LEN;
