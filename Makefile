@@ -179,6 +179,13 @@ test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c
 	# with the announce on every chassis we own, so no test built from our own
 	# captures can catch its return; only the shape of the code can.
 	tools/conformance-headamp-base.sh
+	# ANOTHER SOURCE-SHAPE ARM, for the same reason. test_sniffer_binds_first
+	# measures the sniffer that had the defect; nothing measures the NEXT socket
+	# somebody opens, and #19 IS #18 written again five days later in another
+	# file. This one refuses a packet socket created with a protocol anywhere in
+	# the tree, and it carries a planted good/bad pair so it cannot pass (or fail)
+	# vacuously.
+	tools/conformance-packet-socket.sh
 	@$(MAKE) --no-print-directory facts-drift-check
 
 # THE CAPTURE CORPUS IS A REGRESSION SUITE. The unit suite above runs on
@@ -192,6 +199,7 @@ corpus_check: tools/corpus_check.c libreac.a
 
 conformance:
 	tools/conformance-headamp-base.sh
+	tools/conformance-packet-socket.sh
 	# THE HARNESS IS AN INSTRUMENT, AND AN INSTRUMENT IS GATED LIKE ONE. The
 	# pacer comparison (2026-09-13-reac-kernel-module-backend.md, lane 1) is
 	# decided by a table; a table whose two columns cannot be made to differ

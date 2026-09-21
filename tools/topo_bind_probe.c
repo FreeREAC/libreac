@@ -64,13 +64,19 @@ static void build_frame(uint8_t *f, uint8_t tag)
 	f[14] = tag;
 }
 
-/* A raw sender bound to `ifname`. Returns the fd, or -1 with errno set. */
+/* A raw sender for `ifname`. Returns the fd, or -1 with errno set.
+ *
+ * PROTOCOL 0: this socket only sends, and sendto() takes the device from `to` and the
+ * ethertype from the frame's own bytes. A protocol here would make the INSTRUMENT a
+ * host-wide sniffer — the very thing it is measuring the library for (#18/#19). The
+ * probe opens its own sockets by hand rather than through reac_packet_socket.h on
+ * purpose: an instrument that shares the code under test cannot see it break. */
 static int sender_open(const char *ifname, struct sockaddr_ll *to)
 {
 	unsigned idx = if_nametoindex(ifname);
 	if (idx == 0)
 		return -1;
-	int fd = socket(AF_PACKET, SOCK_RAW, htons(REAC_ETHERTYPE));
+	int fd = socket(AF_PACKET, SOCK_RAW, 0);
 	if (fd < 0)
 		return -1;
 	memset(to, 0, sizeof *to);
