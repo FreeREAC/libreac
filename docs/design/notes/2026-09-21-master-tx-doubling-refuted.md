@@ -62,6 +62,22 @@ raw, three weeks after the dedup that exists for exactly this. PR #93 was withdr
   declaration path instead: libreac `7702d6e`, `09d5710`, `b50070c`, `2920484`, `c8aed34`;
   reac-pw `74ee4f8`.)
 
+## How this should have been caught
+
+We own the protocol: a `.ksy` grammar built from real traffic, and a corpus whose mirror
+twins were stripped a month before this branch was written. Nothing in either was
+consulted — the claim "wire-verified" was believed through two triage passes on the
+strength of a commit message, and no one parsed a capture until now. A static reading
+cannot settle a wire question, and prose in `reac.h` did not stop it twice.
+
+**Owed, mechanical:** a corpus-invariant test — in libreac's capture tier beside
+`tests/test_capture.c`, or in reac-tools next to `dedupe_mirror_twins()` — that parses the
+mirror-deduplicated captures with the `.ksy` geometry and asserts the protocol facts we
+actually rely on, one of them being that a master emits each downstream frame exactly once
+(no two consecutive clean-length frames of one source share a counter). It must report how
+many frames it examined, so an empty scan cannot pass as a clean one. With that in place a
+false wire claim reds a test instead of surviving in a commit.
+
 ## Disposition
 
 `transport/src/reac_pacer.c` unchanged. reac-pw's `fix/master-tx-frame-doubling` is a
