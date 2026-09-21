@@ -37,6 +37,7 @@ test_link
 test_identity
 test_master_carriers
 test_master_capture
+test_wire_invariants
 test_abi_layout
 group_map_scan
 test_tap
