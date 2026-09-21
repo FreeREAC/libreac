@@ -70,13 +70,48 @@ consulted — the claim "wire-verified" was believed through two triage passes o
 strength of a commit message, and no one parsed a capture until now. A static reading
 cannot settle a wire question, and prose in `reac.h` did not stop it twice.
 
-**Owed, mechanical:** a corpus-invariant test — in libreac's capture tier beside
-`tests/test_capture.c`, or in reac-tools next to `dedupe_mirror_twins()` — that parses the
-mirror-deduplicated captures with the `.ksy` geometry and asserts the protocol facts we
-actually rely on, one of them being that a master emits each downstream frame exactly once
-(no two consecutive clean-length frames of one source share a counter). It must report how
-many frames it examined, so an empty scan cannot pass as a clean one. With that in place a
-false wire claim reds a test instead of surviving in a commit.
+**Built, not owed any more:** `tests/test_wire_invariants.c`, in `make test`. Real traffic
+is checked in (`tests/wire-invariants.inc`, 3800 records from the two mirrored captures #92
+measured plus one off a plain NIC, via `tools/gen-wire-invariants.py`), and the gate asserts
+one emission per slot, the counter advance against `reac_rate_snap`, the 100BASE-TX bound,
+and residue-only-in-mirrored-captures — with a positive control (mirrored captures must
+yield twins), a negative control (a synthetically doubled stream must be caught) and a
+refusal to pass on an empty or short fixture. Measured: M-200 48k mirror 594 emissions at
+4000 pps → 48 kHz, 48.5 Mbit/s; M-5000 96k mirror 700 at 8000 pps → 96 kHz, 97.0 Mbit/s;
+M-200 48k clean 1000 at 4000 pps; 1294 twins dropped, 0 violations, 800 violations caught
+on the doubled stream.
+
+## The residue census: it is the tap, in every capture we own
+
+Counted 2026-09-21 over all 104 pcaps in the corpus, VLAN tag honoured (a mirror on a trunk
+hands every frame back tagged, `include/reac/pcap_source.h`; a first pass that did not strip
+the tag read 31 files as empty and would have been a blind scan). Positive control: 0 of 104
+files read zero REAC frames.
+
+| tap | files | clean frames | residue frames |
+|---|---:|---:|---:|
+| mirror-tagged name | 50 | 372,068 | 624,948 |
+| VLAN trunk — the desk-port mirror | 25 | 2,739,781 | 3,719,553 |
+| **plain NIC (`-clean` / `-direct`)** | **25** | **592,762** | **0** |
+| untagged, no VLAN | 4 | 3,446 | 41 |
+
+Not one residue-length frame in 592,762 frames captured off a plain NIC. The 41 sit in two
+untagged files, `captures/role-m-boot-20260831-223528-ctrl.pcap` (23 clean / 22 residue) and
+`captures/role-rival-arrives-20260831-215902-ctrl.pcap` (23 / 19) — a 1:1 split, which is
+the mirror signature itself; their filenames simply do not declare a tap. Not evidence of a
+wire variant, and not proof of one either, so they are named here rather than rounded away.
+
+So the +2 is a fact about the capture path and about nothing else. The grammar already
+refuses to model it as a field (`spec/reac.ksy:45-76`, "explained, stripped, NOT modelled"),
+but it still computes it: `instances/has_fcs_residue` and `clean_len` (`spec/reac.ksy:342-356`,
+with `spec/protocol-facts.yaml:113,236` pinned to them). Those two instances, and libreac's
+`reac_frame_clean_len()` / `REAC_FRAME_BYTES_OHRCA`, are INGEST vocabulary living in the
+protocol's vocabulary. Moving them is a reac-protocol change and cannot ride this branch;
+the inventory for whoever takes it: ingest keeps it — `transport/src/reac_rx.c:162,347-355`
+(the live duplicate guard), `transport/src/reac_tap.c` (`prev_clean_len`); the parsers that
+currently strip it themselves — `src/reac_upstream.c:18`, `src/reac_disco.c:145` — are the
+ones that should be handed clean bytes instead, and `tests/test_braid.c:87-91` is the
+fixture that pins the strip.
 
 ## Disposition
 
