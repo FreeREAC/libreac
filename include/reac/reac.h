@@ -249,6 +249,8 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.3.1: the FCS residue leaves the parsers — ingest strips the capture path's +2 once, a
+ *        residue-length frame is refused by reac_upstream/reac_disco; facts 46 -> 47.
  * 1.3.0: reac_tunables.h (docs/design/specs/
  * 2026-09-17-tunables-api-and-shared-refusal-codes.md) — new public surface, no
  * existing struct/symbol moves or changes size, so this is a minor, not an ABI
@@ -256,7 +258,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
 #define LIBREAC_VERSION_MINOR 3
-#define LIBREAC_VERSION_PATCH 0
+#define LIBREAC_VERSION_PATCH 1
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
