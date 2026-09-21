@@ -48,3 +48,4 @@ etf_probe
 topo_bind_probe
 test_no_getenv_conformance
 test_rx_twin
+test_sniffer_binds_first
