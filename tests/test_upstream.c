@@ -67,14 +67,19 @@ int main(void)
 				bad++;
 	CHK(bad == 0);
 
-	/* 3. S-4000 32-ch OHRCA returns (1206 B = 52 + 32*36 + the +2 CRC trailer):
-	 * shape accepted with AND without the trailer, both captured frames decode
-	 * to the independently-computed PCM tables, and the trailer is NOT decoded
-	 * as audio — the 1206 B and 1204 B reads of the same frame are byte-equal. */
-	CHK(reac_upstream_channels(1206) == 32); /* +2 trailer stripped */
-	CHK(reac_upstream_channels(1204) == 32); /* trailerless variant */
+	/* 3. S-4000 32-ch returns, captured at 1206 B = 52 + 32*36 + the capture
+	 * path's +2. THE FIXTURES ARE AS CAPTURED AND THE TEST IS THE READER: it
+	 * strips with reac_frame_clean_len() — ingest's rule — and hands the parser
+	 * 1204. The parser REFUSES 1206 outright (since 2026-09-21: the residue is
+	 * the tap's, never the wire's, and a parser that stripped it would hide a
+	 * reader that forgot), and the decode of the same real frame at 1204 B is
+	 * byte-equal to the PCM tables, so nothing was lost by the strip. */
+	CHK(reac_upstream_channels(1206) == -1); /* the capture's +2, unstripped */
+	CHK(reac_upstream_channels(1204) == 32); /* the frame itself */
 	CHK(reac_upstream_channels(1205) == -1);
-	ns = reac_upstream_decode(UP32A, sizeof UP32A, out);
+	CHK(reac_frame_clean_len(sizeof UP32A) == 1204); /* what the reader hands over */
+	CHK(reac_upstream_decode(UP32A, sizeof UP32A, out) == -1); /* unstripped: refused */
+	ns = reac_upstream_decode(UP32A, reac_frame_clean_len(sizeof UP32A), out);
 	CHK(ns == REAC_SAMPLES_PER_PKT);
 	CHK(reac_frame_counter(UP32A) == 0xff9c);
 	bad = 0;
@@ -83,13 +88,14 @@ int main(void)
 			if (s24_at(out, 32, ch, s) != UP32A_PCM[ch][s])
 				bad++;
 	CHK(bad == 0);
-	/* the trailer bytes never reach the audio: decoding the same real frame at
-	 * its clean 1204 B length yields the identical planar PCM */
+	/* the residue bytes never reach the audio: the same real frame read at its
+	 * 1204 B length, with the two bytes sliced off by hand rather than by the
+	 * reader's rule, yields the identical planar PCM */
 	uint8_t out2[REAC_MAX_CHANNELS * REAC_SAMPLES_PER_PKT * REAC_RESOLUTION];
 	CHK(reac_upstream_decode(UP32A, 1204, out2) == REAC_SAMPLES_PER_PKT);
 	CHK(memcmp(out, out2, (size_t)32 * 12 * 3) == 0);
 	/* the second consecutive frame (counter +1) pins the per-frame stability */
-	ns = reac_upstream_decode(UP32B, sizeof UP32B, out);
+	ns = reac_upstream_decode(UP32B, reac_frame_clean_len(sizeof UP32B), out);
 	CHK(ns == REAC_SAMPLES_PER_PKT);
 	CHK(reac_frame_counter(UP32B) == 0xff9d);
 	bad = 0;
@@ -121,12 +127,19 @@ int main(void)
 	CHK(reac_upstream_decode(f, 627, out) == -1);          /* truncated */
 	CHK(reac_upstream_decode(NULL, 628, out) == -1);
 	CHK(reac_upstream_decode(f, sizeof f, NULL) == -1);
+	/* a residue length is refused at EVERY width, like any other off-law length:
+	 * 52 + n*36 + 2 is a capture artifact and the reader owns it */
+	CHK(reac_upstream_decode(f, 630, out) == -1);
+	CHK(reac_upstream_channels(342) == -1);
+	CHK(reac_upstream_channels(630) == -1);
+	CHK(reac_upstream_channels(1494) == -1);
 
 	if (fails) {
 		fprintf(stderr, "%d check(s) failed\n", fails);
 		return 1;
 	}
-	printf("OK: upstream decode — 16-ch 628 B + 8-ch 340 B + 32-ch 1206/1204 B captured frames, braid "
-	       "layout, full PCM match, shape/validation rejects\n");
+	printf("OK: upstream decode — 16-ch 628 B + 8-ch 340 B + 32-ch 1204 B (captured at 1206, the "
+	       "reader strips the tap's +2 and the parser refuses it unstripped), braid layout, full "
+	       "PCM match, shape/validation rejects\n");
 	return 0;
 }
