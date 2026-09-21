@@ -249,6 +249,16 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.3.2: THE SNIFFER IS DEAF UNTIL IT IS BOUND, in every socket (#19, which is #18 in the
+ *        one socket that never got #18's fix). reac_capture_open, reac_tx_open,
+ *        reac_slave_open and reac_pacer_open handed the protocol to socket(), which
+ *        registers a receive hook on EVERY interface on the host before the bind picks
+ *        one out. reac_packet_socket.h is the door they all go through now: a new header
+ *        with three ADDED functions and nothing else — no existing struct or symbol moves
+ *        or changes size, so LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved). The
+ *        header is internal to the two libraries; it is declared publicly only because
+ *        libreac and libreac-transport are separate build products and both open packet
+ *        sockets, which is why this is a patch and not the minor 1.3.0's new API was.
  * 1.3.1: the FCS residue leaves the parsers — ingest strips the capture path's +2 once, a
  *        residue-length frame is refused by reac_upstream/reac_disco; facts 46 -> 47.
  * 1.3.0: reac_tunables.h (docs/design/specs/
@@ -258,7 +268,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
 #define LIBREAC_VERSION_MINOR 3
-#define LIBREAC_VERSION_PATCH 1
+#define LIBREAC_VERSION_PATCH 2
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what

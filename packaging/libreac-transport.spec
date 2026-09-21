@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.3.1
+Version:        1.3.2
 %global abi 5
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,23 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.2-1
+- EVERY PACKET SOCKET IS CREATED DEAF AND BOUND IN ONE STEP (#19). reac_tx_open,
+  reac_slave_open and reac_pacer_open handed the protocol to socket(), which registers a
+  receive hook on EVERY interface on the host before the bind picks one out; reac_tx never
+  bound at all, so its fd was a permanent host-wide sniffer queueing into a buffer nothing
+  reads. All three go through libreac's reac_packet_socket door now, and reac_topo_tap_open
+  -- which already had #18's fix -- states it through the same door's two halves, because
+  its BPF filter and PACKET_AUXDATA must be set between the socket and the bind. The TX
+  socket asks for protocol 0: sendto() takes the device from its sockaddr_ll and the
+  ethertype from the frame's own bytes.
+- Each site drops its SIOCGIFINDEX ioctl for if_nametoindex(): that ioctl needed an open
+  socket, and needing one is what put the protocol at socket() in the first place. The
+  ifindex each caller stores is the value it stored before. Behaviour and layout only --
+  no struct touched, LIBREAC_ABI stays 4 and libreac-transport.so.5 is unchanged. Version
+  moves with libreac 1.3.2, where the header states it.
+- tools/topo-veth-bind-probe.sh over the refactored tap: 200 opens, 904 foreign frames on
+  the wire, 0 heard, 1 control frame read from its own link. make test-transport green.
 * Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.1-1
 - The FCS residue leaves the parsers: ingest strips the capture path's +2 at the door, once; a residue-length frame is REFUSED by reac_upstream/reac_disco (2 bytes were silently parsed clean before). Facts header 46 -> 47 (PORT_SLOT_IN_SPLIT). test_wire_invariants gates the merge on the deduplicated capture corpus.
 
