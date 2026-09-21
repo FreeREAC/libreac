@@ -5,7 +5,7 @@
 
 #include <reac/reac_hunt.h>
 
-#include <reac/reac.h>   /* REAC_MAX_CHANNELS — the master downstream width */
+#include <reac/reac.h>   /* REAC_MAX_CHANNELS, reac_frame_clean_len */
 
 #include <string.h>
 
@@ -46,6 +46,11 @@ int reac_hunt_observe(struct reac_hunt *h, const uint8_t *frame, size_t len,
                       uint64_t now_ns, struct reac_disco_sighting *out)
 {
 	struct reac_disco_sighting s;
+	/* A DOOR TAKING WIRE BYTES STRIPS THE CAPTURE PATH'S +2, and nothing behind it
+	 * does: the classifier reads a peer's geometry off the frame length, and a
+	 * residue length is no geometry (<reac/reac.h>, census 2026-09-21). A sniffer
+	 * on a mirrored port would otherwise see every peer at width 0. */
+	len = reac_frame_clean_len(len);
 	if (reac_disco_classify_on_segment(&h->lock, frame, len, h->our_mac, &s) != 0)
 		return -1;
 	/* THE WINDOW RUNS FROM THE FIRST SIGHTING, not from the socket opening. A sniffer

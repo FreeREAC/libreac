@@ -289,14 +289,22 @@ transport: libreac-transport.a
 # 802.1Q tag). Absent, the test prints CORPUS ARM NOT RUN rather than passing quietly.
 REAC_TAP_CAPTURE ?=
 
-test-transport: tests/test_tap.c libreac-transport.a libreac.a
+test-transport: tests/test_tap.c tests/test_rx_twin.c libreac-transport.a libreac.a
 	$(CC) $(CFLAGS) $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
 	./test_tap $(REAC_TAP_CAPTURE)
 	tools/conformance-tap-silent.sh
+	# THE DOOR STRIPS THE CAPTURE'S +2, and nothing behind it tolerates one. Since
+	# the parsers refuse a residue length (2026-09-21) that one line in reac_rx's
+	# loop is what keeps a mirror twin a DUPLICATE instead of "not ours"; this
+	# replays real captured frames plus their faithful FCS twins through reac_rx
+	# and requires it, with a no-twin control so `dups` cannot pass vacuously.
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_rx_twin.c libreac-transport.a libreac.a \
+	    -lm -lpthread -o test_rx_twin
+	./test_rx_twin
 
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_etf test_reac_etf_qdisc etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
-	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap
+	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport

@@ -149,14 +149,17 @@ static void feed(struct tally *t, uint8_t *f, size_t len, int truncated, int cor
 		return;   /* the audio region is not there to decode */
 
 	static uint8_t pcm[REAC_MAX_CHANNELS * REAC_SAMPLES_PER_PKT * REAC_RESOLUTION];
+	/* THE READER'S STRIP, and the only one: a mirrored capture leaves the frame's
+	 * own two FCS bytes after the end marker, and every decoder below refuses a
+	 * residue length rather than stripping it again (<reac/reac.h>). */
 	size_t clean = reac_frame_clean_len(len);
 	if (clean == REAC_FRAME_BYTES) {
 		if (reac_decode(f, clean, &REAC_MODE_48K, pcm) == REAC_SAMPLES_PER_PKT)
 			t->audio_dn_ok++;
 		else
 			t->audio_dn_bad++;
-	} else if (reac_upstream_channels(len) > 0) {
-		if (reac_upstream_decode(f, len, pcm) == REAC_SAMPLES_PER_PKT)
+	} else if (reac_upstream_channels(clean) > 0) {
+		if (reac_upstream_decode(f, clean, pcm) == REAC_SAMPLES_PER_PKT)
 			t->audio_up_ok++;
 		else
 			t->audio_up_bad++;
