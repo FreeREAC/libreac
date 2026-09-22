@@ -176,12 +176,25 @@ static int blast(const char *ifname, uint16_t ethertype, int n)
 
 /* What one arm read off the tap. */
 struct heard {
-	unsigned long frames;      /* frames the tap handed back at all           */
-	unsigned long untagged;    /* classified REAC_TOPO_UNTAGGED               */
-	unsigned long tagged;      /* classified as carrying a VID (any ethertype) */
-	unsigned long on_vid;      /* of those, on the VID this arm is about      */
-	unsigned long ensure;      /* ENSURE events the table emitted for it      */
+	unsigned long frames;      /* frames the tap handed back at all            */
+	unsigned long untagged;    /* classified REAC_TOPO_UNTAGGED                */
+	unsigned long on_vid;      /* frames carrying the VID this arm is about    */
+	unsigned long reac_on_vid; /* of those, classified REAC_TOPO_TAGGED        */
+	unsigned long other_on_vid;/* of those, classified REAC_TOPO_TAGGED_OTHER  */
 };
+
+/* ENSURE events, per VID, ACROSS ALL ARMS — and the arms need that, because the table and
+ * its event queue are shared and a VLAN netdev is not silent just because this test has
+ * sent nothing on it yet: `rtopoF.11` emits its own IPv6 multicast the moment it comes up,
+ * so vid 11 is heard (and its ENSURE queued) during an earlier arm's window. An arm that
+ * drained the queue and kept only its own VID's events read that ENSURE as missing, which
+ * is a defect in the instrument and reads exactly like a defect in the table. */
+static unsigned long ensure_seen[4096];
+
+static unsigned long ensures(uint16_t vid)
+{
+	return (vid < 4096) ? ensure_seen[vid] : 0;
+}
 
 /* Drain the tap for `ms` milliseconds, feeding every frame to the table exactly as the
  * daemon's poll does. Every kind that names a VID counts, so this function needs no
@@ -211,18 +224,20 @@ static void drain(struct reac_topo_tap *tap, struct reac_topo *t, uint16_t vid_o
 			uint64_t ns = (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 			if (kind == REAC_TOPO_UNTAGGED)
 				h->untagged++;
-			if (vid != 0) {
-				h->tagged++;
-				if (vid == vid_of_interest)
-					h->on_vid++;
+			if (vid == vid_of_interest && vid != 0) {
+				h->on_vid++;
+				if (kind == REAC_TOPO_TAGGED)
+					h->reac_on_vid++;
+				if (kind == REAC_TOPO_TAGGED_OTHER)
+					h->other_on_vid++;
 			}
 			reac_topo_saw(t, PARENT, kind, vid, ns);
 		}
 	}
 	struct reac_topo_event ev;
 	while (reac_topo_next(t, &ev))
-		if (ev.verb == REAC_TOPO_ENSURE && ev.vid == vid_of_interest)
-			h->ensure++;
+		if (ev.verb == REAC_TOPO_ENSURE && ev.vid < 4096)
+			ensure_seen[ev.vid]++;
 }
 
 static int measure(void)
@@ -256,9 +271,9 @@ static int measure(void)
 	drain(&tap, &topo, VID_COLD, 250, &c);
 	int trunk_after_c = reac_topo_is_trunk(&topo, PARENT);
 	const struct reac_topo_vlan *vc = reac_topo_vlan_find(&topo, PARENT, VID_COLD);
-	printf("C: %d tagged non-REAC frame(s) on vid %d -> heard=%s frames_on_vid=%lu "
-	       "ensure=%lu is_trunk=%d\n", sent_c, VID_COLD, vc ? "yes" : "NO",
-	       c.on_vid, c.ensure, trunk_after_c);
+	printf("C: %d tagged non-REAC frame(s) on vid %d -> heard=%s on_vid=%lu "
+	       "classified_other=%lu ensure=%lu is_trunk=%d\n", sent_c, VID_COLD,
+	       vc ? "yes" : "NO", c.on_vid, c.other_on_vid, ensures(VID_COLD), trunk_after_c);
 
 	/* ---- ARM B: the tap can detect presence. Untagged REAC straight onto the parent's
 	 * far end, which is what an access port — and the desk's NATIVE VLAN — looks like. */
@@ -283,9 +298,9 @@ static int measure(void)
 	drain(&tap, &topo, VID_REAC, 250, &a);
 	int trunk_after_a = reac_topo_is_trunk(&topo, PARENT);
 	const struct reac_topo_vlan *va = reac_topo_vlan_find(&topo, PARENT, VID_REAC);
-	printf("A: %d tagged REAC frame(s) on vid %d -> heard=%s frames_on_vid=%lu "
-	       "ensure=%lu is_trunk=%d\n", sent_a, VID_REAC, va ? "yes" : "NO",
-	       a.on_vid, a.ensure, trunk_after_a);
+	printf("A: %d tagged REAC frame(s) on vid %d -> heard=%s on_vid=%lu "
+	       "classified_reac=%lu ensure=%lu is_trunk=%d\n", sent_a, VID_REAC,
+	       va ? "yes" : "NO", a.on_vid, a.reac_on_vid, ensures(VID_REAC), trunk_after_a);
 
 	/* ---- ARM D: nothing was ever sent on VID_NEVER. */
 	const struct reac_topo_vlan *vd = reac_topo_vlan_find(&topo, PARENT, VID_NEVER);
@@ -301,7 +316,7 @@ static int measure(void)
 		        "  silence on any VID proves nothing.\n", PARENT, sent_b);
 		return 2;
 	}
-	if (a.on_vid == 0 && va == NULL) {
+	if (a.reac_on_vid == 0) {
 		fprintf(stderr, "test_topo_hears_vlans: FAIL — %d tagged REAC frame(s) went\n"
 		        "  onto vid %d and the tap named no VID. §1's third bullet ('a tagged\n"
 		        "  REAC frame ... is REPORTED by its id') does not hold in this library:\n"
@@ -309,7 +324,7 @@ static int measure(void)
 		        "  tag. (2026-09-16-segments-and-roles-are-autodetected.md §1.)\n",
 		        sent_a, VID_REAC);
 		rc = 1;
-	} else if (a.ensure == 0) {
+	} else if (va == NULL || ensures(VID_REAC) == 0) {
 		fprintf(stderr, "test_topo_hears_vlans: FAIL — vid %d was heard and no ENSURE\n"
 		        "  was emitted, so the binding is never told to mint %s.%d.\n",
 		        VID_REAC, PARENT, VID_REAC);
@@ -321,7 +336,7 @@ static int measure(void)
 		        "  access port is driven, and that is two masters for one box.\n", PARENT);
 		rc = 1;
 	}
-	if (vc == NULL) {
+	if (vc == NULL || c.other_on_vid == 0 || ensures(VID_COLD) == 0) {
 		fprintf(stderr, "test_topo_hears_vlans: FAIL — vid %d carried %d tagged frame(s)\n"
 		        "  past the tap and the table never heard it. On a cold rig no REAC frame\n"
 		        "  is ever tagged, so this is the only evidence the VLAN exists, and\n"
@@ -337,6 +352,22 @@ static int measure(void)
 		        "  UNTAGGED (measured 2026-09-10); a trunk verdict from one STP frame\n"
 		        "  would stop that parent being driven and unserve a working segment.\n",
 		        PARENT);
+		rc = 1;
+	}
+	/* The published answer the daemon reports and derives its segments from. */
+	uint16_t vids[REAC_TOPO_MAX_VLANS];
+	int n_vids = reac_topo_heard_vids(&topo, PARENT, vids, REAC_TOPO_MAX_VLANS);
+	int saw_reac = 0, saw_cold = 0;
+	for (int i = 0; i < n_vids; i++) {
+		saw_reac |= (vids[i] == VID_REAC);
+		saw_cold |= (vids[i] == VID_COLD);
+	}
+	printf("published: %d vid(s) heard on %s, %d and %d among them=%d/%d\n",
+	       n_vids, PARENT, VID_REAC, VID_COLD, saw_reac, saw_cold);
+	if (!saw_reac || !saw_cold) {
+		fprintf(stderr, "test_topo_hears_vlans: FAIL — reac_topo_heard_vids() does not\n"
+		        "  publish a VID the table holds, so a binding that asks the library\n"
+		        "  which VLANs this wire carries is told less than it heard.\n");
 		rc = 1;
 	}
 	if (vd != NULL) {

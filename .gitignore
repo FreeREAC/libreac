@@ -53,3 +53,4 @@ test_reac_knock
 test_reac_tapwait
 test_box_0832
 test_box_table
+test_topo_hears_vlans

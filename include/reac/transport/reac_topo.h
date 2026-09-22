@@ -26,19 +26,34 @@
  *     still NAME it (vid 222 with no netdev). That is what makes an unconfigured VLAN
  *     visible, and it is the whole basis of the detector.
  *
- * Hence: ONE ETH_P_ALL SOCKET PER PHYSICAL PARENT, BPF-filtered to 0x8819, read-only,
- * never transmitting, AND DEAF UNTIL IT IS BOUND — the protocol is given to bind() and not
- * to socket(), because a packet socket created with a protocol hears every interface on
- * the host until the bind lands (#18; the reasoning is at reac_topo_tap_open()). The filter matters — without it an ETH_P_ALL socket on a trunk
+ * A COLD VLAN IS NAMED BY THE SWITCH, NOT BY ITS BOX (the 2026-09-22 ruling, reac-pw's
+ * 2026-09-16 spec, amendment of that date). Everything above is about REAC frames, and on a
+ * cold rig there are none: a stagebox is a slave and says nothing until a master speaks,
+ * and the master cannot speak until the segment's netdev exists — so a VLAN whose box is
+ * cold was invisible and reachable only by a hand-written declaration. But a trunk port
+ * carries each VLAN's STP, LLDP, ARP and broadcasts TAGGED whatever the boxes are doing,
+ * and the kernel names the VID on every one of them. Hearing one is the switch naming that
+ * VID: passive, nothing transmitted, no VID presupposed, and never the blind 1-4094 flood
+ * the 2026-09-19 amendment rejects. Such a frame is TAGGED_OTHER: it ensures a segment and
+ * it NEVER counts towards the trunk verdict (reac_topo_saw's note says what that costs).
+ *
+ * Hence: ONE ETH_P_ALL SOCKET PER PHYSICAL PARENT, BPF-filtered to REAC or to anything the
+ * kernel says ARRIVED TAGGED, read-only, never transmitting, AND DEAF UNTIL IT IS BOUND —
+ * the protocol is given to bind() and not to socket(), because a packet socket created with
+ * a protocol hears every interface on the host until the bind lands (#18; the reasoning is
+ * at reac_topo_tap_open()). The filter matters — without it an ETH_P_ALL socket on a trunk
  * copies every frame on the link to userspace. It accepts the accelerated case (the tag in
- * metadata, ethertype 0x8819 at offset 12) and the in-buffer case (0x8100/0x88a8 at 12,
- * 0x8819 behind it) alike, because whether a driver strips the tag is a driver's business
- * and a classifier that assumed one of them would go deaf on the other.
+ * metadata, ethertype 0x8819 at offset 12) and the in-buffer case (0x8100/0x88a8 at 12)
+ * alike, because whether a driver strips the tag is a driver's business and a classifier
+ * that assumed one of them would go deaf on the other; the tagged-but-not-REAC arm reads
+ * SKF_AD_VLAN_TAG_PRESENT and is truncated to 64 bytes, since the only thing wanted from
+ * such a frame is which VID it came from. An untagged non-REAC frame is still dropped in
+ * the kernel and never costs a copy.
  *
  * THE DETECTOR ONLY EVER UPGRADES (§4b). There is no moment at which it must conclude "this
  * is not a trunk": untagged 0x8819 with no sub-interfaces is an ordinary segment and is
- * today's behaviour; any tagged 0x8819 means a VLAN exists and needs a segment. So no dwell,
- * no window to tune. A box that first speaks on VID 12 an hour into the show is served an
+ * today's behaviour; any tag means a VLAN exists and needs a segment. So no dwell, no
+ * window to tune. A box that first speaks on VID 12 an hour into the show is served an
  * hour into the show and nothing was concluded wrongly in the meantime.
  *
  * A PARENT THAT CARRIES TAGGED REAC IS NEVER ITSELF DRIVEN (§3's ruling, §4f). It receives
@@ -78,11 +93,15 @@
  * frame on that VID retries at wire speed. */
 #define REAC_TOPO_RETRY_NS (10ULL * 1000000000ULL)
 
-/* What one frame on a parent's tap turned out to be. */
+/* What one frame on a parent's tap turned out to be. APPEND ONLY: the values cross the
+ * library boundary as plain ints and a binding built against an older header passes one
+ * through unchanged. */
 enum reac_topo_kind {
-	REAC_TOPO_NOT_REAC = 0, /* not 0x8819 — the BPF should have dropped it */
+	REAC_TOPO_NOT_REAC = 0, /* untagged and not 0x8819 — the BPF should have dropped it */
 	REAC_TOPO_UNTAGGED,     /* 0x8819, no VLAN: the parent itself may be the segment */
 	REAC_TOPO_TAGGED,       /* 0x8819 inside a tag: a segment on VLAN <vid> of this parent */
+	REAC_TOPO_TAGGED_OTHER, /* a tag on some other ethertype: VLAN <vid> EXISTS, and that
+	                         * is all it says. Since 1.5.0 (the 2026-09-22 ruling). */
 };
 
 const char *reac_topo_kind_name(enum reac_topo_kind k);
@@ -95,6 +114,10 @@ const char *reac_topo_kind_name(enum reac_topo_kind k);
  * outer tag into metadata and the inner stays in the bytes, and it is the OUTER VID that
  * names the netdev a frame arrives on. VID 0 is a priority tag and names no VLAN (802.1Q),
  * so it reads as UNTAGGED and never mints `<parent>.0`.
+ *
+ * A TAG ON ANY OTHER ETHERTYPE IS TAGGED_OTHER, with the VID filled in (since 1.5.0). It
+ * is a strictly weaker fact than TAGGED — "this VLAN exists" and nothing about REAC — and
+ * the two are kept apart everywhere downstream, above all in the trunk verdict.
  *
  * `vid_out` may be NULL. Returns the kind; a short or malformed buffer is NOT_REAC,
  * never a guess. */
@@ -159,9 +182,13 @@ void reac_topo_init(struct reac_topo *t);
 int reac_topo_watch(struct reac_topo *t, const char *parent);
 void reac_topo_unwatch(struct reac_topo *t, const char *parent, uint64_t now_ns);
 
-/* One classified frame. TAGGED with a fresh VID queues ENSURE; a VID already served just
- * refreshes its clock. UNTAGGED only counts — the parent is served by the ordinary
- * hearing path, and refused there once this parent is a trunk. */
+/* One classified frame. TAGGED or TAGGED_OTHER with a fresh VID queues ENSURE; a VID
+ * already served just refreshes its clock. UNTAGGED only counts — the parent is served by
+ * the ordinary hearing path, and refused there once this parent is a trunk.
+ *
+ * ONLY TAGGED FEEDS `tagged`, AND SO THE TRUNK VERDICT. A tagged frame that is not REAC
+ * says a VLAN exists; it says nothing about whether this parent carries REAC of its own,
+ * and on the rig the parent's own box IS heard untagged, on the trunk's native VLAN. */
 void reac_topo_saw(struct reac_topo *t, const char *parent, enum reac_topo_kind kind,
                    uint16_t vid, uint64_t now_ns);
 
@@ -198,6 +225,13 @@ int reac_topo_untagged_on_trunk(struct reac_topo *t, const char *parent);
 
 /* VIDs on this parent in `state` (REAC_TOPO_VLAN_FREE counts nothing). */
 int reac_topo_count(const struct reac_topo *t, const char *parent, enum reac_topo_vstate st);
+
+/* EVERY VLAN ID HEARD ON THIS PARENT, whatever named it and whatever state it reached —
+ * the library's published answer to "which VLANs does this wire carry", which a binding
+ * reports and derives its segment list from rather than keeping a list of its own. Writes
+ * up to `max` ids into `out` in table order and returns how many were written; `out` may
+ * be NULL to count them. An unknown parent is 0, because silence is not a topology. */
+int reac_topo_heard_vids(const struct reac_topo *t, const char *parent, uint16_t *out, int max);
 
 /* Is `ifname` STACKED on another netdev — a VLAN sub-interface, a bridge, a bond master —
  * rather than a physical parent? Reads `<root ?: "/sys/class/net">/<ifname>/` for a
