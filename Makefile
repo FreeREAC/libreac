@@ -25,7 +25,7 @@ INC     := -Iinclude
 # Every file in the second list is PURE - no socket, no thread, no clock - which is what let
 # them move here unchanged from reac-pw, where they had already been written that way.
 OBJS = reac.o reac_ctrlblk.o reac_box_synth.o reac_identity.o reac_ports.o reac_decode.o reac_upstream.o reac_encode.o reac_packet_socket.o reac_capture.o pcap_source.o \
-       reac_fsm.o reac_master.o reac_master_fsm.o reac_hunt.o reac_arbitration.o \
+       reac_fsm.o reac_master.o reac_master_fsm.o reac_hunt.o reac_knock.o reac_tapwait.o reac_arbitration.o \
        reac_grant.o reac_headamp_tx.o reac_ctrl.o reac_scene_body.o \
        reac_link_state.o reac_disco.o reac_boxreg.o reac_clock.o reac_link.o reac_macaddr.o
 
@@ -99,7 +99,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c libreac.a $(FACTS_ASSERT_H)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -133,6 +133,15 @@ test: tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c
 	./test_facts
 	$(CC) $(CFLAGS) $(INC) tests/test_identity.c libreac.a -lm -o test_identity
 	./test_identity
+	# WHEN A WIRE NOBODY CONFIGURED MAY BE DRIVEN, and how long a sighting the
+	# topology tap has not placed holds the hunt off it. Both are the hunt's own
+	# inputs (docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md)
+	# and both used to live in reac-pw, where a libreac change could not see them
+	# go red. Pure: a clock and a verdict, no socket, no frame.
+	$(CC) $(CFLAGS) $(INC) tests/test_reac_knock.c libreac.a -lm -o test_reac_knock
+	./test_reac_knock
+	$(CC) $(CFLAGS) $(INC) tests/test_reac_tapwait.c libreac.a -lm -o test_reac_tapwait
+	./test_reac_tapwait
 	# Library reads no environment (2026-09-17-tunables-api-and-shared-refusal-codes.md).
 	$(CC) $(CFLAGS) $(INC) tests/test_no_getenv_conformance.c -o test_no_getenv_conformance
 	./test_no_getenv_conformance
@@ -322,7 +331,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c libreac-transport.a librea
 	./test_rx_twin
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
