@@ -388,6 +388,16 @@ int reac_topo_is_stacked(const char *root, const char *ifname)
  * speaks, and the master needs the netdev first). Without this arm the tap is deaf to every
  * such frame and reac-pw's 2026-09-16 spec §1 can never fire on a cold trunk.
  *
+ * AND IT IS THE ARM THAT DOES THE WORK ON EVERY WIRE WE CAN MEASURE. Sabotage-measured
+ * 2026-09-22 on veth in a netns (tests/test_topo_hears_vlans.c) and through the daemon
+ * (reac-pw's hearing-finds-a-segment.sh): drop this arm and the cold VLAN is not heard at
+ * all; drop the two in-buffer arms instead and every test stays green. The kernel
+ * accelerates the tag on veth, and it does on the rig's NIC too (`rx-vlan-offload: on`,
+ * measured 2026-09-10) — so the in-buffer arms are exercised by NO wire test anywhere,
+ * only by the classifier's own unit arms, which hand it bytes directly. They stay because
+ * whether a driver strips a tag is a driver's business and the one that does not is the
+ * one nobody will be watching for.
+ *
  * IT IS THE ONLY ARM THAT TRUNCATES. Everything it admits is a frame we want for ONE fact —
  * which VID it came from, which is metadata — so 64 bytes is all that is ever read of it
  * (the classifier reads at most 22, reac-pw's reader also wants the source MAC at 6). A
