@@ -28,9 +28,10 @@
 const char *reac_topo_kind_name(enum reac_topo_kind k)
 {
 	switch (k) {
-	case REAC_TOPO_NOT_REAC: return "not-reac";
-	case REAC_TOPO_UNTAGGED: return "untagged";
-	case REAC_TOPO_TAGGED:   return "tagged";
+	case REAC_TOPO_NOT_REAC:     return "not-reac";
+	case REAC_TOPO_UNTAGGED:     return "untagged";
+	case REAC_TOPO_TAGGED:       return "tagged";
+	case REAC_TOPO_TAGGED_OTHER: return "tagged-other";
 	}
 	return "?";
 }
@@ -80,10 +81,16 @@ enum reac_topo_kind reac_topo_classify(const void *buf, size_t len, int tci_vali
 			vid = (uint16_t)(be16at(b + off + 2) & 0x0fff);
 		off += 4;
 	}
-	if (be16at(b + off) != REAC_ETHERTYPE)
-		return REAC_TOPO_NOT_REAC;
 	if (vid_out)
 		*vid_out = vid;
+	/* A TAG NAMES A VLAN WHATEVER IT CARRIES (ruling 2026-09-22). On a cold rig no REAC
+	 * frame is ever tagged — a stagebox is a slave and says nothing until a master
+	 * speaks — so the switch's own STP/LLDP/broadcast traffic is the only thing that
+	 * says the VLAN is there at all. It is a weaker fact than a REAC sighting and it is
+	 * kept separate all the way up: this never reads as REAC_TOPO_TAGGED, so it never
+	 * reaches the trunk verdict. */
+	if (be16at(b + off) != REAC_ETHERTYPE)
+		return vid ? REAC_TOPO_TAGGED_OTHER : REAC_TOPO_NOT_REAC;
 	return vid ? REAC_TOPO_TAGGED : REAC_TOPO_UNTAGGED;
 }
 
@@ -186,7 +193,17 @@ void reac_topo_saw(struct reac_topo *t, const char *parent, enum reac_topo_kind 
 		p->untagged++;
 		return;
 	}
-	p->tagged++;
+	if (vid == 0)
+		return;
+	/* ONLY TAGGED REAC MAKES A TRUNK, AND THE DESK IS WHY. `tagged` feeds
+	 * reac_topo_is_trunk(), which decides whether the PARENT may be driven at all. On
+	 * the rig enp131s0's S-4000 is heard UNTAGGED because VLAN 11 is that trunk port's
+	 * native VLAN (measured 2026-09-10), so a trunk verdict drawn from one STP frame
+	 * would stop that parent being driven and unserve a segment that works today.
+	 * Hearing a VID and refusing to drive a parent are two questions about one frame,
+	 * and only the second is about REAC. */
+	if (kind == REAC_TOPO_TAGGED)
+		p->tagged++;
 	struct reac_topo_vlan *free_slot = NULL;
 	for (int i = 0; i < REAC_TOPO_MAX_VLANS; i++) {
 		struct reac_topo_vlan *v = &p->v[i];
@@ -313,6 +330,22 @@ int reac_topo_count(const struct reac_topo *t, const char *parent, enum reac_top
 	return n;
 }
 
+int reac_topo_heard_vids(const struct reac_topo *t, const char *parent, uint16_t *out, int max)
+{
+	const struct reac_topo_parent *p = reac_topo_find(t, parent);
+	int n = 0;
+	if (!p)
+		return 0;
+	for (int i = 0; i < REAC_TOPO_MAX_VLANS; i++) {
+		if (p->v[i].state == REAC_TOPO_VLAN_FREE)
+			continue;
+		if (out && n < max)
+			out[n] = p->v[i].vid;
+		n++;
+	}
+	return (out && n > max) ? max : n;
+}
+
 int reac_topo_is_stacked(const char *root, const char *ifname)
 {
 	if (!ifname || !ifname[0])
@@ -333,26 +366,47 @@ int reac_topo_is_stacked(const char *root, const char *ifname)
 
 /* ---- the socket shell ------------------------------------------------------------- */
 
-/* 0x8819, tagged or not, and nothing else. An ETH_P_ALL socket on a trunk without this
- * filter copies every frame on the link to userspace.
+/* REAC, OR ANYTHING THAT CARRIES A TAG, AND NOTHING ELSE. An ETH_P_ALL socket on a trunk
+ * without a filter copies every frame on the link to userspace, so this is the load guard
+ * as much as the classifier's front door, and each arm is here for a different fact.
  *
- * With an accelerated tag the bytes carry no 802.1Q header at all (measured — see the
- * header), so instruction 1 matches on its own; with an in-buffer tag the ethertype at 12
- * is 0x8100 or 0x88a8 and the real one sits 4 bytes further on, which is what the second
- * and third arms read. Two levels of tag are accepted for the QinQ case. */
+ * 0x8819 AT 12 IS REAC WITH THE TAG ACCELERATED AWAY, OR NO TAG AT ALL — the kernel hands
+ * us the frame with the 802.1Q header already out of the bytes (measured; see the header),
+ * and `tp_vlan_tci` is what tells the two apart. Passed WHOLE: this is the audio protocol's
+ * own frame and the arm that has always been here.
+ *
+ * 0x8100/0x88a8 AT 12 IS A TAG THE DRIVER LEFT IN THE BYTES. Whether a driver strips a tag
+ * is a driver's business and a classifier that assumed one of them would go deaf on the
+ * other. Passed whole too, and the classifier walks two levels for the QinQ case.
+ *
+ * THE ANCILLARY ARM IS THE 2026-09-22 RULING, AND IT IS THE WHOLE OF THE COLD-VLAN FIX.
+ * `SKF_AD_VLAN_TAG_PRESENT` is the kernel's own "this frame arrived tagged" bit — the same
+ * one tcpdump's `vlan` primitive reads — and it is true for frames of EVERY ethertype. A
+ * trunk port carries each VLAN's STP, LLDP, ARP and broadcast traffic tagged whatever the
+ * boxes are doing, and on a cold rig that is the only evidence the VLAN exists at all
+ * (nothing REAC is ever tagged there: a stagebox is a slave and says nothing until a master
+ * speaks, and the master needs the netdev first). Without this arm the tap is deaf to every
+ * such frame and reac-pw's 2026-09-16 spec §1 can never fire on a cold trunk.
+ *
+ * IT IS THE ONLY ARM THAT TRUNCATES. Everything it admits is a frame we want for ONE fact —
+ * which VID it came from, which is metadata — so 64 bytes is all that is ever read of it
+ * (the classifier reads at most 22, reac-pw's reader also wants the source MAC at 6). A
+ * shared trunk's whole tagged load would otherwise be copied out in full for that one fact.
+ * An UNTAGGED non-REAC frame — the bulk of a native VLAN's traffic — is still dropped in
+ * the kernel and never costs a copy. */
+#define REAC_TOPO_TAG_SNAP 64
+
 static struct sock_filter reac_topo_bpf[] = {
-	{ BPF_LD  | BPF_H   | BPF_ABS, 0, 0, 12 },            /* A = ethertype        */
-	{ BPF_JMP | BPF_JEQ | BPF_K,   9, 0, REAC_ETHERTYPE },/* plain 0x8819 -> pass */
-	{ BPF_JMP | BPF_JEQ | BPF_K,   1, 0, VLAN_CTAG },
-	{ BPF_JMP | BPF_JEQ | BPF_K,   0, 6, VLAN_STAG },     /* not a tag -> drop    */
-	{ BPF_LD  | BPF_H   | BPF_ABS, 0, 0, 16 },            /* A = inner ethertype  */
-	{ BPF_JMP | BPF_JEQ | BPF_K,   5, 0, REAC_ETHERTYPE },
-	{ BPF_JMP | BPF_JEQ | BPF_K,   1, 0, VLAN_CTAG },
-	{ BPF_JMP | BPF_JEQ | BPF_K,   0, 2, VLAN_STAG },
-	{ BPF_LD  | BPF_H   | BPF_ABS, 0, 0, 20 },            /* A = innermost        */
-	{ BPF_JMP | BPF_JEQ | BPF_K,   1, 0, REAC_ETHERTYPE },
-	{ BPF_RET | BPF_K,             0, 0, 0 },             /* drop                 */
-	{ BPF_RET | BPF_K,             0, 0, 0x40000 },       /* pass the whole frame */
+	{ BPF_LD  | BPF_H   | BPF_ABS, 0, 0, 12 },              /* A = ethertype at 12     */
+	{ BPF_JMP | BPF_JEQ | BPF_K,   6, 0, REAC_ETHERTYPE },  /* REAC              -> whole */
+	{ BPF_JMP | BPF_JEQ | BPF_K,   5, 0, VLAN_CTAG },       /* tag in the bytes  -> whole */
+	{ BPF_JMP | BPF_JEQ | BPF_K,   4, 0, VLAN_STAG },       /* QinQ outer        -> whole */
+	{ BPF_LD  | BPF_B   | BPF_ABS, 0, 0,                    /* A = "arrived tagged?"   */
+	  (unsigned)(SKF_AD_OFF + SKF_AD_VLAN_TAG_PRESENT) },
+	{ BPF_JMP | BPF_JEQ | BPF_K,   1, 0, 0 },               /* no tag            -> drop  */
+	{ BPF_RET | BPF_K,             0, 0, REAC_TOPO_TAG_SNAP },
+	{ BPF_RET | BPF_K,             0, 0, 0 },               /* drop                    */
+	{ BPF_RET | BPF_K,             0, 0, 0x40000 },         /* pass the whole frame    */
 };
 
 int reac_topo_tap_open(struct reac_topo_tap *t, const char *parent)

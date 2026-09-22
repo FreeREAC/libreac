@@ -249,6 +249,21 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
+ *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
+ *        amendment of that date). reac_topo's tap was BPF-filtered to 0x8819, so a VLAN
+ *        whose box is cold — a stagebox is a slave and says nothing until a master speaks,
+ *        and the master needs the netdev first — was invisible and reachable only by a
+ *        hand-written declaration. The filter now also admits anything the kernel says
+ *        ARRIVED TAGGED (SKF_AD_VLAN_TAG_PRESENT, truncated to 64 bytes), because a trunk
+ *        port carries each VLAN's STP/LLDP/ARP tagged whatever the boxes are doing, and
+ *        that is the switch naming its VIDs. One ADDED enum value (REAC_TOPO_TAGGED_OTHER,
+ *        appended) and one ADDED function (reac_topo_heard_vids); no existing struct or
+ *        symbol moves or changes size, so LIBREAC_ABI stays 4 (61 structs / 578 offsets,
+ *        unmoved) and this is a minor. The trunk verdict deliberately did NOT widen with
+ *        the filter: only tagged REAC feeds reac_topo_is_trunk(), because the rig's own box
+ *        is heard UNTAGGED on the trunk's native VLAN and a verdict from one STP frame
+ *        would unserve it.
  * 1.4.0: DECIDING WHAT A WIRE IS BELONGS HERE, NOT TO THE BINDING
  *        (docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md).
  *        reac_knock.h (the masterless observation that licences driving a vacant wire)
