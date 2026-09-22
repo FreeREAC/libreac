@@ -317,7 +317,7 @@ transport: libreac-transport.a
 # 802.1Q tag). Absent, the test prints CORPUS ARM NOT RUN rather than passing quietly.
 REAC_TAP_CAPTURE ?=
 
-test-transport: tests/test_tap.c tests/test_rx_twin.c libreac-transport.a libreac.a
+test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlans.c libreac-transport.a libreac.a
 	$(CC) $(CFLAGS) $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
 	./test_tap $(REAC_TAP_CAPTURE)
 	tools/conformance-tap-silent.sh
@@ -329,10 +329,21 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c libreac-transport.a librea
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_rx_twin.c libreac-transport.a libreac.a \
 	    -lm -lpthread -o test_rx_twin
 	./test_rx_twin
+	# THE TAP AGAINST A KERNEL THAT REALLY TAGS. Every other arm on reac_topo is fed
+	# buffers this repo builds, and a hand-built buffer cannot say whether the kernel
+	# accelerated the tag into tp_vlan_tci or left it in the bytes — the one question
+	# the classifier exists to answer. A veth trunk in a private user+net namespace,
+	# VLAN netdevs on the FAR end only, so the kernel inserts every tag. It exits 2
+	# saying NOTHING WAS TESTED where iproute2 or user namespaces are missing; that is
+	# not a pass and is not swallowed here, because this target is host-shell only
+	# already (REACPW_INCLUDE has no meaning in a release tarball).
+	$(CC) $(CFLAGS) $(INC) tests/test_topo_hears_vlans.c libreac-transport.a libreac.a \
+	    -lm -lpthread -o test_topo_hears_vlans
+	./test_topo_hears_vlans
 
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
-	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin
+	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport
