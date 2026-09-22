@@ -60,6 +60,14 @@
  *   FAIL — vid 12 carried 5 tagged frame(s) past the tap and the table never heard it
  * So §1 was already true (A), and the cold VLAN was invisible (C): the BPF on the tap
  * passed 0x8819 and nothing else, so a tag on any other ethertype never reached userspace.
+ *
+ * WHICH FILTER ARM THIS ACTUALLY MEASURES, since two of them could admit the same frame.
+ * Sabotaged both ways, same day: with the ancillary arm (SKF_AD_VLAN_TAG_PRESENT) dropped,
+ * arm C reads heard=NO and this test exits 1; with the two IN-BUFFER arms (0x8100/0x88a8
+ * at offset 12) dropped instead, every arm stays green. The kernel accelerates the tag on
+ * veth — and on the rig's NIC (`rx-vlan-offload: on`, 2026-09-10) — so the in-buffer path
+ * is not exercised by this test, by the daemon's netns tests, or by the rig. It is covered
+ * only by the classifier's unit arms, which are handed bytes directly.
  */
 #define _GNU_SOURCE
 #include <reac/transport/reac_topo.h>
