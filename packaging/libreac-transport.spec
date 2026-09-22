@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.3.2
+Version:        1.4.0
 %global abi 5
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,14 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.4.0-1
+- No change to this library. The version moves with libreac 1.4.0 (one tarball, one
+  version string), which gains reac_knock.h and reac_tapwait.h from reac-pw. Those two
+  are hunt inputs and the hunt is libreac's, so the transport tier gains no symbol and
+  libreac-transport.so.5 is unchanged -- see
+  docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md §2 for why the
+  tap-wait sits beside the hunt it guards rather than beside the tap it waits for.
+
 * Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.2-1
 - EVERY PACKET SOCKET IS CREATED DEAF AND BOUND IN ONE STEP (#19). reac_tx_open,
   reac_slave_open and reac_pacer_open handed the protocol to socket(), which registers a

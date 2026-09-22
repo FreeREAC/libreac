@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.3.2
+Version:        1.4.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,26 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.4.0-1
+- DECIDING WHAT A WIRE IS BELONGS TO THE LIBRARY, NOT TO THE PIPEWIRE BINDING (operator
+  ruling 2026-09-22; docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md).
+  reac-pw 1.0.22 had put two wire state machines in the daemon: the masterless observation
+  that licences driving a vacant wire, and the bounded wait for the topology tap to place a
+  sighting. Both are inputs to reac_hunt, which has been in libreac since 0.8.0 -- and
+  reac_hunt.h was already citing `reac_knock.h` three times at a header that lived in
+  another repository.
+- New public headers: include/reac/reac_knock.h (reac_knock_init/_heard/_step,
+  REAC_KNOCK_LISTEN_NS) and include/reac/reac_tapwait.h (reac_tapwait_binds,
+  REAC_TAPWAIT_NS == REAC_HUNT_WINDOW_NS). Five added functions, two new structs, two new
+  enums; nothing existing moves or changes size, so LIBREAC_ABI stays 4 and
+  tests/test_abi_layout still reads 61 structs / 578 offsets, unmoved. A new public surface
+  is a minor, the same call 1.3.0 made for reac_tunables.h.
+- `make test` gains test_reac_knock and test_reac_tapwait, moved with their sources and
+  unchanged in what they assert -- so a libreac change can now see them go red, which it
+  could not while they ran in reac-pw's suite. Sabotage-verified: removing the "a cancelled
+  observation re-opens" clause from reac_knock_step reds test_reac_knock at its C2 arm.
+- No behaviour change. The two .c files are byte-identical but for their #include line.
+
 * Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.2-1
 - THE SNIFFER IS DEAF UNTIL IT IS BOUND (#19, which is #18 in the one socket that never
   got #18's fix). reac_capture_open() gave the protocol to socket() and bound two syscalls
