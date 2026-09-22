@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.4.0
+Version:        1.5.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,31 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.5.0-1
+- A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TOPOLOGY TAP HEARS THEM (operator ruling
+  2026-09-22, "we must autodetect VLANs when plugged in a switch trunk"; reac-pw's
+  docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md, amendment of that
+  date). The tap's BPF passed 0x8819 and nothing else, so a VLAN whose box is COLD was
+  invisible: a stagebox is a slave and says nothing until a master speaks, and the master
+  cannot speak until the segment's netdev exists. The filter now also admits whatever the
+  kernel says arrived TAGGED (SKF_AD_VLAN_TAG_PRESENT), truncated to 64 bytes because the
+  only thing wanted from such a frame is which VID it came from; an untagged non-REAC frame
+  is still dropped in the kernel. A trunk port carries each VLAN's STP/LLDP/ARP tagged
+  whatever the boxes are doing, so hearing one IS the switch naming that VID -- passive,
+  nothing transmitted, and never the blind 1-4094 flood the 2026-09-19 amendment rejects.
+- New surface: REAC_TOPO_TAGGED_OTHER (appended to enum reac_topo_kind) and
+  reac_topo_heard_vids(). No existing struct or symbol moves or changes size, so
+  LIBREAC_ABI stays 4 -- 61 structs / 578 offsets, unmoved, and tests/test_abi_layout.c
+  says so rather than the diff's shape.
+- The trunk verdict did NOT widen with the filter, and that is the live-rig line: only
+  tagged REAC feeds reac_topo_is_trunk(). The desk's S-4000 is heard UNTAGGED because
+  VLAN 11 is that trunk port's native VLAN (measured 2026-09-10), and a trunk verdict from
+  one STP frame would stop that parent being driven and unserve a working segment.
+- Measured by tests/test_topo_hears_vlans.c: a veth trunk in a private user+net namespace
+  with the VLAN netdevs on the far end only, so every tag is the kernel's. It also makes
+  the settled rule (a tagged REAC frame on a VID with no sub-interface is reported by its
+  id) measured for the first time against a kernel that really tags.
+
 * Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.4.0-1
 - DECIDING WHAT A WIRE IS BELONGS TO THE LIBRARY, NOT TO THE PIPEWIRE BINDING (operator
   ruling 2026-09-22; docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md).
