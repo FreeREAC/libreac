@@ -249,6 +249,15 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.4.0: DECIDING WHAT A WIRE IS BELONGS HERE, NOT TO THE BINDING
+ *        (docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md).
+ *        reac_knock.h (the masterless observation that licences driving a vacant wire)
+ *        and reac_tapwait.h (how long a sighting the topology tap has not placed binds
+ *        the hunt) arrive from reac-pw, where reac_hunt.h had been citing reac_knock.h
+ *        by name at a header that was in another repo. Five ADDED functions, two NEW
+ *        structs, two NEW enums; no existing struct or symbol moves or changes size, so
+ *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved) — the same shape as
+ *        1.3.0 below, and a new public surface is a minor.
  * 1.3.2: THE SNIFFER IS DEAF UNTIL IT IS BOUND, in every socket (#19, which is #18 in the
  *        one socket that never got #18's fix). reac_capture_open, reac_tx_open,
  *        reac_slave_open and reac_pacer_open handed the protocol to socket(), which
@@ -267,8 +276,8 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 3
-#define LIBREAC_VERSION_PATCH 2
+#define LIBREAC_VERSION_MINOR 4
+#define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
