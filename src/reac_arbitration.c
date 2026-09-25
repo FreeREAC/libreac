@@ -163,6 +163,21 @@ enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e)
 	return REAC_RIVAL_UNKNOWN;
 }
 
+enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t now_ns)
+{
+	if (!e)
+		return REAC_RIVAL_NONE;
+	if (e->model != NULL || e->role == REAC_DISCO_ROLE_BOX || e->role == REAC_DISCO_ROLE_MASTER)
+		return reac_rival_kind_of(e);   /* its own frames already said what it is */
+	if (e->channels == 0)
+		return REAC_RIVAL_UNKNOWN;      /* nothing heard to hold on */
+	/* A broadcast stream with no role-bearing frame: HOLD for the declared window, then
+	 * call it what the absence of any master-only frame makes it. */
+	if (now_ns <= e->first_seen_ns || now_ns - e->first_seen_ns < REAC_DESK_PROOF_WINDOW_NS)
+		return REAC_RIVAL_UNKNOWN;
+	return REAC_RIVAL_BOX;
+}
+
 enum reac_rival_kind reac_rival_kind_from_channels(unsigned channels)
 {
 	if (channels == 0)

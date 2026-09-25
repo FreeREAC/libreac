@@ -80,6 +80,42 @@ static void answer_fill(struct reac_segment_answer *out,
 	snprintf(out->rate, sizeof out->rate, "%d", rate_hz > 0 ? rate_hz : 0);
 }
 
+void reac_segment_answer_slave_kind(struct reac_segment_answer *out, int heard,
+                                    uint64_t master_mac48, int rate_hz,
+                                    enum reac_rival_kind peer)
+{
+	if (!out)
+		return;
+	/* WE JOINED, SO WE REFUSED NOTHING — a fact about us, not about the peer. A
+	 * box carries a refusal code for the one case that still refuses (a wire
+	 * pinned master), and that answer is composed by reac_segment_answer_refused;
+	 * publishing the code here would report this segment as declining the very
+	 * master it is following. The PEER's kind is the caller's, decided by what the
+	 * peer declared and how it spoke (reac_sender_kind), never by its width. */
+	answer_fill(out, heard ? REAC_SEGMENT_FOREIGN : REAC_SEGMENT_NONE,
+	            heard ? peer : REAC_RIVAL_NONE,
+	            reac_rival_refusal(REAC_RIVAL_NONE),
+	            heard ? REAC_PACE_FOREIGN_MASTER : REAC_PACE_FREE_RUN,
+	            master_mac48, rate_hz);
+}
+
+void reac_segment_answer_refused_kind(struct reac_segment_answer *out,
+                                      enum reac_rival_kind rival, uint64_t rival_mac48,
+                                      int rate_hz)
+{
+	if (!out)
+		return;
+	/* FOREIGN is not a guess here: this answer exists because arbitration found an
+	 * unambiguous other master on the wire. The pace is that master's for the same
+	 * reason — it is the only thing transmitting, and we are not. */
+	answer_fill(out, REAC_SEGMENT_FOREIGN, rival, reac_rival_refusal(rival),
+	            REAC_PACE_FOREIGN_MASTER, rival_mac48, rate_hz);
+}
+
+/* THE WIDTH-ONLY DOORS, kept because they are public and reac-pw calls them. They
+ * infer the kind from a width, which the 2026-09-25 ruling says cannot tell a desk from
+ * a box; a caller that has the kind (arbitration's `rival`, reac_sender_kind) passes it
+ * to the _kind variants above instead. */
 void reac_segment_answer_slave(struct reac_segment_answer *out, int heard,
                                uint64_t master_mac48, int rate_hz,
                                unsigned wire_channels)

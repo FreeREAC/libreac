@@ -62,7 +62,11 @@
 #include <stddef.h>
 
 /* HOW LONG A VACANT WIRE IS WATCHED BEFORE WE TAKE IT — three master announce
- * cadences.
+ * cadences. The cadence is the protocol fact REAC_ANNOUNCE_PERIOD_MS (reac-protocol's
+ * timing group, read through reac_facts_timing.h) and the three is
+ * REAC_DESK_ANNOUNCES_TO_WAIT (reac_arbitration.h): this window and the HOLD a broadcast
+ * sender gets to prove it is the desk are one number, declared once. It used to be a
+ * typed 3e9.
  *
  * The number is read off the protocol this daemon already emits, not picked: a master
  * announces itself with a cfea once per second and fills the gaps with FILLER
@@ -76,7 +80,7 @@
  * first announce and joined then — the wait is what a wire with nothing on it costs,
  * once, and it is the difference between hunting for three seconds and hunting forever.
  */
-#define REAC_HUNT_WINDOW_NS (3ULL * 1000000000ULL)
+#define REAC_HUNT_WINDOW_NS REAC_DESK_PROOF_WINDOW_NS   /* 3 x REAC_ANNOUNCE_PERIOD_MS */
 
 /* What the hunt has concluded about this segment. `HUNTING` is not a failure: it is the
  * honest state of a wire that has not answered yet, and it is REPORTED rather than spun

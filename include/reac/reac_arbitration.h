@@ -31,6 +31,7 @@
 #include <reac/reac_disco.h>
 #include <reac/reac_master.h>   /* enum reac_master_state: the FSM's OWN state */
 #include <reac/reac_clock.h>    /* the discipline this vocabulary reports on */
+#include <reac/reac_facts_timing.h>   /* REAC_ANNOUNCE_PERIOD_MS — a protocol fact */
 
 #include <stdint.h>
 
@@ -137,12 +138,49 @@ struct reac_arbitration {
 enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e);
 
 /**
+ * HOW LONG A BROADCAST SENDER IS GIVEN TO PROVE IT IS THE DESK.
+ *
+ * A broadcast audio stream whose source has sent nothing that names its role could be the
+ * desk's downstream (its announce not heard yet) or a box's presence-flood. Width cannot
+ * decide it (a box may be 40 wide). Operator ruling 2026-09-25: HOLD WITH A DECLARED LIMIT
+ * — hold the verdict until the sender's own frames prove its role, but never longer than
+ * k x the desk's declared master-announce interval; at the window's end a broadcast
+ * sender with no master-only frame is a BOX.
+ *
+ * The interval is a protocol fact (reac-protocol protocol-facts.yaml, timing group,
+ * ANNOUNCE_PERIOD_MS: a master announces once a second), read from the generated
+ * reac_facts_timing.h — never typed here. k = 3 is this library's choice, and the reason
+ * is the hunt's (reac_hunt.h): one announce would call a desk absent on a single lost
+ * frame, two on two in a row, three is the first window that survives two consecutive
+ * losses, inside the 5 s REAC_DISCO_STALE_NS "really gone" bar.
+ */
+#define REAC_DESK_ANNOUNCES_TO_WAIT 3
+#define REAC_DESK_PROOF_WINDOW_NS \
+	((uint64_t)REAC_DESK_ANNOUNCES_TO_WAIT * (uint64_t)REAC_ANNOUNCE_PERIOD_MS * 1000000ULL)
+
+/**
+ * What a sender IS, with the hold: reac_rival_kind_of() plus time.
+ *
+ *   - declared a box model, or spoke as only a box does          -> BOX
+ *   - announced master (a master-only frame) and declared no box -> DESK (UNKNOWN until a
+ *     stream is heard, as in reac_rival_kind_of)
+ *   - neither (a broadcast stream, role unresolved), no stream heard      -> UNKNOWN
+ *   - neither, heard for less than REAC_DESK_PROOF_WINDOW_NS since first seen -> UNKNOWN
+ *     (HOLD: its announce may still come)
+ *   - neither, heard for the whole window with no master-only frame       -> BOX
+ *
+ * `now_ns` is on the table's clock (the one reac_disco_table_observe was given). NULL is
+ * NONE. Pure.
+ */
+enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t now_ns);
+
+/**
  * WIDTH ONLY — SUPERSEDED for desk-vs-box by reac_rival_kind_of().
  *
  * It says 40 -> DESK and narrower -> BOX, which the 2026-09-25 ruling overturned: a box may be
- * 40 wide. Kept because it is public and because two callers that see only a width still use
- * it (reac_hunt's unresolved-broadcast rule, reac_segment_ident's answer); those are listed as
- * open in docs/audits/2026-09-25-libreac-review.md. 0 is UNKNOWN.
+ * 40 wide. Kept because it is public; nothing in libreac or libreac-transport decides
+ * desk-vs-box with it any more (reac_segment_ident's width-only answers, kept for reac-pw
+ * until it moves to the _kind variants, are the last callers). 0 is UNKNOWN.
  */
 enum reac_rival_kind reac_rival_kind_from_channels(unsigned channels);
 

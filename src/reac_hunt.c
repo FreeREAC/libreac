@@ -102,14 +102,14 @@ static int live(const struct reac_disco_entry *e, uint64_t now_ns)
  *   - an unambiguous BOX sighting: a JOIN/box-ready/identity record, a box heartbeat, a
  *     box's own config announce, or a unicast FILLER feeding some master. This is the
  *     `a box JOIN/announce IS heard` case and it needs nothing else.
- *   - a BOX GEOMETRY from a peer whose role has not resolved. A box that has lost its
- *     master announces by FLOODING BROADCAST FILLER at wire rate on PHY-up
- *     (reac_fsm.h, byte-verified 2026-07-11), and a broadcast FILLER is deliberately
- *     classified UNKNOWN because a master's downstream audio is byte-identical in kind.
- *     Its WIDTH is not ambiguous: 40 channels is the master downstream and nothing
- *     else, every smaller legal geometry is a box — the same law
- *     reac_rival_kind_from_channels applies to a rival. A 16- or 32-channel flood is a
- *     stagebox standing on the wire with its hand up.
+ *   - a BROADCAST stream from a peer whose role has not resolved. A box that has lost its
+ *     master announces by FLOODING BROADCAST FILLER at wire rate on PHY-up (reac_fsm.h,
+ *     byte-verified 2026-07-11), and a broadcast FILLER is deliberately classified
+ *     UNKNOWN because a master's downstream audio is byte-identical in kind. Its width
+ *     does not settle it either — a box may be 40 wide (operator ruling 2026-09-25).
+ *     What settles it is the HOLD WITH A DECLARED LIMIT (reac_sender_kind): the desk
+ *     announces itself once per REAC_ANNOUNCE_PERIOD_MS, so a broadcast sender that sent
+ *     no master-only frame for REAC_DESK_ANNOUNCES_TO_WAIT of those is a box.
  *
  * Refusing the second kind would be the founding bug of this whole area: two boxes sat
  * ungranted on 2026-09-08 while the daemon hunted, because nothing turned "a box is
@@ -124,17 +124,20 @@ static int box_present(const struct reac_disco_table *t, uint64_t now_ns)
 		if (e->role == REAC_DISCO_ROLE_BOX)
 			return 1;
 		if (e->role == REAC_DISCO_ROLE_UNKNOWN &&
-		    reac_rival_kind_from_channels(e->channels) == REAC_RIVAL_BOX)
+		    reac_sender_kind(e, now_ns) == REAC_RIVAL_BOX)
 			return 1;
 	}
 	return 0;
 }
 
-/* Is a 40-channel stream live on this wire from a peer we have NOT yet resolved to a
- * master? That is a desk's downstream audio with its announce not yet heard (or lost),
- * and it is the one case where the window must NOT expire into "vacant". Taking a wire
- * that is carrying a master downstream is the two-masters fault the seglock exists to
- * make impossible between processes; it is no better between a desk and us. */
+/* Is a broadcast stream live on this wire from a peer that has NOT yet proven what it is,
+ * and is still inside its window to do so? That may be a desk's downstream with its
+ * announce not yet heard (or lost), and it is the one case where the window must NOT
+ * expire into "vacant": taking a wire carrying a master downstream is the two-masters
+ * fault the seglock exists to make impossible between processes; it is no better between
+ * a desk and us. It used to be "a 40-channel stream", which a 40-wide box also is. The
+ * hold is bounded: once the sender's window passes with no master-only frame it is a box
+ * (box_present), and this stops holding. */
 static int desk_geometry_live(const struct reac_disco_table *t, const uint8_t our_mac[6],
                               uint64_t now_ns)
 {
@@ -144,7 +147,8 @@ static int desk_geometry_live(const struct reac_disco_table *t, const uint8_t ou
 			continue;
 		if (our_mac && memcmp(e->mac, our_mac, 6) == 0)
 			continue;
-		if (reac_rival_kind_from_channels(e->channels) == REAC_RIVAL_DESK)
+		if (e->role == REAC_DISCO_ROLE_UNKNOWN && e->channels > 0 &&
+		    reac_sender_kind(e, now_ns) == REAC_RIVAL_UNKNOWN)
 			return 1;
 	}
 	return 0;
@@ -214,8 +218,8 @@ static enum reac_hunt_verdict decide(const struct reac_hunt *h, uint64_t now_ns)
 	if (h->arb.state == REAC_SEGMENT_FOREIGN)
 		return h->arb.rival == REAC_RIVAL_UNKNOWN ? REAC_HUNT_REFUSED : REAC_HUNT_SLAVE;
 
-	/* No master evidence. Before calling the wire vacant, refuse to race a 40-channel
-	 * stream whose owner has not announced yet. */
+	/* No master evidence. Before calling the wire vacant, refuse to race a broadcast
+	 * stream whose owner has not proven its role yet — for at most its declared window. */
 	if (desk_geometry_live(&h->table, h->our_mac, now_ns))
 		return REAC_HUNT_HUNTING;
 

@@ -98,13 +98,22 @@ $(BUILD_DIR)/reac_facts_box_width.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
 	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
 	  --groups box_width --guard REAC_FACTS_BOX_WIDTH_H
 
+# The same for the TIMING group: the periods a desk or box fixes (REAC_ANNOUNCE_PERIOD_MS
+# and friends). reac_arbitration.h reads the announce period from it to size the window a
+# broadcast sender is given to prove it is the desk (operator ruling 2026-09-25).
+$(BUILD_DIR)/reac_facts_timing.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
+	@mkdir -p $(BUILD_DIR)
+	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
+	  --groups timing --guard REAC_FACTS_TIMING_H
+
 # The drift gate: only meaningful when the schema is reachable (nothing to
 # compare the fallback against otherwise). Regenerates and diffs against the
 # committed tests/reac_facts_assert.h; a difference fails the build rather
 # than passing quietly on a stale copy.
 .PHONY: facts-drift-check
 ifeq ($(HAVE_SCHEMA),1)
-facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_width.h
+facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_width.h \
+                   $(BUILD_DIR)/reac_facts_timing.h
 	@diff -u tests/reac_facts_assert.h $(BUILD_DIR)/reac_facts_assert.h || \
 	  { echo "tests/reac_facts_assert.h has drifted from $(FACTS_SCHEMA)."; \
 	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_assert.h tests/reac_facts_assert.h"; \
@@ -112,6 +121,10 @@ facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_
 	@diff -u include/reac/reac_facts_box_width.h $(BUILD_DIR)/reac_facts_box_width.h || \
 	  { echo "include/reac/reac_facts_box_width.h has drifted from $(FACTS_SCHEMA)."; \
 	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_box_width.h include/reac/reac_facts_box_width.h"; \
+	    exit 1; }
+	@diff -u include/reac/reac_facts_timing.h $(BUILD_DIR)/reac_facts_timing.h || \
+	  { echo "include/reac/reac_facts_timing.h has drifted from $(FACTS_SCHEMA)."; \
+	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_timing.h include/reac/reac_facts_timing.h"; \
 	    exit 1; }
 else
 facts-drift-check:
@@ -179,6 +192,11 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) ./test_box_width
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_desk_or_box.c libreac.a -lm -o test_desk_or_box
 	$(RUN_TEST) ./test_desk_or_box
+	# HOLD WITH A DECLARED LIMIT (operator ruling 2026-09-25): a broadcast sender is held
+	# until its own frames prove desk or box, for at most REAC_DESK_ANNOUNCES_TO_WAIT x the
+	# protocol's REAC_ANNOUNCE_PERIOD_MS; then, with no master-only frame, it is a box.
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_hold.c libreac.a -lm -o test_hold
+	$(RUN_TEST) ./test_hold
 	$(CC) $(CFLAGS) $(INC) tests/test_master_carriers.c libreac.a -lm -o test_master_carriers
 	$(RUN_TEST) ./test_master_carriers
 	$(CC) $(CFLAGS) $(INC) tests/test_master_capture.c libreac.a -lm -o test_master_capture
@@ -373,7 +391,7 @@ transport: libreac-transport.a
 REAC_TAP_CAPTURE ?=
 
 test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlans.c libreac-transport.a libreac.a
-	$(CC) $(CFLAGS) $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
 	$(RUN_TEST) ./test_tap $(REAC_TAP_CAPTURE)
 	$(RUN_TEST) tools/conformance-tap-silent.sh
 	# THE DOOR STRIPS THE CAPTURE'S +2, and nothing behind it tolerates one. Since
@@ -397,7 +415,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	$(RUN_TEST) ./test_topo_hears_vlans
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_rate_detect test_clock test_identity_cksum test_decode_plain_le etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_rate_detect test_clock test_identity_cksum test_decode_plain_le etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 

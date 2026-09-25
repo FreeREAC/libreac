@@ -126,6 +126,11 @@ make test
   reac_upstream_channels ask it, and a 40-wide box is legal. WIDTH NEVER SAYS DESK:
   reac_rival_kind_of() classifies a rival by its declaration and role, and reac_arbitrate
   uses it; reac_detect_rate_fd prefers the broadcast stream.
+- HOLD WITH A DECLARED LIMIT (operator ruling 2026-09-25): a broadcast sender is held until
+  its own frames prove desk or box, for at most 3 x REAC_ANNOUNCE_PERIOD_MS — a protocol
+  fact, read from the new generated reac_facts_timing.h — then is a box
+  (reac_sender_kind). The hunt's window is the same number.
+- Every test runs under tests/run-test.sh: a timeout on each, exit 77 an explicit SKIP.
 - tests/test_boxreg.c is the fabric guard reac_slots.h claimed: widening the audio fabric
   to 48 now reds `make test`.
 
