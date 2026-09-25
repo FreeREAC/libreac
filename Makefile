@@ -214,7 +214,7 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	./test_clock
 	$(CC) $(CFLAGS) $(INC) tests/test_identity_cksum.c libreac.a -lm -o test_identity_cksum
 	./test_identity_cksum
-	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) tests/test_decode_plain_le.c libreac.a -lm -o test_decode_plain_le
+	$(CC) $(CFLAGS) $(INC) tests/test_decode_plain_le.c libreac.a -lm -o test_decode_plain_le
 	./test_decode_plain_le
 	tests/conformance-cfg-declared-once.sh
 	$(CC) $(CFLAGS) $(INC) -Ipackaging/vendor/reac-pw-headers tests/test_cfg.c libreac.a -lm -o test_cfg

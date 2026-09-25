@@ -12,6 +12,11 @@
  * can assert it directly. Each source appears once per list, so "best available"
  * is a total order with no ties to resolve. */
 
+_Static_assert(REAC_CLOCK_SRC_COUNT == REAC_CLOCK_SRC_WIRE + 1,
+               "REAC_CLOCK_SRC_COUNT counts enum reac_clock_source");
+_Static_assert(REAC_CLOCK_Q_COUNT == REAC_CLOCK_Q_DESIGNATED + 1,
+               "REAC_CLOCK_Q_COUNT counts enum reac_clock_quality");
+
 static const enum reac_clock_source master_hier[] = {
 	REAC_CLOCK_SRC_PHC,     /* independent of both the host and the segment  */
 	REAC_CLOCK_SRC_GRAPH,   /* hardware-driven graph only (see the header)   */

@@ -63,7 +63,8 @@ int reac_boxreg_declare(struct reac_boxreg *r, int nch, const char *name, int ba
  * the same width exists, bind this MAC to it (honouring its base + name);
  * otherwise auto-allocate the lowest free contiguous range of `nch` slots.
  * Idempotent: a MAC already present returns its existing index. Returns the box
- * index, or -1 if the width is invalid or the fabric is full. */
+ * index, or -1 if the width is invalid, the MAC is all-zero (the table's own
+ * "unbound" mark) or the fabric is full. */
 int reac_boxreg_add(struct reac_boxreg *r, const uint8_t mac[6], int nch);
 
 /* Set / overwrite a box's operator name. */
