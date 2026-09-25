@@ -220,6 +220,9 @@ static const char *const KIND_NAME[] = {
 	"group_map", "record_fragment", "link2", "unknown_ctrl",
 };
 
+_Static_assert(sizeof KIND_NAME / sizeof KIND_NAME[0] == REAC_CTRL_UNKNOWN_CTRL + 1,
+               "one KIND_NAME per enum reac_ctrl_kind, in order");
+
 const char *reac_ctrl_kind_name(enum reac_ctrl_kind kind)
 {
 	unsigned i = (unsigned)kind;
@@ -354,6 +357,14 @@ int reac_ctrl_identity_reply(const uint8_t *frame, size_t len, uint16_t *addr_lo
 	if (sysex_len < 14 || (unsigned)(9 + sysex_len) > REAC_CTRL_BLOCK_LEN)
 		return 0;
 	if (block[9] != 0xf0 || block[9 + sysex_len - 1] != 0xf7)
+		return 0;
+	/* BOTH CHECKSUMS, the way every other control frame is judged: a reply that
+	 * fails either is corrupt, and a corrupt reply is not evidence of the box's
+	 * firmware. The OUTER one closes the 32-byte block; the INNER (sum-to-0x80)
+	 * runs from the TAG at block[16] to the record checksum just before the f7. */
+	if (reac_ctrl_checksum_verify(frame) != 0)
+		return 0;
+	if (reac_ctrl_record_cksum_verify(&block[16], (size_t)sysex_len - 8) != 0)
 		return 0;
 	*addr_lo = (uint16_t)((block[18] << 8) | block[19]);
 	*payload = &block[20];
@@ -619,7 +630,9 @@ static const struct reac_box_model BOX_MODELS[] = {
 	 * AUDIO FABRIC's full width and it is not 48: the port table spans twelve
 	 * 4-channel slots = 48 channels, but the downstream frame carries 40 slots
 	 * (REAC_AUDIO_FABRIC_SLOTS), so 40/0 and 0/40 are the widest rows the fabric
-	 * can actually carry and 20/20 is the widest symmetric one. ---- */
+	 * can actually carry and 20/20 is the widest symmetric one. A 40-wide box is a
+	 * BOX (operator ruling 2026-09-25, REAC_BOX_MAX_CHANNELS): its 1492 B return is
+	 * told from a desk's downstream by direction and role, never by width. ---- */
 	{ .token = "fr4000", .display = "FreeREAC 40 in / 0 out", .in_ch = 40, .out_ch = 0,
 	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
 	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
@@ -887,11 +900,15 @@ static size_t ctrl_emit_as(uint8_t *out, const struct ctrl_frame *f,
                            uint16_t counter, int n_ch, const uint8_t *args,
                            float *const *planar, int ns)
 {
-	/* The braid packs channel PAIRS: box widths are even, 2..40 (628 B at 16,
-	 * 340 B at 8). Rows sized from the matrix carry a verified width already. */
-	if (f->len == LEN_ARG_WIDTH &&
-	    (n_ch < 2 || n_ch > REAC_MAX_CHANNELS || (n_ch & 1)))
+	/* A BOX FRAME IS A BOX WIDTH: even, 2..40 (reac_box_width_ok) — the braid packs
+	 * channel PAIRS, and a box may fill the whole fabric (operator ruling
+	 * 2026-09-25). Rows sized from the matrix carry a verified width already; a
+	 * model handed in brings its width in n_ch and is checked below. */
+	if (f->len == LEN_ARG_WIDTH && !reac_box_width_ok(n_ch))
 		return 0;
+	if (f->len != LEN_DOWNSTREAM && (model || f->len == LEN_MODEL_WIDTH) &&
+	    !reac_box_width_ok(n_ch))
+		return 0;   /* a width-keyed row too: 41 must not quietly become an S-1608 */
 
 	/* THE ROW IS THE CALLER'S WHEN THE CALLER HAS ONE. A width can only ever
 	 * name a captured model (reac_box_model_by_channels answers for those
@@ -1015,10 +1032,11 @@ static const struct ctrl_frame CTRL_FRAMES[CTRL_FRAME_COUNT] = {
 	 * is MAC-independent. Sum(block) mod 256 == 0 holds as captured, so the outer
 	 * stamp is a no-op that keeps the invariant.
 	 * 0013: the variant a real box INTERLEAVES with the 0014 (S-1608 cold boot,
-	 * m200-s1608-BIDIR-reboot-2026-07-11); block[31]=0x02 trailer, and the
-	 * captured block sums to 0xfe mod 256 — NOT sum-to-0, which is the evidence
-	 * that the cold-connect is not checksum-validated the way 0014 happens to be.
-	 * It is therefore emitted RAW, as are 0016 and 001a.
+	 * m200-s1608-BIDIR-reboot-2026-07-11); block[31]=0x02 trailer. It is emitted
+	 * RAW, as are 0016 and 001a: the captured bytes are reproduced, not re-stamped.
+	 * (This note once said the 0013 block "sums to 0xfe"; it sums to 0x00 as
+	 * captured, like all four — libreac review 2026-09-25, L6. RAW is still right:
+	 * a stamp over a block that already closes is a no-op.)
 	 * 0016: a MODEL-specific inventory block the mixer uses to identify the box.
 	 * 001a: the fullest MODEL-specific box inventory.
 	 * All four byte-matched per model (matrix-m200-s1608 / -s0808, 2026-07-11;
@@ -1293,7 +1311,8 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame)
 	if (frame[REAC_CTRL_BLOCK_OFF] != REAC_LINK_RECORD ||
 	    frame[REAC_CTRL_BLOCK_OFF + 1] != REAC_SEG_SINGLE)
 		return -1;
-	return reac_ctrl_record_cksum_verify(frame + 34, 6);
+	return reac_ctrl_record_cksum_verify(frame + REAC_CTRL_BLOCK_OFF + HEADAMP_REC_OFF,
+	                                    HEADAMP_REC_LEN);
 }
 
 /* cdea 04 03 0014, record 12 12 01 00: the master's ACK of the box's join params. */
@@ -1314,7 +1333,6 @@ static const uint8_t GRANT_HEAD_MARK[34] = {
 /* GROUP B — the fixed 6-record constant (marker 12 11, TAG 05 00), byte-identical
  * across 8/16/32-input boxes: (ch,sub,val) = (00,00,04) (06,00,08) (10,00,11)
  * (10,11,09) (11,00,11) (11,11,09). Unchanged from the tables it replaces. */
-#define REAC_GRANT_GROUPB_LEN 6
 static const uint8_t GRANT_GROUPB[REAC_GRANT_GROUPB_LEN][34] = {
 	{ 0xcd, 0xea, 0x04, 0x03, 0x00, 0x13, 0x00, 0x02, 0x00, 0xfe, 0x0e, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x11, 0x05, 0x00, 0x00, 0x00, 0x04, 0x77, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03 },
 	{ 0xcd, 0xea, 0x04, 0x03, 0x00, 0x13, 0x00, 0x02, 0x00, 0xfe, 0x0e, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x11, 0x05, 0x00, 0x06, 0x00, 0x08, 0x6d, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03 },
@@ -1419,6 +1437,7 @@ int reac_headamp_group_of(uint8_t ch, uint8_t param)
 
 int reac_headamp_record_carries(uint8_t ch, uint8_t param)
 {
+	(void)ch;   /* every channel carries all three: the answer never depends on it */
 	switch (param) {
 	case REAC_HEADAMP_SENS:
 	case REAC_HEADAMP_PAD:

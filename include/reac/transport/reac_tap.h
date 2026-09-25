@@ -60,8 +60,16 @@
 #define REAC_TAP_MAX_STREAMS 9
 
 enum reac_tap_stream_kind {
-	REAC_TAP_STREAM_MASTER = 0,  /* the 40-channel downstream broadcast */
+	REAC_TAP_STREAM_MASTER = 0,  /* the desk's downstream broadcast (proved by its announce) */
 	REAC_TAP_STREAM_BOX,         /* one box's upstream return, at the box's width */
+	/* A BROADCAST stream whose source has not proven what it is yet (APPENDED 1.6.0).
+	 * Operator ruling 2026-09-25, HOLD WITH A DECLARED LIMIT: it becomes MASTER on the
+	 * source's first master-only frame, BOX on a box-only frame or a declared model, and
+	 * BOX once its own counter has advanced one master-only cadence in frames at its pace
+	 * with neither (reac_arbitration.h, reac-protocol's master_cadence group). Width
+	 * never decides it: a box may be 40 wide. A tap does not serve a stream in this
+	 * state — it has not been told whose audio it is. */
+	REAC_TAP_STREAM_UNRESOLVED,
 };
 
 /* One heard stream. `kind` and `channels` are read off the GEOMETRY — reac.h's
@@ -141,6 +149,8 @@ void reac_tap_survey_set_self(struct reac_tap_survey *s, const uint8_t mac[6]);
  *   REAC_TAP_DUPLICATE  a byte-identical repeat of this stream's previous frame
  *   REAC_TAP_FULL       the roster is full and this is a new source
  *   REAC_TAP_SELF       this host's own echo (reac_tap_survey_set_self)
+ * A BROADCAST audio frame from a new source mints an UNRESOLVED stream (the hold); a
+ * UNICAST one mints a BOX stream, at any box width.
  * A negative return is a REFUSAL with a reason, never a silent drop. */
 #define REAC_TAP_NOT_REAC   (-1)
 #define REAC_TAP_DUPLICATE  (-2)
@@ -153,6 +163,13 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
  * master was heard, when fewer than two of its frames were accepted, or when the frames
  * carried no timestamps. Absence is 0 and 0 is never a rate. */
 int reac_tap_survey_rate(const struct reac_tap_survey *s);
+
+/* Apply the HOLD's limit at `now_usec` (the survey's timestamp clock): every UNRESOLVED
+ * stream first heard one master-only cadence (reac_master_only_cadence_ns at its own
+ * pace) or more before `now_usec` without a
+ * master-only frame becomes a BOX. Returns how many are still UNRESOLVED. A frame's own
+ * timestamp applies the same limit as it arrives; this is for the end of a survey. */
+unsigned reac_tap_survey_resolve(struct reac_tap_survey *s, uint64_t now_usec);
 
 /* The master stream, or NULL. At most one exists: two masters on one segment is the
  * condition arbitration §2 forbids, and the survey reports the second as its own BOX-less

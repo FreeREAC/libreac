@@ -55,6 +55,7 @@
 #define REAC_HUNT_H
 
 #include <reac/reac_arbitration.h>
+#include <reac/reac_facts_timing.h>   /* REAC_ANNOUNCE_PERIOD_MS — a protocol fact */
 #include <reac/reac_disco.h>
 #include <reac/reac_role.h>
 
@@ -62,7 +63,12 @@
 #include <stddef.h>
 
 /* HOW LONG A VACANT WIRE IS WATCHED BEFORE WE TAKE IT — three master announce
- * cadences.
+ * cadences. The cadence is the protocol fact REAC_ANNOUNCE_PERIOD_MS (reac-protocol's
+ * timing group, read through reac_facts_timing.h); it used to be a typed 3e9. This is
+ * NOT the hold on a broadcast sender's verdict (reac_master_only_cadence_ns): that one is
+ * a single master-only cadence, because a desk that IS sending proves itself within one;
+ * this one is three, because it is waiting out a desk that may be sending nothing we
+ * heard.
  *
  * The number is read off the protocol this daemon already emits, not picked: a master
  * announces itself with a cfea once per second and fills the gaps with FILLER
@@ -76,7 +82,9 @@
  * first announce and joined then — the wait is what a wire with nothing on it costs,
  * once, and it is the difference between hunting for three seconds and hunting forever.
  */
-#define REAC_HUNT_WINDOW_NS (3ULL * 1000000000ULL)
+#define REAC_HUNT_ANNOUNCES 3
+#define REAC_HUNT_WINDOW_NS \
+	((uint64_t)REAC_HUNT_ANNOUNCES * (uint64_t)REAC_ANNOUNCE_PERIOD_MS * 1000000ULL)
 
 /* What the hunt has concluded about this segment. `HUNTING` is not a failure: it is the
  * honest state of a wire that has not answered yet, and it is REPORTED rather than spun

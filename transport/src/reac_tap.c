@@ -16,6 +16,7 @@
 #include <reac/reac_capture.h>
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_disco.h>
+#include <reac/reac_arbitration.h>   /* the hold's limit: one master-only cadence */
 #include <reac/reac_upstream.h>
 #include <reac/pcap_source.h>
 
@@ -59,8 +60,10 @@ void reac_tap_survey_set_self(struct reac_tap_survey *s, const uint8_t mac[6])
 static int stream_for(struct reac_tap_survey *s, const uint8_t src[6],
                       enum reac_tap_stream_kind kind, unsigned channels)
 {
+	/* ONE STREAM PER SOURCE. A broadcast stream's kind is resolved after it is minted
+	 * (UNRESOLVED -> MASTER/BOX), so the lookup is by source alone. */
 	for (unsigned i = 0; i < s->n; i++)
-		if (s->stream[i].kind == kind && memcmp(s->stream[i].src, src, 6) == 0)
+		if (memcmp(s->stream[i].src, src, 6) == 0)
 			return (int)i;
 	if (s->n >= REAC_TAP_MAX_STREAMS) {
 		s->frames_overflow++;
@@ -73,6 +76,75 @@ static int stream_for(struct reac_tap_survey *s, const uint8_t src[6],
 	st->channels = channels;
 	st->model_index = -1;
 	return (int)s->n++;
+}
+
+/* THE HOLD, RESOLVED BY THE SOURCE'S OWN FRAMES: a master-only frame (cfea announce,
+ * slot map, head-amp record, scene push) makes it the desk; a box-only frame or a
+ * declared model makes it a box. The same verdicts reac_disco draws, from the same
+ * classifier. */
+static void resolve_by_role(const struct reac_tap_survey *s, struct reac_tap_stream *st,
+                            const uint8_t *frame, size_t clean)
+{
+	if (st->kind != REAC_TAP_STREAM_UNRESOLVED)
+		return;
+	static const uint8_t NONE[6] = { 0 };
+	struct reac_disco_sighting sg;
+	if (reac_disco_classify(frame, clean, s->have_self ? s->self_mac : NONE, &sg) != 0)
+		return;
+	if (sg.model != NULL || sg.role == REAC_DISCO_ROLE_BOX || st->model_index >= 0)
+		st->kind = REAC_TAP_STREAM_BOX;
+	else if (sg.role == REAC_DISCO_ROLE_MASTER)
+		st->kind = REAC_TAP_STREAM_MASTER;
+}
+
+/* The stream's own pace, from its counter advance over its timestamps; 0 when there is
+ * no span to measure it over. */
+static int stream_fps(const struct reac_tap_stream *st)
+{
+	const uint64_t advance = st->frames + st->gaps;
+	if (advance < 2 || !st->first_ts_usec || st->last_ts_usec <= st->first_ts_usec)
+		return 0;
+	return (int)((double)(advance - 1) * 1e6 / (double)(st->last_ts_usec - st->first_ts_usec) + 0.5);
+}
+
+/* THE HOLD'S LIMIT (reac_arbitration.h): ONE MASTER-ONLY CADENCE, IN FRAMES AT THE
+ * CURRENT RATE. The sender's own counter says how many frames it has put on the wire
+ * since it was first heard — lost ones included, a mirror twin never (the duplicate guard
+ * runs first) — and a broadcast stream that has advanced a whole cadence at its own pace
+ * with no master-only op is a box. With no pace measurable yet the widest frame count of
+ * the three paces is the bar: a hold that is too short at some pace is not a hold. */
+static void resolve_by_frames(struct reac_tap_stream *st)
+{
+	if (st->kind != REAC_TAP_STREAM_UNRESOLVED)
+		return;
+	const int fps = stream_fps(st);
+	const uint32_t window = fps > 0 ? reac_master_only_cadence_frames(fps)
+	                                : REAC_MASTER_ONLY_CADENCE_FRAMES_96K;
+	if (st->frames + st->gaps > window)
+		st->kind = REAC_TAP_STREAM_BOX;
+}
+
+/* The same limit at the END of a survey, with no frame to count: the time since the
+ * stream was first heard, as frames at its own pace (or the longest window, unmeasured). */
+static void resolve_by_time(struct reac_tap_stream *st, uint64_t now_usec)
+{
+	if (st->kind != REAC_TAP_STREAM_UNRESOLVED || !st->first_ts_usec)
+		return;
+	if (now_usec > st->first_ts_usec &&
+	    (now_usec - st->first_ts_usec) * 1000ull >= reac_master_only_cadence_ns(stream_fps(st)))
+		st->kind = REAC_TAP_STREAM_BOX;
+}
+
+unsigned reac_tap_survey_resolve(struct reac_tap_survey *s, uint64_t now_usec)
+{
+	unsigned left = 0;
+	if (!s)
+		return 0;
+	for (unsigned i = 0; i < s->n; i++) {
+		resolve_by_time(&s->stream[i], now_usec);
+		left += s->stream[i].kind == REAC_TAP_STREAM_UNRESOLVED;
+	}
+	return left;
 }
 
 /* The box's own CONFIG-ANNOUNCE, if this frame carries one: a byte-exact match against
@@ -116,21 +188,30 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
 
 	enum reac_tap_stream_kind kind;
 	unsigned channels;
-	if (reac_frame_is_master_downstream(clean)) {
-		kind = REAC_TAP_STREAM_MASTER;
-		channels = REAC_MAX_CHANNELS;
-	} else if (reac_upstream_channels(clean) > 0) {
-		kind = REAC_TAP_STREAM_BOX;
-		channels = (unsigned)reac_upstream_channels(clean);
+	/* DIRECTION BEFORE WIDTH, AND ROLE BEFORE BOTH. A master BROADCASTS its downstream;
+	 * a box UNICASTS its return to its master, at any box width up to the whole fabric
+	 * (operator ruling 2026-09-25) — so a unicast stream is a box's. A BROADCAST stream
+	 * is the desk's downstream OR a box's presence-flood, and nothing in its length says
+	 * which: it is minted UNRESOLVED and the source's own frames resolve it (below),
+	 * or the declared window does (resolve_by_time). */
+	static const uint8_t BCAST[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+	const int unicast = memcmp(frame, BCAST, 6) != 0;
+	const int width = reac_upstream_channels(clean);
+	if (width > 0) {
+		kind = unicast ? REAC_TAP_STREAM_BOX : REAC_TAP_STREAM_UNRESOLVED;
+		channels = (unsigned)width;
 	} else {
 		/* A control-only shape: no audio geometry, so it cannot MINT a stream — a
 		 * stream whose width nothing declared would be a node of invented size. It
-		 * can still IDENTIFY a peer already heard, which is how the config-announce
-		 * names the model of a box the data frames already sized. */
+		 * can still IDENTIFY a peer already heard: the config-announce names the
+		 * model of a box the data frames already sized, and a master-only frame
+		 * resolves a broadcast stream to the desk. */
 		s->frames_ungeometric++;
 		for (unsigned i = 0; i < s->n; i++)
-			if (memcmp(s->stream[i].src, src, 6) == 0)
+			if (memcmp(s->stream[i].src, src, 6) == 0) {
 				note_model(&s->stream[i], frame, clean);
+				resolve_by_role(s, &s->stream[i], frame, clean);
+			}
 		return REAC_TAP_NOT_REAC;
 	}
 
@@ -174,6 +255,8 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
 	}
 	st->frames++;
 	note_model(st, frame, clean);
+	resolve_by_role(s, st, frame, clean);
+	resolve_by_frames(st);
 	return idx;
 }
 
@@ -231,6 +314,7 @@ static int survey_source(struct reac_tap *t)
 		}
 		uint32_t budget = t->cfg.survey_frames ? t->cfg.survey_frames
 		                                       : REAC_TAP_DEFAULT_SURVEY_FRAMES;
+		uint64_t last_ts = 0;
 		for (uint32_t i = 0; i < budget; i++) {
 			uint64_t ts = 0;
 			long n = pcap_source_next(&ps, frame, sizeof frame, &ts);
@@ -239,8 +323,13 @@ static int survey_source(struct reac_tap *t)
 			if (n < 0)
 				continue;
 			reac_tap_survey_frame(&t->survey, frame, (size_t)n, ts);
+			if (ts > last_ts)
+				last_ts = ts;
 		}
 		pcap_source_close(&ps);
+		/* The recording is all the evidence there is: apply the hold's limit at its
+		 * last timestamp. A broadcast stream shorter than the window stays unresolved. */
+		reac_tap_survey_resolve(&t->survey, last_ts);
 		return 0;
 	}
 
@@ -255,7 +344,13 @@ static int survey_source(struct reac_tap *t)
 	const unsigned ms = t->cfg.survey_ms ? (unsigned)t->cfg.survey_ms
 	                                     : REAC_TAP_DEFAULT_SURVEY_MS;
 	const uint64_t deadline = mono_usec() + (uint64_t)ms * 1000ull;
-	while (mono_usec() < deadline) {
+	/* THE HOLD HAS A DECLARED LIMIT, AND THE SURVEY WAITS FOR IT: past the ordinary
+	 * survey, keep listening while any broadcast stream is still unresolved, for at most
+	 * one master-only cadence more — a desk proves itself on its next master-only op, a
+	 * flood-only box by the cadence running out. */
+	const uint64_t hold_end = deadline + reac_master_only_cadence_ns(0) / 1000ull;
+	while (mono_usec() < deadline ||
+	       (mono_usec() < hold_end && reac_tap_survey_resolve(&t->survey, mono_usec()) > 0)) {
 		long n = reac_capture_next(&cap, frame, sizeof frame);
 		if (n <= 0) {
 			struct timespec idle = { 0, 1000000 };  /* 1 ms */
@@ -279,6 +374,23 @@ int reac_tap_open(struct reac_tap *t, const struct reac_tap_cfg *cfg)
 
 	if (survey_source(t) != 0)
 		return -1;
+
+	/* A stream still UNRESOLVED has not proven whose audio it is: it is not served
+	 * (the hold), and saying so is the whole report. */
+	unsigned kept = 0, held = 0;
+	for (unsigned i = 0; i < t->survey.n; i++) {
+		if (t->survey.stream[i].kind == REAC_TAP_STREAM_UNRESOLVED) {
+			held++;
+			continue;
+		}
+		if (kept != i)
+			t->survey.stream[kept] = t->survey.stream[i];
+		kept++;
+	}
+	t->survey.n = kept;
+	if (held)
+		fprintf(stderr, "reac_tap: '%s': %u broadcast stream(s) never proved desk or box "
+		        "inside the declared window — not served\n", t->cfg.source, held);
 
 	t->sample_rate = cfg->forced_rate ? cfg->forced_rate : reac_tap_survey_rate(&t->survey);
 	t->n = t->survey.n;
@@ -312,11 +424,11 @@ int reac_tap_open(struct reac_tap *t, const struct reac_tap_cfg *cfg)
 			t->n = 0;
 			return -1;
 		}
-		if (t->survey.stream[i].kind == REAC_TAP_STREAM_BOX)
-			/* PIN the gate to THIS box. Left to latch on its own, an upstream feeder
-			 * takes whichever box it hears first, so two boxes on a mirrored segment
-			 * would race for both rings and one box would be served twice. */
-			reac_rx_peer_reset(&t->rx[i], t->survey.stream[i].src, 1);
+		/* PIN the gate to THIS source. Left to latch on its own, an upstream feeder
+		 * takes whichever box it hears first, so two boxes on a mirrored segment would
+		 * race for both rings and one box would be served twice; and a downstream feeder
+		 * would take a 40-wide box's broadcast flood beside the desk's frames. */
+		reac_rx_peer_reset(&t->rx[i], t->survey.stream[i].src, 1);
 	}
 	return 0;
 }

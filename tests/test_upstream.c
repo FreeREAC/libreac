@@ -47,7 +47,10 @@ int main(void)
 	/* 1. shape: nch from frame length (len = 52 + nch*36) */
 	CHK(reac_upstream_channels(628) == 16);  /* S-1608 */
 	CHK(reac_upstream_channels(340) == 8);   /* S-0808 */
-	CHK(reac_upstream_channels(1492) == -1); /* the 40-ch DOWNSTREAM shape is not upstream */
+	CHK(reac_upstream_channels(1492) == 40); /* a 40-wide box's return: a box may fill the
+	                                          * fabric (ruling 2026-09-25); width does not
+	                                          * say desk — direction and role do */
+	CHK(reac_upstream_channels(1528) == -1); /* 42: wider than any box */
 	CHK(reac_upstream_channels(627) == -1);
 	CHK(reac_upstream_channels(629) == -1);
 	CHK(reac_upstream_channels(52) == -1);   /* nch 0 */

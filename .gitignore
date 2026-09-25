@@ -54,3 +54,14 @@ test_reac_tapwait
 test_box_0832
 test_box_table
 test_topo_hears_vlans
+
+# the 2026-09-25 review guards (make test)
+test_box_width
+test_cfg
+test_boxreg
+test_rate_detect
+test_clock
+test_identity_cksum
+test_decode_plain_le
+test_desk_or_box
+test_hold

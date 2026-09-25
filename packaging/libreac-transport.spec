@@ -3,7 +3,7 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.5.0
+Version:        1.6.0
 %global abi 5
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
@@ -87,6 +87,22 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
+- No symbol or struct change in this library. reac_role_swap.h's REAC_ROLE_STATE_HUNTING
+  and the vendored reac-pw cfg headers now alias libreac's reac_cfg.h instead of typing
+  the vocabulary a second time; the version moves with libreac 1.6.0.
+- DIRECTION, NOT WIDTH: reac_rx's downstream gate takes only BROADCAST 1492 B frames and
+  its upstream gate locks only on a UNICAST return, so a 40-wide box's return and the
+  desk's downstream (the same length) land in their own rings; reac_tap files a unicast
+  stream as a box's at any width. reac_slave clamps a configured box width to
+  REAC_BOX_MAX_CHANNELS (40).
+- reac_tap holds a broadcast stream as REAC_TAP_STREAM_UNRESOLVED (APPENDED to the enum)
+  until its source proves desk or box, for at most one master-only cadence counted in its
+  own frames at its own pace (libreac's reac_master_only_cadence_frames),
+  and serves no stream still unresolved; reac_tap_survey_resolve() is ADDED.
+  reac_segment_answer_slave_kind() / _refused_kind() are ADDED and publish the kind the
+  caller decided instead of inferring it from a width. No struct changes size.
+
 * Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.5.0-1
 - THE CHANGE IS IN THIS LIBRARY: reac_topo's tap hears every 802.1Q tag on a trunk, not
   only the ones on REAC frames, so a VLAN whose box is cold is discovered instead of
