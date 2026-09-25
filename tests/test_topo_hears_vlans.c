@@ -28,8 +28,8 @@
  * 1-4094 flood that amendment rejects.
  *
  * THE ORDER OF THE ARMS IS THE DESK-SAFETY RULING, NOT A CONVENIENCE. enp131s0's native
- * VLAN is 11 and the S-4000 on it is heard UNTAGGED (measured 2026-09-10, openmixer's
- * docs/design/notes/2026-09-10-continuation-for-tecman.md). reac_topo_is_trunk() decides
+ * VLAN is 11 and the S-4000 on it is heard UNTAGGED (measured 2026-09-10, recorded in
+ * openmixer's design notes of that date). reac_topo_is_trunk() decides
  * whether that parent may be driven at all (a trunk parent is never driven: it receives every
  * sub-interface's frames untagged and would put a second master on one box). So a non-REAC
  * tag MUST NOT make a parent a trunk, or one STP frame from the switch would unserve the

@@ -68,14 +68,18 @@ extern "C" {
 /* A BOX'S WIDTH, EITHER DIRECTION. Operator ruling 2026-09-25: "BOX_MAX_CHANNELS =
  * 40. We are dealing with a S-4000S-3208 (32 in, 8 out), we also have S-2416 (24 in,
  * 16 out), and we tested an 8 in / 32 out box." A box's width is EVEN PER DIRECTION,
- * one braid pair up to the whole fabric: 2..40. So a 40-wide (1492 B) frame is NOT
- * only the desk's, and width is never what tells a desk's frame from a box's —
- * direction, source and role do. reac-protocol spec/protocol-facts.yaml `box_width`
- * declares both numbers (tests/reac_facts_assert.h binds these to it); every box door
- * (the builders, the model table, the registry, the upstream parser) asks
- * reac_box_width_ok(). */
-#define REAC_BOX_MIN_CHANNELS  2                   /* one braid pair */
-#define REAC_BOX_MAX_CHANNELS  REAC_MAX_CHANNELS   /* 40, the whole fabric */
+ * REAC_BOX_MIN_CHANNELS..REAC_BOX_MAX_CHANNELS — one braid pair up to the whole
+ * fabric, 2..40. So a 40-wide (1492 B) frame is NOT only the desk's, and width is
+ * never what tells a desk's frame from a box's: direction, source and role do. Every
+ * box door (the builders, the model table, the registry, the upstream parser) asks
+ * reac_box_width_ok().
+ *
+ * THE LIMITS ARE PROTOCOL FACTS, NOT libreac's. They are declared once, in
+ * reac-protocol spec/protocol-facts.yaml (group box_width), and read here from the
+ * header generated out of it: reac_facts_box_width.h is written by
+ * tools/gen-facts-header.py with reac-protocol's own emitter, committed, and held to
+ * the schema by `make facts-drift-check`. */
+#include <reac/reac_facts_box_width.h>
 
 static inline int reac_box_width_ok(int n)
 {
@@ -285,11 +289,14 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        LOCKING until measured; reac_ctrl_identity_reply requires both checksums;
  *        reac_decode_plain_le refuses an oversize geometry; reac_boxreg refuses an
  *        overflowing base and the zero MAC. A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40
- *        (operator ruling 2026-09-25): REAC_BOX_MIN/MAX_CHANNELS and reac_box_width_ok()
- *        are ADDED and every box door refuses odd widths and anything past 40; a
- *        40-wide box is legal. Desk-vs-box is decided by direction, source and role,
- *        never width: reac_rival_kind_of() is ADDED and reac_arbitrate uses it, and
- *        reac_upstream_channels() now answers 40 for a 1492 B return. No struct or symbol moves or changes size, so
+ *        (operator ruling 2026-09-25): REAC_BOX_MIN/MAX_CHANNELS (read from
+ *        reac-protocol's box_width facts, via the new generated
+ *        reac_facts_box_width.h) and reac_box_width_ok() are ADDED; every box door
+ *        refuses odd widths and anything past 40, and a 40-wide box is legal.
+ *        Desk-vs-box is decided by direction, source and role, never width:
+ *        reac_rival_kind_of() is ADDED and reac_arbitrate uses it, and
+ *        reac_upstream_channels() now answers 40 for a 1492 B return. No struct or
+ *        symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
