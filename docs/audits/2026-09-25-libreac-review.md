@@ -245,9 +245,33 @@ Each row names the one declaration that should be used, and the copies of it.
 11. *`reac_headamp_sens_value_cdb` rounds a negative request toward zero.* False:
     `want <= 0` is taken first.
 
-## Running the proofs
-```
-make review-2026-09-25     # 7 proofs; exits non-zero while any is red
-```
-When a finding is fixed, its proof turns green. A fix can then move the proof into
-`make test` in place of the review target.
+## Status after fix (branch `fix/libreac-review-2026-09-25`, libreac 1.6.0)
+
+`make review-2026-09-25` is gone. Every proof that went green now runs in `make test`,
+and `make test` now ends on a PASS verdict line. The sections above describe `ee205b6`
+as it was reviewed.
+
+| Finding | State | Guard in `make test` |
+|---|---|---|
+| M1 rate detection | fixed: one stream, measured by its own counter | `tests/test_rate_detect.c` |
+| M2 clock lock on switch | fixed: a new reference is LOCKING until measured | `tests/test_clock.c` |
+| M3 identity checksums | fixed: both checksums required | `tests/test_identity_cksum.c`, `tests/test_identity.c` |
+| **M4 40-ch box row** | **OPEN, operator question**: the row stays as is | none; `tests/test_review_box_width.c` is red, run by hand |
+| M5 boxreg overflow | fixed | `tests/test_boxreg.c` |
+| M6 plain-LE over-read | fixed | `tests/test_decode_plain_le.c` |
+| M7 `reac_cfg.h` | fixed: the one declaration; the vendored reac-pw headers alias it; `"none"` | `tests/conformance-cfg-declared-once.sh`, `tests/test_cfg.c` |
+| L7 fabric guard (`reac_slots.h`) | fixed: widening to 48 reds `make test` (sabotage-verified) | `tests/test_boxreg.c` |
+| L1 | fixed with M7 | — |
+| L2, L3 (CLOEXEC), L5, L6, L8, L9 | fixed | `test_boxreg`, `test_capture` arms |
+| L3 `PACKET_IGNORE_OUTGOING` | open: this changes what every capture consumer hears; M1 no longer depends on it | — |
+| L4 boxreg departure API | open: needs a new API | — |
+| L7 SKIP exits 0; no tests for `reac_arbitrate` / `reac_grant` | open | — |
+| D: dead `reac_ctrl.c` copy, `REAC_GRANT_GROUPB_LEN` twice, `frame + 34` | fixed | — |
+| D: `0x88,0x19` byte copies, the offset-50 triple, the Roland OUI, `REAC_GRANT_SWEEP_LEN` in two headers, the dead public `REAC_CLOCK_AVAIL_*` / `REAC_CLOCK_Q_COUNT` / `REAC_AUDIO_FABRIC_CEILING` | open: spread across files, or public macros reac-pw may read | — |
+
+**Cross-repo follow-ups.**
+- reac-pw's `src/reac_rate_cfg.h` / `reac_role_cfg.h` must take the edit the vendored
+  snapshot got here, and its `*_refuse_code()` must return from
+  `REAC_*_REFUSE_CODES_INIT`.
+- openmixer's `reac-cfg.ts` mirror must follow the `reac_cfg.h` changes: `"none"`,
+  `REAC_ROLE_PROP` and `ROLE_STATE_HUNTING` added, the two unread macros removed.
