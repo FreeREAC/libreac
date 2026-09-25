@@ -52,6 +52,10 @@
 #include "reac/transport/reac_tap.h"
 #include "reac/pcap_source.h"
 #include "reac/reac.h"
+#include "reac/reac_arbitration.h"   /* REAC_DESK_PROOF_WINDOW_NS — the hold's limit */
+#include "reac/transport/reac_segment_ident.h"
+
+#include "ctrl_fixtures.inc"          /* FX_ANNOUNCE — a captured cfea master announce */
 
 #include <stdio.h>
 #include <stdint.h>
@@ -117,6 +121,12 @@ static void write_mirror_pcap(const char *path, double pps)
 	for (int i = 0; i < TICKS; i++) {
 		uint64_t ts = 1000000ull + (uint64_t)(i * step_us);
 		mk_frame(dn, REAC_FRAME_BYTES, BCAST, MASTER_MAC, counter);
+		/* THE DESK ANNOUNCES ITSELF (a captured cfea over its first frame's control
+		 * block): a broadcast stream is the desk's because it says so, never because
+		 * it is 40 wide (operator ruling 2026-09-25) — a desk that never announced
+		 * would be held, and then served as a box. */
+		if (i == 0)
+			memcpy(dn + 16, FX_ANNOUNCE, sizeof FX_ANNOUNCE);
 		mk_frame(up, BOX_LEN, MASTER_MAC, BOX_MAC, counter);
 		wr_rec(f, dn, REAC_FRAME_BYTES, ts);        /* master, first copy   */
 		wr_rec(f, up, BOX_LEN, ts + 20);            /* box return in between */
@@ -307,6 +317,67 @@ static void arm_corpus(const char *path)
 	CHECK(mirrored.n == 2, "corpus+mirror: still exactly two streams");
 }
 
+/* HOLD WITH A DECLARED LIMIT, in the tap. A broadcast stream is UNRESOLVED until its
+ * source proves what it is, for at most REAC_DESK_PROOF_WINDOW_NS; then a source with no
+ * master-only frame is a box. Timestamps are the survey's own clock (microseconds). */
+static void arm_hold(void)
+{
+	static const uint8_t DESK[6]  = { 0x00, 0x40, 0xab, 0xc9, 0x91, 0x9c };
+	static const uint8_t FLOOD[6] = { 0x00, 0x40, 0xab, 0x16, 0x08, 0x02 };
+	static const uint8_t WIDE[6]  = { 0x00, 0x40, 0xab, 0x40, 0x40, 0x02 };
+	const uint64_t W_US = REAC_DESK_PROOF_WINDOW_NS / 1000ull;
+	const uint64_t T = 5000000ull;
+	uint8_t f[REAC_FRAME_BYTES];
+	struct reac_tap_survey s;
+	reac_tap_survey_init(&s);
+
+	/* A desk's downstream, unannounced for its first second: held. */
+	uint16_t c = 1;
+	for (uint64_t ts = T; ts < T + 1000000ull; ts += 100000ull) {
+		mk_frame(f, REAC_FRAME_BYTES, BCAST, DESK, c++);
+		reac_tap_survey_frame(&s, f, REAC_FRAME_BYTES, ts);
+	}
+	CHECK(s.n == 1 && s.stream[0].kind == REAC_TAP_STREAM_UNRESOLVED,
+	      "hold: a desk's downstream before its announce is UNRESOLVED, not the master");
+	CHECK(reac_tap_survey_master(&s) == NULL, "hold: and no master is claimed yet");
+	/* ...and its announce arrives inside the window: the desk. */
+	mk_frame(f, REAC_FRAME_BYTES, BCAST, DESK, c++);
+	memcpy(f + 16, FX_ANNOUNCE, sizeof FX_ANNOUNCE);
+	reac_tap_survey_frame(&s, f, REAC_FRAME_BYTES, T + 1000000ull);
+	CHECK(s.stream[0].kind == REAC_TAP_STREAM_MASTER,
+	      "hold: a desk whose announce arrives inside the window is the MASTER stream");
+
+	/* Flood-only boxes, 16 and 40 wide: held inside the window, boxes past it. */
+	const struct { const uint8_t *mac; int w; } boxes[] = { { FLOOD, 16 }, { WIDE, 40 } };
+	for (unsigned b = 0; b < 2; b++) {
+		const size_t len = REAC_UPSTREAM_OVERHEAD + (size_t)boxes[b].w * REAC_UPSTREAM_BYTES_PER_CH;
+		uint64_t ts = T;
+		for (; ts < T + W_US; ts += 250000ull) {
+			mk_frame(f, len, BCAST, boxes[b].mac, c++);
+			memset(f + 16, 0, 34);               /* a FILLER: type 0000, zero block */
+			reac_tap_survey_frame(&s, f, len, ts);
+		}
+		const struct reac_tap_stream *st = &s.stream[s.n - 1];
+		CHECK(st->kind == REAC_TAP_STREAM_UNRESOLVED && st->channels == (unsigned)boxes[b].w,
+		      "hold: a flood-only broadcast is UNRESOLVED inside the window");
+		mk_frame(f, len, BCAST, boxes[b].mac, c++);
+		memset(f + 16, 0, 34);
+		reac_tap_survey_frame(&s, f, len, T + W_US);
+		CHECK(st->kind == REAC_TAP_STREAM_BOX,
+		      "hold: a flood-only broadcast is a BOX once the window passes (16 and 40 wide)");
+	}
+
+	/* The limit also applies at the END of a survey, with no further frame. */
+	struct reac_tap_survey s2;
+	reac_tap_survey_init(&s2);
+	mk_frame(f, BOX_LEN, BCAST, FLOOD, 9);
+	memset(f + 16, 0, 34);
+	reac_tap_survey_frame(&s2, f, BOX_LEN, T);
+	CHECK(reac_tap_survey_resolve(&s2, T + W_US - 1) == 1, "hold: still held just inside");
+	CHECK(reac_tap_survey_resolve(&s2, T + W_US) == 0 &&
+	      s2.stream[0].kind == REAC_TAP_STREAM_BOX, "hold: a box at the window's end");
+}
+
 int main(int argc, char **argv)
 {
 	char dir[] = "/tmp/reac_tap_test_XXXXXX";
@@ -315,6 +386,25 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	arm_synthetic(dir);
+	arm_hold();
+
+	/* The segment answers publish the KIND they are given, never one inferred from a
+	 * width: a joined box on M that is 40 wide reads `box`, a refused box `box` with its
+	 * refusal, a joined desk `desk` (operator ruling 2026-09-25). */
+	{
+		struct reac_segment_answer a;
+		reac_segment_answer_slave_kind(&a, 1, 0x0040abc4063bull, 48000, REAC_RIVAL_BOX);
+		CHECK(strcmp(a.rival_kind, "box") == 0 && strcmp(a.refusal, "none") == 0,
+		      "segment: a joined box on M reads box, whatever its width");
+		reac_segment_answer_slave_kind(&a, 1, 0x0040abc9919cull, 48000, REAC_RIVAL_DESK);
+		CHECK(strcmp(a.rival_kind, "desk") == 0, "segment: a joined desk reads desk");
+		reac_segment_answer_slave_kind(&a, 0, 0, 0, REAC_RIVAL_DESK);
+		CHECK(strcmp(a.rival_kind, "none") == 0 && strcmp(a.master_state, "none") == 0,
+		      "segment: nothing heard is none, whatever kind was passed");
+		reac_segment_answer_refused_kind(&a, REAC_RIVAL_BOX, 0x0040abc4063bull, 48000);
+		CHECK(strcmp(a.rival_kind, "box") == 0 && strcmp(a.refusal, "rival-master-box") == 0,
+		      "segment: a refused box carries its refusal code");
+	}
 
 	if (argc > 1 && access(argv[1], R_OK) == 0) {
 		printf("test_tap: corpus arm on %s\n", argv[1]);

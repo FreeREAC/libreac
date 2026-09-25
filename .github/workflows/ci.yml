@@ -10,3 +10,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build + unit tests
         run: make test
+      # The transport suite, against the vendored reac-pw headers. Its namespace/veth test
+      # either measures on this runner or exits 77 and is reported as SKIP: it ends with a
+      # verdict either way, and every test in it carries tests/run-test.sh's timeout.
+      - name: Transport tests
+        run: make test-transport REACPW_INCLUDE=packaging/vendor/reac-pw-headers
