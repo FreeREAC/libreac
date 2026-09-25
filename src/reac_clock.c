@@ -313,6 +313,12 @@ void reac_clock_disc_update(struct reac_clock_disc *c, uint32_t avail,
 		 * reference; carrying it over would let one device's steadiness vouch for
 		 * another's. applied_ppm survives — that is holdover, a separate promise. */
 		reac_dll_stability_reset(&c->dll);
+		/* And so does the LOCK. A reference that has produced no sample yet is being
+		 * acquired, not followed: LOCKED names the old one, and left standing it would
+		 * publish the new reference's name over the old one's correction. A sample in
+		 * this same call moves it on below; FREERUN decides its own state below. */
+		if (src != REAC_CLOCK_SRC_FREERUN)
+			c->state = REAC_CLOCK_LOCKING;
 	}
 	c->src = src;
 
