@@ -23,9 +23,9 @@ int reac_upstream_channels(size_t len)
 	if ((len - REAC_UPSTREAM_OVERHEAD) % REAC_UPSTREAM_BYTES_PER_CH != 0)
 		return -1;
 	size_t nch = (len - REAC_UPSTREAM_OVERHEAD) / REAC_UPSTREAM_BYTES_PER_CH;
-	if (nch & 1)               /* the braid carries channel PAIRS */
-		return -1;
-	if (nch >= REAC_MAX_CHANNELS) /* 40 ch = 1492 B = the downstream broadcast */
+	/* An even 2..38 (reac_box_width_ok): the braid carries channel PAIRS, and
+	 * 40 ch = 1492 B is the downstream broadcast, the desk's frame. */
+	if (!reac_box_width_ok((int)nch))
 		return -1;
 	return (int)nch;
 }

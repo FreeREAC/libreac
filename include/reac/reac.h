@@ -65,6 +65,20 @@ extern "C" {
 #define REAC_UPSTREAM_OVERHEAD     52  /* 50 B header + 2 B end marker */
 #define REAC_UPSTREAM_BYTES_PER_CH 36  /* 12 samples x 3 B */
 
+/* A BOX'S WIDTH, EITHER DIRECTION (operator ruling 2026-09-25: "mixer sends 40ch,
+ * boxes have their size of ins and outs, always even"; reac-protocol spec/reac.ksy
+ * num_channels: "40 is the downstream broadcast; an even 2..38 is a box's upstream
+ * return"). 40 channels / 1492 B is the DESK's frame and only the desk's, so a box
+ * width is an even 2..38 — declared once here, and every box door (the builders,
+ * the model table, the registry, the upstream parser) asks reac_box_width_ok(). */
+#define REAC_BOX_MIN_CHANNELS  2
+#define REAC_BOX_MAX_CHANNELS  (REAC_MAX_CHANNELS - 2)   /* 38 */
+
+static inline int reac_box_width_ok(int n)
+{
+	return n >= REAC_BOX_MIN_CHANNELS && n <= REAC_BOX_MAX_CHANNELS && (n & 1) == 0;
+}
+
 /* THE GEOMETRY IS THE ROLE. A master's downstream is always the 40-channel
  * solution (1492 B); a stagebox's upstream is its own, smaller, declared width.
  * Frame length therefore decides which side of the protocol a peer is, with
@@ -260,7 +274,11 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        Behaviour: reac_detect_rate_fd measures one stream; a new clock reference is
  *        LOCKING until measured; reac_ctrl_identity_reply requires both checksums;
  *        reac_decode_plain_le refuses an oversize geometry; reac_boxreg refuses an
- *        overflowing base and the zero MAC. No struct or symbol moves or changes size, so
+ *        overflowing base and the zero MAC. A BOX IS NEVER 40 WIDE (operator ruling
+ *        2026-09-25): REAC_BOX_MIN/MAX_CHANNELS and reac_box_width_ok() are ADDED and
+ *        every box door refuses 40 and odd widths; the experiment rows' tokens move
+ *        from fr4000 / fr0040 to fr3600 / fr0036, so a caller selecting those by token
+ *        must move with it. No struct or symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,

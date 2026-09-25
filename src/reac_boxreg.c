@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 #include <reac/reac_boxreg.h>
+#include <reac/reac.h>   /* reac_box_width_ok */
 #include <string.h>
 #include <stdio.h>
 
@@ -52,7 +53,8 @@ static int lowest_free_base(const struct reac_boxreg *r, int nch)
 
 static int width_ok(const struct reac_boxreg *r, int nch)
 {
-	return nch >= 2 && nch <= r->fabric && (nch & 1) == 0;
+	/* A box width (even 2..38, reac.h), and inside this registry's fabric. */
+	return reac_box_width_ok(nch) && nch <= r->fabric;
 }
 
 int reac_boxreg_declare(struct reac_boxreg *r, int nch, const char *name, int base)

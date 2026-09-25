@@ -489,7 +489,11 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
  *
  * SAID PLAINLY BECAUSE IT IS AN ASSUMPTION: no capture of an output-only box
  * exists anywhere in this project. What a real S-4000D puts on the wire is the
- * open question of the 2026-09-17 spec's §9, and this is what we will try. */
+ * open question of the 2026-09-17 spec's §9, and this is what we will try.
+ *
+ * 0 — "not a box" — for a row whose inputs OR outputs are not zero or a box width
+ * (an even 2..38, reac_box_width_ok in reac.h): 40 is the desk's frame (operator
+ * ruling 2026-09-25), and every builder refuses a row this answers 0 for. */
 int reac_box_model_upstream_width(const struct reac_box_model *m);
 
 /* Build one of a model's box->master control frames AS THAT MODEL — the door a

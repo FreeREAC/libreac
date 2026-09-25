@@ -5,7 +5,7 @@
  * (docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §2, reac-pw's tree).
  *
  * A row used to BE its captured bytes. So a model nobody has captured — an
- * S-0816, an S-2416, or the operator's 40-channel experiment — could not be a
+ * S-0816, an S-2416, or the operator's 36-channel experiment — could not be a
  * row at all; it could only be code. Every block is now SYNTHESISED from a row's
  * declared facts, and the captured bytes are the ORACLE for that synthesis:
  *
@@ -20,13 +20,15 @@
  *   ARM 3  every row's identity page round-trips through reac_identity_ingest
  *          back to the row's declared firmware, REAC version and name — the
  *          decoder is the corpus's, not this test's.
- *   ARM 4  the rows nobody has seen are rows: widths, tokens, and the 40-channel
- *          experiment declaring the fabric's full width with no Roland model
- *          behind it.
+ *   ARM 4  the rows nobody has seen are rows: widths, tokens, and the 36-channel
+ *          experiment — the widest box a declaration can state, since 40 is the
+ *          desk's frame (ruling 2026-09-25) — with no Roland model behind it;
+ *          and EVERY row is a box width each way, never 40.
  *   ARM 5  the identity is OURS unless the row asks otherwise: every DERIVED
  *          FreeREAC row claims REAC major 9, which no Roland box has ever sent,
  *          and every CAPTURED row is Roland-shaped.
  */
+#include <reac/reac.h>
 #include <reac/reac_ctrl.h>
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_identity.h>
@@ -187,12 +189,23 @@ int main(void)
 	CHK(m->has_identity_record == 0 && m->name == NULL);
 	CHK(reac_box_model_upstream_width(m) == 8);   /* its granted return, measured */
 
-	/* THE OPERATOR'S EXPERIMENT: the protocol's full 40-channel width, either
-	 * way round, with no Roland model behind it. 40 and not 48 — the port table
-	 * spans 48 channels but the downstream frame carries 40 slots. */
-	CHK((m = reac_box_model_by_token("fr4000")) && m->in_ch == 40 && m->out_ch == 0);
+	/* THE OPERATOR'S EXPERIMENT, at the widest a box may be: 40 channels is the
+	 * DESK's frame (ruling 2026-09-25), a box width is an even 2..38, and the
+	 * declaration counts in 4-channel slots — so 36, either way round. */
+	CHK((m = reac_box_model_by_token("fr3600")) && m->in_ch == 36 && m->out_ch == 0);
 	CHK(m->origin == REAC_BOX_DERIVED && m->identity_shape == REAC_BOX_IDENTITY_FREEREAC);
-	CHK((m = reac_box_model_by_token("fr0040")) && m->in_ch == 0 && m->out_ch == 40);
+	CHK((m = reac_box_model_by_token("fr0036")) && m->in_ch == 0 && m->out_ch == 36);
+	CHK(reac_box_model_by_token("fr4000") == NULL && reac_box_model_by_token("fr0040") == NULL);
+	/* EVERY ROW is a box: each direction zero or an even 2..38, never the desk's 40. */
+	{
+		size_t n;
+		const struct reac_box_model *t = reac_box_model_table(&n);
+		for (size_t i = 0; i < n; i++) {
+			CHK(t[i].in_ch == 0 || reac_box_width_ok(t[i].in_ch));
+			CHK(t[i].out_ch == 0 || reac_box_width_ok(t[i].out_ch));
+			CHK(reac_box_width_ok(reac_box_model_upstream_width(&t[i])));
+		}
+	}
 	CHK((m = reac_box_model_by_token("fr2020")) && m->in_ch == 20 && m->out_ch == 20);
 
 	/* A WIDTH STILL NAMES ONLY A CAPTURED ROW. Derived rows are addressed by
@@ -209,27 +222,27 @@ int main(void)
 
 	/* ---- THE ROW REACHES THE WIRE. A width can only name a CAPTURED row, so
 	 * this is the door a derived model declares itself through: build the
-	 * announce AS the 40-channel experiment row and require the frame to carry
+	 * announce AS the 36-channel experiment row and require the frame to carry
 	 * that row's declaration and to be recognised back as that row. ---- */
 	{
 		static const uint8_t MASTER[6] = { 0x00, 0x40, 0xab, 0x01, 0x02, 0x03 };
 		static const uint8_t SRC[6]    = { 0x00, 0x40, 0xab, 0x0f, 0x0e, 0x0d };
 		uint8_t frame[2048], want[32];
-		const struct reac_box_model *fr = reac_box_model_by_token("fr4000");
-		CHK(fr && reac_box_model_upstream_width(fr) == 40);
+		const struct reac_box_model *fr = reac_box_model_by_token("fr3600");
+		CHK(fr && reac_box_model_upstream_width(fr) == 36);
 		size_t len = reac_ctrl_build_as(frame, fr, REAC_BOX_BLOCK_CONFIG,
 		                                MASTER, SRC, 1, NULL, 0);
-		CHK(len == reac_ctrl_box_frame_len(40));
+		CHK(len == reac_ctrl_box_frame_len(36));
 		CHK(reac_box_model_block(fr, REAC_BOX_BLOCK_CONFIG, want) == 1);
 		CHK(memcmp(frame + 18, want, 32) == 0);
 		CHK(reac_ctrl_identify_box(frame, len) == fr);
 		/* The identity the mixer will read back is OURS, not a Roland box's. */
 		CHK(reac_ctrl_build_as(frame, fr, REAC_BOX_BLOCK_IDENT_FIRST,
 		                       MASTER, SRC, 2, NULL, 0) > 0);
-		CHK(memcmp(frame + 18 + 21, "FR-4000", 7) == 0);
+		CHK(memcmp(frame + 18 + 21, "FR-3600", 7) == 0);
 		/* An output-only row still speaks: the declaration says zero inputs and
 		 * the frame carries the minimum pair (an assumption, named in the spec). */
-		const struct reac_box_model *d = reac_box_model_by_token("fr0040");
+		const struct reac_box_model *d = reac_box_model_by_token("fr0036");
 		CHK(d && d->in_ch == 0 && reac_box_model_upstream_width(d) == 2);
 		CHK(reac_ctrl_build_as(frame, d, REAC_BOX_BLOCK_CONFIG,
 		                       MASTER, SRC, 3, NULL, 0) == reac_ctrl_box_frame_len(2));
@@ -255,7 +268,7 @@ int main(void)
 	       "every captured block of all 3 captured rows byte for byte, every row's "
 	       "declaration decodes to its own widths and strap, every identity page "
 	       "round-trips through reac_identity, and the unseen models (S-0816, "
-	       "S-2416, S-4000D/M/H, the 0832 split) plus the 40-channel experiment "
+	       "S-2416, S-4000D/M/H, the 0832 split) plus the 36-channel experiment "
 	       "are rows\n");
 	return 0;
 }

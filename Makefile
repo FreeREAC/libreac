@@ -150,6 +150,11 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# is the only thing that licenses a row for a model nobody has ever seen.
 	$(CC) $(CFLAGS) $(INC) tests/test_box_table.c libreac.a -lm -o test_box_table
 	./test_box_table
+	# A BOX IS NEVER 40 WIDE (operator ruling 2026-09-25): 40 channels is the desk's
+	# frame, a box's width either way is an even 2..38. Every box builder, the model
+	# door, the registry and the upstream parser refuse 40 and every odd width.
+	$(CC) $(CFLAGS) $(INC) tests/test_box_width.c libreac.a -lm -o test_box_width
+	./test_box_width
 	$(CC) $(CFLAGS) $(INC) tests/test_master_carriers.c libreac.a -lm -o test_master_carriers
 	./test_master_carriers
 	$(CC) $(CFLAGS) $(INC) tests/test_master_capture.c libreac.a -lm -o test_master_capture
@@ -367,7 +372,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	./test_topo_hears_vlans
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_rate_detect test_clock test_identity_cksum test_decode_plain_le etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_rate_detect test_clock test_identity_cksum test_decode_plain_le etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 

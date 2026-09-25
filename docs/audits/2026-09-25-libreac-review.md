@@ -256,7 +256,7 @@ as it was reviewed.
 | M1 rate detection | fixed: one stream, measured by its own counter | `tests/test_rate_detect.c` |
 | M2 clock lock on switch | fixed: a new reference is LOCKING until measured | `tests/test_clock.c` |
 | M3 identity checksums | fixed: both checksums required | `tests/test_identity_cksum.c`, `tests/test_identity.c` |
-| **M4 40-ch box row** | **OPEN, operator question**: the row stays as is | none; `tests/test_review_box_width.c` is red, run by hand |
+| M4 40-ch box row | fixed per operator ruling 2026-09-25 ("mixer sends 40ch, boxes have their size of ins and outs, always even"): every box door takes `reac_box_width_ok()` (even 2..38, declared once in `reac.h`); `fr4000` / `fr0040` became `fr3600` / `fr0036`, the widest the 4-channel-slot declaration can state; the transport slave's width clamp is 38 | `tests/test_box_width.c` (red on the old code: 30 failures) and the every-row arm in `tests/test_box_table.c` |
 | M5 boxreg overflow | fixed | `tests/test_boxreg.c` |
 | M6 plain-LE over-read | fixed | `tests/test_decode_plain_le.c` |
 | M7 `reac_cfg.h` | fixed: the one declaration; the vendored reac-pw headers alias it; `"none"` | `tests/conformance-cfg-declared-once.sh`, `tests/test_cfg.c` |

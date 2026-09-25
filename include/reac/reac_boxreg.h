@@ -35,7 +35,7 @@
 struct reac_box {
 	uint8_t  mac[6];                     /* L2 source; all-zero = a pre-declared slot */
 	int      base;                       /* first AUDIO fabric slot (0..39) */
-	int      nch;                        /* box input width (even, 2..40) */
+	int      nch;                        /* box input width (even, 2..38) */
 	int      established;                 /* handshake complete (RX/FSM sets this) */
 	int      pinned;                     /* base was pre-declared, not auto-allocated */
 	char     name[REAC_BOXREG_NAME_MAX]; /* operator label; "" = fall back to model */
