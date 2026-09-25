@@ -52,8 +52,10 @@
  * (cfea [17] = 0x28). Allocation of a box's audio lives here. */
 #define REAC_AUDIO_FABRIC_SLOTS   40
 #define REAC_AUDIO_FABRIC_CEILING (REAC_AUDIO_FABRIC_SLOTS - 1)   /* 39 = 0x27 */
-/* MUTATION-CHECKED: widening this to 48 makes tests/test_reac_grant.c section 5b
- * accept a 16-wide box at audio slot 32 (ending at 47) — the test fails. */
+/* MUTATION-CHECKED: widening this to 48 makes tests/test_boxreg.c accept a 16-wide
+ * box at audio slot 32 (ending at 47), pinned or joined — `make test` goes red
+ * (sabotage-verified 2026-09-25). This note used to cite reac-pw's
+ * tests/test_reac_grant.c, which is not in this repo: here nothing went red. */
 
 /* HEAD-AMP / chanmap wire-channel space: 0x00..0x2f. An S-1608 based at 0x20
  * occupies 0x20..0x2f, which is why this ceiling is 0x2f and not 39. */
