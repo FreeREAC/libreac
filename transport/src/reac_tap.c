@@ -16,7 +16,7 @@
 #include <reac/reac_capture.h>
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_disco.h>
-#include <reac/reac_arbitration.h>   /* REAC_DESK_PROOF_WINDOW_NS — the hold's limit */
+#include <reac/reac_arbitration.h>   /* the hold's limit: one master-only cadence */
 #include <reac/reac_upstream.h>
 #include <reac/pcap_source.h>
 
@@ -97,14 +97,41 @@ static void resolve_by_role(const struct reac_tap_survey *s, struct reac_tap_str
 		st->kind = REAC_TAP_STREAM_MASTER;
 }
 
-/* THE HOLD'S LIMIT (reac_arbitration.h, REAC_DESK_PROOF_WINDOW_NS): a broadcast stream
- * heard for the whole window without a master-only frame is a box. */
+/* The stream's own pace, from its counter advance over its timestamps; 0 when there is
+ * no span to measure it over. */
+static int stream_fps(const struct reac_tap_stream *st)
+{
+	const uint64_t advance = st->frames + st->gaps;
+	if (advance < 2 || !st->first_ts_usec || st->last_ts_usec <= st->first_ts_usec)
+		return 0;
+	return (int)((double)(advance - 1) * 1e6 / (double)(st->last_ts_usec - st->first_ts_usec) + 0.5);
+}
+
+/* THE HOLD'S LIMIT (reac_arbitration.h): ONE MASTER-ONLY CADENCE, IN FRAMES AT THE
+ * CURRENT RATE. The sender's own counter says how many frames it has put on the wire
+ * since it was first heard — lost ones included, a mirror twin never (the duplicate guard
+ * runs first) — and a broadcast stream that has advanced a whole cadence at its own pace
+ * with no master-only op is a box. With no pace measurable yet the widest frame count of
+ * the three paces is the bar: a hold that is too short at some pace is not a hold. */
+static void resolve_by_frames(struct reac_tap_stream *st)
+{
+	if (st->kind != REAC_TAP_STREAM_UNRESOLVED)
+		return;
+	const int fps = stream_fps(st);
+	const uint32_t window = fps > 0 ? reac_master_only_cadence_frames(fps)
+	                                : REAC_MASTER_ONLY_CADENCE_FRAMES_96K;
+	if (st->frames + st->gaps > window)
+		st->kind = REAC_TAP_STREAM_BOX;
+}
+
+/* The same limit at the END of a survey, with no frame to count: the time since the
+ * stream was first heard, as frames at its own pace (or the longest window, unmeasured). */
 static void resolve_by_time(struct reac_tap_stream *st, uint64_t now_usec)
 {
 	if (st->kind != REAC_TAP_STREAM_UNRESOLVED || !st->first_ts_usec)
 		return;
 	if (now_usec > st->first_ts_usec &&
-	    (now_usec - st->first_ts_usec) * 1000ull >= REAC_DESK_PROOF_WINDOW_NS)
+	    (now_usec - st->first_ts_usec) * 1000ull >= reac_master_only_cadence_ns(stream_fps(st)))
 		st->kind = REAC_TAP_STREAM_BOX;
 }
 
@@ -229,8 +256,7 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
 	st->frames++;
 	note_model(st, frame, clean);
 	resolve_by_role(s, st, frame, clean);
-	if (ts_usec)
-		resolve_by_time(st, ts_usec);
+	resolve_by_frames(st);
 	return idx;
 }
 
@@ -320,9 +346,9 @@ static int survey_source(struct reac_tap *t)
 	const uint64_t deadline = mono_usec() + (uint64_t)ms * 1000ull;
 	/* THE HOLD HAS A DECLARED LIMIT, AND THE SURVEY WAITS FOR IT: past the ordinary
 	 * survey, keep listening while any broadcast stream is still unresolved, for at most
-	 * REAC_DESK_PROOF_WINDOW_NS more — a desk proves itself on its next announce, a
-	 * flood-only box by the window running out. */
-	const uint64_t hold_end = deadline + REAC_DESK_PROOF_WINDOW_NS / 1000ull;
+	 * one master-only cadence more — a desk proves itself on its next master-only op, a
+	 * flood-only box by the cadence running out. */
+	const uint64_t hold_end = deadline + reac_master_only_cadence_ns(0) / 1000ull;
 	while (mono_usec() < deadline ||
 	       (mono_usec() < hold_end && reac_tap_survey_resolve(&t->survey, mono_usec()) > 0)) {
 		long n = reac_capture_next(&cap, frame, sizeof frame);

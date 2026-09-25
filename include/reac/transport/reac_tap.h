@@ -65,7 +65,8 @@ enum reac_tap_stream_kind {
 	/* A BROADCAST stream whose source has not proven what it is yet (APPENDED 1.6.0).
 	 * Operator ruling 2026-09-25, HOLD WITH A DECLARED LIMIT: it becomes MASTER on the
 	 * source's first master-only frame, BOX on a box-only frame or a declared model, and
-	 * BOX once REAC_DESK_PROOF_WINDOW_NS passes with neither (reac_arbitration.h). Width
+	 * BOX once its own counter has advanced one master-only cadence in frames at its pace
+	 * with neither (reac_arbitration.h, reac-protocol's master_cadence group). Width
 	 * never decides it: a box may be 40 wide. A tap does not serve a stream in this
 	 * state — it has not been told whose audio it is. */
 	REAC_TAP_STREAM_UNRESOLVED,
@@ -164,7 +165,8 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
 int reac_tap_survey_rate(const struct reac_tap_survey *s);
 
 /* Apply the HOLD's limit at `now_usec` (the survey's timestamp clock): every UNRESOLVED
- * stream first heard REAC_DESK_PROOF_WINDOW_NS or more before `now_usec` without a
+ * stream first heard one master-only cadence (reac_master_only_cadence_ns at its own
+ * pace) or more before `now_usec` without a
  * master-only frame becomes a BOX. Returns how many are still UNRESOLVED. A frame's own
  * timestamp applies the same limit as it arrives; this is for the end of a survey. */
 unsigned reac_tap_survey_resolve(struct reac_tap_survey *s, uint64_t now_usec);

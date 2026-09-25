@@ -31,7 +31,6 @@
 #include <reac/reac_disco.h>
 #include <reac/reac_master.h>   /* enum reac_master_state: the FSM's OWN state */
 #include <reac/reac_clock.h>    /* the discipline this vocabulary reports on */
-#include <reac/reac_facts_timing.h>   /* REAC_ANNOUNCE_PERIOD_MS — a protocol fact */
 
 #include <stdint.h>
 
@@ -141,38 +140,48 @@ enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e);
  * HOW LONG A BROADCAST SENDER IS GIVEN TO PROVE IT IS THE DESK.
  *
  * A broadcast audio stream whose source has sent nothing that names its role could be the
- * desk's downstream (its announce not heard yet) or a box's presence-flood. Width cannot
- * decide it (a box may be 40 wide). Operator ruling 2026-09-25: HOLD WITH A DECLARED LIMIT
- * — hold the verdict until the sender's own frames prove its role, but never longer than
- * k x the desk's declared master-announce interval; at the window's end a broadcast
- * sender with no master-only frame is a BOX.
+ * desk's downstream (its master-only ops not heard yet) or a box's presence-flood. Width
+ * cannot decide it (a box may be 40 wide). Operator ruling 2026-09-25: HOLD WITH A DECLARED
+ * LIMIT — hold the verdict until the sender's own frames prove its role, but never longer
+ * than the SHORTEST master-only control cadence, in FRAMES at the current rate; at that
+ * window's end a broadcast sender that sent no master-only op is a BOX. The desk reveals
+ * itself fast: its cfea announce comes once a second whether or not a box answers (the
+ * page 0x0019 window slows to ~2 s and the scene transfer repeats every 2.695 s — both
+ * longer).
  *
- * The interval is a protocol fact (reac-protocol protocol-facts.yaml, timing group,
- * ANNOUNCE_PERIOD_MS: a master announces once a second), read from the generated
- * reac_facts_timing.h — never typed here. k = 3 is this library's choice, and the reason
- * is the hunt's (reac_hunt.h): one announce would call a desk absent on a single lost
- * frame, two on two in a row, three is the first window that survives two consecutive
- * losses, inside the 5 s REAC_DISCO_STALE_NS "really gone" bar.
+ * The cadence is a protocol fact: reac-protocol's master_cadence group
+ * (MASTER_ONLY_CADENCE_FRAMES_44K1 / _48K / _96K = 3675 / 4000 / 8000, from the
+ * m200i-s1608 cold-boot capture), read through the generated reac_facts_master_cadence.h
+ * — never typed here.
  */
-#define REAC_DESK_ANNOUNCES_TO_WAIT 3
-#define REAC_DESK_PROOF_WINDOW_NS \
-	((uint64_t)REAC_DESK_ANNOUNCES_TO_WAIT * (uint64_t)REAC_ANNOUNCE_PERIOD_MS * 1000000ULL)
+#include <reac/reac_facts_master_cadence.h>
+
+/** The window in FRAMES at `fps` frames/s (snapped to the pace it means), or 0 when
+ *  `fps` <= 0 (no rate known). */
+uint32_t reac_master_only_cadence_frames(int fps);
+
+/** The same window as a duration: its frames at `fps`. With no rate known (`fps` <= 0)
+ *  it is the LONGEST of the three paces' windows — a hold that would be too short at some
+ *  pace is not a hold. (The three are equal in time by derivation: one cadence per
+ *  second at every pace.) */
+uint64_t reac_master_only_cadence_ns(int fps);
 
 /**
- * What a sender IS, with the hold: reac_rival_kind_of() plus time.
+ * What a sender IS, with the hold: reac_rival_kind_of() plus the window.
  *
  *   - declared a box model, or spoke as only a box does          -> BOX
- *   - announced master (a master-only frame) and declared no box -> DESK (UNKNOWN until a
+ *   - announced master (a master-only op) and declared no box    -> DESK (UNKNOWN until a
  *     stream is heard, as in reac_rival_kind_of)
- *   - neither (a broadcast stream, role unresolved), no stream heard      -> UNKNOWN
- *   - neither, heard for less than REAC_DESK_PROOF_WINDOW_NS since first seen -> UNKNOWN
- *     (HOLD: its announce may still come)
- *   - neither, heard for the whole window with no master-only frame       -> BOX
+ *   - neither (a broadcast stream, role unresolved), no stream heard            -> UNKNOWN
+ *   - neither, heard for less than one master-only cadence at `fps`             -> UNKNOWN
+ *     (HOLD: its master-only op may still come)
+ *   - neither, heard for the whole cadence with no master-only op               -> BOX
  *
- * `now_ns` is on the table's clock (the one reac_disco_table_observe was given). NULL is
- * NONE. Pure.
+ * `now_ns` is on the table's clock (the one reac_disco_table_observe was given); `fps` is
+ * the sender's pace if known, else 0 (reac_master_only_cadence_ns). NULL is NONE. Pure.
  */
-enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t now_ns);
+enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t now_ns,
+                                      int fps);
 
 /**
  * WIDTH ONLY — SUPERSEDED for desk-vs-box by reac_rival_kind_of().

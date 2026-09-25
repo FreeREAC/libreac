@@ -106,6 +106,14 @@ $(BUILD_DIR)/reac_facts_timing.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
 	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
 	  --groups timing --guard REAC_FACTS_TIMING_H
 
+# The MASTER-ONLY CADENCE (reac-protocol's master_cadence group): the shortest interval at
+# which a desk sends a master-only op, in frames at each rate. It is the limit of the hold
+# on a broadcast sender's desk-or-box verdict (operator ruling 2026-09-25).
+$(BUILD_DIR)/reac_facts_master_cadence.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
+	@mkdir -p $(BUILD_DIR)
+	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
+	  --groups master_cadence --guard REAC_FACTS_MASTER_CADENCE_H
+
 # The drift gate: only meaningful when the schema is reachable (nothing to
 # compare the fallback against otherwise). Regenerates and diffs against the
 # committed tests/reac_facts_assert.h; a difference fails the build rather
@@ -113,7 +121,7 @@ $(BUILD_DIR)/reac_facts_timing.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
 .PHONY: facts-drift-check
 ifeq ($(HAVE_SCHEMA),1)
 facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_width.h \
-                   $(BUILD_DIR)/reac_facts_timing.h
+                   $(BUILD_DIR)/reac_facts_timing.h $(BUILD_DIR)/reac_facts_master_cadence.h
 	@diff -u tests/reac_facts_assert.h $(BUILD_DIR)/reac_facts_assert.h || \
 	  { echo "tests/reac_facts_assert.h has drifted from $(FACTS_SCHEMA)."; \
 	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_assert.h tests/reac_facts_assert.h"; \
@@ -125,6 +133,10 @@ facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_
 	@diff -u include/reac/reac_facts_timing.h $(BUILD_DIR)/reac_facts_timing.h || \
 	  { echo "include/reac/reac_facts_timing.h has drifted from $(FACTS_SCHEMA)."; \
 	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_timing.h include/reac/reac_facts_timing.h"; \
+	    exit 1; }
+	@diff -u include/reac/reac_facts_master_cadence.h $(BUILD_DIR)/reac_facts_master_cadence.h || \
+	  { echo "include/reac/reac_facts_master_cadence.h has drifted from $(FACTS_SCHEMA)."; \
+	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_master_cadence.h include/reac/reac_facts_master_cadence.h"; \
 	    exit 1; }
 else
 facts-drift-check:

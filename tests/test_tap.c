@@ -52,7 +52,7 @@
 #include "reac/transport/reac_tap.h"
 #include "reac/pcap_source.h"
 #include "reac/reac.h"
-#include "reac/reac_arbitration.h"   /* REAC_DESK_PROOF_WINDOW_NS — the hold's limit */
+#include "reac/reac_arbitration.h"   /* the hold's limit: one master-only cadence */
 #include "reac/transport/reac_segment_ident.h"
 
 #include "ctrl_fixtures.inc"          /* FX_ANNOUNCE — a captured cfea master announce */
@@ -318,63 +318,84 @@ static void arm_corpus(const char *path)
 }
 
 /* HOLD WITH A DECLARED LIMIT, in the tap. A broadcast stream is UNRESOLVED until its
- * source proves what it is, for at most REAC_DESK_PROOF_WINDOW_NS; then a source with no
- * master-only frame is a box. Timestamps are the survey's own clock (microseconds). */
+ * source proves what it is, for at most ONE MASTER-ONLY CADENCE IN FRAMES AT ITS OWN PACE
+ * (reac-protocol's master_cadence group, through reac_arbitration.h); then a source with
+ * no master-only op is a box. Frames are fed at their real pace, counters consecutive. */
+static void feed(struct reac_tap_survey *s, const uint8_t *mac, size_t len, int fps,
+                 uint32_t n, uint16_t *ctr, uint64_t *ts, int announce_last)
+{
+	uint8_t f[REAC_FRAME_BYTES];
+	for (uint32_t k = 0; k < n; k++) {
+		mk_frame(f, len, BCAST, mac, (*ctr)++);
+		memset(f + 16, 0, 34);                       /* a FILLER: type 0000, zero block */
+		if (announce_last && k + 1 == n)
+			memcpy(f + 16, FX_ANNOUNCE, sizeof FX_ANNOUNCE);
+		reac_tap_survey_frame(s, f, len, *ts);
+		*ts += 1000000ull / (uint64_t)fps;
+	}
+}
+
 static void arm_hold(void)
 {
 	static const uint8_t DESK[6]  = { 0x00, 0x40, 0xab, 0xc9, 0x91, 0x9c };
 	static const uint8_t FLOOD[6] = { 0x00, 0x40, 0xab, 0x16, 0x08, 0x02 };
 	static const uint8_t WIDE[6]  = { 0x00, 0x40, 0xab, 0x40, 0x40, 0x02 };
-	const uint64_t W_US = REAC_DESK_PROOF_WINDOW_NS / 1000ull;
-	const uint64_t T = 5000000ull;
-	uint8_t f[REAC_FRAME_BYTES];
+	static const uint8_t FAST[6]  = { 0x00, 0x40, 0xab, 0x96, 0x96, 0x02 };
+	const int fps48 = 4000, fps96 = 8000;
+	const uint32_t W48 = reac_master_only_cadence_frames(fps48);   /* 4000 */
+	const uint32_t W96 = reac_master_only_cadence_frames(fps96);   /* 8000 */
 	struct reac_tap_survey s;
 	reac_tap_survey_init(&s);
 
-	/* A desk's downstream, unannounced for its first second: held. */
+	/* A desk's downstream: held for most of a cadence, then its master op inside it. */
 	uint16_t c = 1;
-	for (uint64_t ts = T; ts < T + 1000000ull; ts += 100000ull) {
-		mk_frame(f, REAC_FRAME_BYTES, BCAST, DESK, c++);
-		reac_tap_survey_frame(&s, f, REAC_FRAME_BYTES, ts);
-	}
+	uint64_t ts = 5000000ull;
+	feed(&s, DESK, REAC_FRAME_BYTES, fps48, W48 / 2, &c, &ts, 0);
 	CHECK(s.n == 1 && s.stream[0].kind == REAC_TAP_STREAM_UNRESOLVED,
-	      "hold: a desk's downstream before its announce is UNRESOLVED, not the master");
+	      "hold: a desk's downstream before its master op is UNRESOLVED, not the master");
 	CHECK(reac_tap_survey_master(&s) == NULL, "hold: and no master is claimed yet");
-	/* ...and its announce arrives inside the window: the desk. */
-	mk_frame(f, REAC_FRAME_BYTES, BCAST, DESK, c++);
-	memcpy(f + 16, FX_ANNOUNCE, sizeof FX_ANNOUNCE);
-	reac_tap_survey_frame(&s, f, REAC_FRAME_BYTES, T + 1000000ull);
+	feed(&s, DESK, REAC_FRAME_BYTES, fps48, 1, &c, &ts, 1);
 	CHECK(s.stream[0].kind == REAC_TAP_STREAM_MASTER,
-	      "hold: a desk whose announce arrives inside the window is the MASTER stream");
+	      "hold: a desk whose master op arrives inside the window is the MASTER stream");
 
-	/* Flood-only boxes, 16 and 40 wide: held inside the window, boxes past it. */
+	/* Flood-only boxes at 48 kHz, 16 and 40 wide: held for exactly one cadence of frames,
+	 * a box on the next. */
 	const struct { const uint8_t *mac; int w; } boxes[] = { { FLOOD, 16 }, { WIDE, 40 } };
 	for (unsigned b = 0; b < 2; b++) {
 		const size_t len = REAC_UPSTREAM_OVERHEAD + (size_t)boxes[b].w * REAC_UPSTREAM_BYTES_PER_CH;
-		uint64_t ts = T;
-		for (; ts < T + W_US; ts += 250000ull) {
-			mk_frame(f, len, BCAST, boxes[b].mac, c++);
-			memset(f + 16, 0, 34);               /* a FILLER: type 0000, zero block */
-			reac_tap_survey_frame(&s, f, len, ts);
-		}
+		uint16_t bc = 100;
+		uint64_t bts = 5000000ull;
+		feed(&s, boxes[b].mac, len, fps48, W48, &bc, &bts, 0);
 		const struct reac_tap_stream *st = &s.stream[s.n - 1];
 		CHECK(st->kind == REAC_TAP_STREAM_UNRESOLVED && st->channels == (unsigned)boxes[b].w,
-		      "hold: a flood-only broadcast is UNRESOLVED inside the window");
-		mk_frame(f, len, BCAST, boxes[b].mac, c++);
-		memset(f + 16, 0, 34);
-		reac_tap_survey_frame(&s, f, len, T + W_US);
+		      "hold: a flood-only broadcast is UNRESOLVED for one cadence of frames");
+		feed(&s, boxes[b].mac, len, fps48, 1, &bc, &bts, 0);
 		CHECK(st->kind == REAC_TAP_STREAM_BOX,
-		      "hold: a flood-only broadcast is a BOX once the window passes (16 and 40 wide)");
+		      "hold: a flood-only broadcast is a BOX past one cadence (16 and 40 wide)");
+	}
+
+	/* IN FRAMES AT THE CURRENT RATE: a 96 kHz flood has advanced 48 kHz's window and is
+	 * still held, because at its own pace the cadence is 8000 frames. */
+	{
+		uint16_t fc = 7;
+		uint64_t fts = 5000000ull;
+		feed(&s, FAST, BOX_LEN, fps96, W48 + 1, &fc, &fts, 0);
+		const struct reac_tap_stream *st = &s.stream[s.n - 1];
+		CHECK(st->kind == REAC_TAP_STREAM_UNRESOLVED,
+		      "hold: at 96 kHz, 4001 frames is half a cadence — still held");
+		feed(&s, FAST, BOX_LEN, fps96, W96 - W48, &fc, &fts, 0);
+		CHECK(st->kind == REAC_TAP_STREAM_BOX, "hold: at 96 kHz, a box past 8000 frames");
 	}
 
 	/* The limit also applies at the END of a survey, with no further frame. */
 	struct reac_tap_survey s2;
 	reac_tap_survey_init(&s2);
-	mk_frame(f, BOX_LEN, BCAST, FLOOD, 9);
-	memset(f + 16, 0, 34);
-	reac_tap_survey_frame(&s2, f, BOX_LEN, T);
-	CHECK(reac_tap_survey_resolve(&s2, T + W_US - 1) == 1, "hold: still held just inside");
-	CHECK(reac_tap_survey_resolve(&s2, T + W_US) == 0 &&
+	uint16_t c2 = 9;
+	uint64_t ts2 = 5000000ull;
+	feed(&s2, FLOOD, BOX_LEN, fps48, 10, &c2, &ts2, 0);
+	const uint64_t first = 5000000ull, W_US = reac_master_only_cadence_ns(fps48) / 1000ull;
+	CHECK(reac_tap_survey_resolve(&s2, first + W_US - 1) == 1, "hold: still held just inside");
+	CHECK(reac_tap_survey_resolve(&s2, first + W_US) == 0 &&
 	      s2.stream[0].kind == REAC_TAP_STREAM_BOX, "hold: a box at the window's end");
 }
 

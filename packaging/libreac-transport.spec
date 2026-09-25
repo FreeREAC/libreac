@@ -97,7 +97,8 @@ PC
   stream as a box's at any width. reac_slave clamps a configured box width to
   REAC_BOX_MAX_CHANNELS (40).
 - reac_tap holds a broadcast stream as REAC_TAP_STREAM_UNRESOLVED (APPENDED to the enum)
-  until its source proves desk or box, for at most libreac's REAC_DESK_PROOF_WINDOW_NS,
+  until its source proves desk or box, for at most one master-only cadence counted in its
+  own frames at its own pace (libreac's reac_master_only_cadence_frames),
   and serves no stream still unresolved; reac_tap_survey_resolve() is ADDED.
   reac_segment_answer_slave_kind() / _refused_kind() are ADDED and publish the kind the
   caller decided instead of inferring it from a width. No struct changes size.
