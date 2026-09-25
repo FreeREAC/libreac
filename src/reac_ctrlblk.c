@@ -355,6 +355,14 @@ int reac_ctrl_identity_reply(const uint8_t *frame, size_t len, uint16_t *addr_lo
 		return 0;
 	if (block[9] != 0xf0 || block[9 + sysex_len - 1] != 0xf7)
 		return 0;
+	/* BOTH CHECKSUMS, the way every other control frame is judged: a reply that
+	 * fails either is corrupt, and a corrupt reply is not evidence of the box's
+	 * firmware. The OUTER one closes the 32-byte block; the INNER (sum-to-0x80)
+	 * runs from the TAG at block[16] to the record checksum just before the f7. */
+	if (reac_ctrl_checksum_verify(frame) != 0)
+		return 0;
+	if (reac_ctrl_record_cksum_verify(&block[16], (size_t)sysex_len - 8) != 0)
+		return 0;
 	*addr_lo = (uint16_t)((block[18] << 8) | block[19]);
 	*payload = &block[20];
 	*payload_len = (size_t)sysex_len - 13;
