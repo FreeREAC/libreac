@@ -203,7 +203,9 @@ int main(void)
 	CHK((m = reac_box_model_by_channels(8)) && strcmp(m->token, "s0808") == 0);
 	CHK(m->origin == REAC_BOX_CAPTURED);   /* NOT the 8-input S-4000H */
 	CHK((m = reac_box_model_by_channels(32)) && strcmp(m->token, "s4000s") == 0);
-	CHK((m = reac_box_model_by_channels(40)) && m->origin == REAC_BOX_CAPTURED);
+	/* A width with no captured row falls back to the S-1608 — the documented
+	 * default, asserted by name (an origin check here could never fail). */
+	CHK((m = reac_box_model_by_channels(40)) && strcmp(m->token, "s1608") == 0);
 
 	/* ---- THE ROW REACHES THE WIRE. A width can only name a CAPTURED row, so
 	 * this is the door a derived model declares itself through: build the

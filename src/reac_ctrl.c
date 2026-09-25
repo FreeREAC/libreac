@@ -7,30 +7,6 @@
 #include <string.h>
 #include <math.h>
 
-/* Frame geometry (ground-truthed against reac-captures/wired-reac-a-bothdirs):
- *   master->fabric frames: 1492 B (40ch width), broadcast, trailer C2 EA.
- *   box->master frames:    18 hdr + 32 descriptor + n_ch*36 audio + 2 tail.
- *     16ch -> 628 B, 8ch -> 340 B. The [18:50] block is the descriptor on a
- *     FILLER (00 7a per slot) or the cdea/cfea control on a control frame; the
- *     audio region [50:..] still carries 12 samples/ch either way. */
-#define ETH_HDR 14
-#define CNT_OFF 14
-#define TYPE_OFF 16
-#define AUDIO_OFF 50
-#define DESC_WORD_HI 0x00
-#define DESC_WORD_LO 0x7a   /* per-channel descriptor byte observed on the wire */
-
-static inline void put_hdr(uint8_t *f, const uint8_t dst[6], const uint8_t src[6],
-                           uint16_t counter, uint8_t t0, uint8_t t1)
-{
-	memcpy(f, dst, 6);
-	memcpy(f + 6, src, 6);
-	f[12] = 0x88; f[13] = 0x19;
-	f[CNT_OFF] = (uint8_t)(counter & 0xff);
-	f[CNT_OFF + 1] = (uint8_t)(counter >> 8);
-	f[TYPE_OFF] = t0; f[TYPE_OFF + 1] = t1;
-}
-
 int reac_ctrl_classify_box_frame(const uint8_t *frame, size_t len,
                                  const uint8_t our_mac[6],
                                  struct reac_ctrl_parsed *out,

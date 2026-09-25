@@ -85,6 +85,11 @@ int reac_boxreg_add(struct reac_boxreg *r, const uint8_t mac[6], int nch)
 {
 	if (!width_ok(r, nch))
 		return -1;
+	/* The zero MAC MEANS "pre-declared, unbound" in this table, so it can never be
+	 * a joined box's: registering it would add a row that reads as a free slot and
+	 * is never found again, one more per call. */
+	if (mac_is_zero(mac))
+		return -1;
 	int idx = reac_boxreg_find(r, mac);
 	if (idx >= 0)
 		return idx;   /* already registered — idempotent */
