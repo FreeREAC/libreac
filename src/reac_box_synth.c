@@ -263,7 +263,12 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
  * as a plausible number. */
 int reac_box_model_upstream_width(const struct reac_box_model *m)
 {
-	if (!m || m->in_ch < 0 || m->in_ch > REAC_MAX_CHANNELS || (m->in_ch & 1))
+	/* EACH DIRECTION IS A BOX WIDTH (reac_box_width_ok, reac.h): zero, or an even
+	 * 2..38. 40 is the desk's frame, and a row declaring it is not a box. */
+	if (!m || m->in_ch < 0 || m->out_ch < 0)
+		return 0;
+	if ((m->in_ch && !reac_box_width_ok(m->in_ch)) ||
+	    (m->out_ch && !reac_box_width_ok(m->out_ch)))
 		return 0;
 	/* THE DECLARED INPUTS ARE THE RETURN WIDTH, and the S-4000S-0832 is what
 	 * proves it rather than what breaks it: ungranted on our own wire it flooded
