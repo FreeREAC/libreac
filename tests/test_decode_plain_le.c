@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* REVIEW 2026-09-25, finding M6 (docs/audits/2026-09-25-libreac-review.md).
+/* THE PLAIN-LE DIAGNOSTIC STAYS INSIDE THE FRAME. Guard for libreac review 2026-09-25, M6
+ * (docs/audits/2026-09-25-libreac-review.md); red on ee205b6, green since the fix.
  *
  * reac_decode_plain_le() takes a caller's `struct reac_mode` and reads
  * (s*nch + ch)*3 past offset 50 with no check that the geometry fits the
@@ -74,18 +75,18 @@ int main(void)
 {
 	int c = in_child(braid_refuses);
 	if (c != 0) {
-		printf("NOT A RESULT: test_review_decode_plain_le — the reac_decode control "
+		printf("NOT A RESULT: test_decode_plain_le — the reac_decode control "
 		       "did not refuse cleanly (child status %d)\n", c);
 		return 2;
 	}
 	int v = in_child(plain_refuses);
 	if (v != 0) {
-		fprintf(stderr, "FAIL test_review_decode_plain_le: a 42x12 mode over a 1492 B "
+		fprintf(stderr, "FAIL test_decode_plain_le: a 42x12 mode over a 1492 B "
 		        "frame %s\n", v == 128 + SIGSEGV
 		        ? "reads past the frame into the guard page (SIGSEGV)"
 		        : "is decoded instead of refused");
 		return 1;
 	}
-	printf("OK: test_review_decode_plain_le — an oversize geometry is refused\n");
+	printf("OK: test_decode_plain_le — an oversize geometry is refused\n");
 	return 0;
 }

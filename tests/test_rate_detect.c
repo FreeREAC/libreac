@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* REVIEW 2026-09-25, finding M1 (docs/audits/2026-09-25-libreac-review.md).
+/* THE RATE IS ONE STREAM'S. Guard for libreac review 2026-09-25, M1
+ * (docs/audits/2026-09-25-libreac-review.md); red on ee205b6, green since the fix.
  *
  * reac_detect_rate_fd() counts EVERY 0x8819 frame it reads and divides by the
  * span, so a socket that hears both directions of one 48 kHz session — the
@@ -91,18 +92,18 @@ int main(void)
 {
 	int control = run(0);
 	if (control != 48000) {
-		printf("NOT A RESULT: test_review_rate_detect — the downstream-only control "
+		printf("NOT A RESULT: test_rate_detect — the downstream-only control "
 		       "read %d, not 48000; the harness is not pacing, so the verdict arm "
 		       "would prove nothing\n", control);
 		return 2;
 	}
 	int both = run(1);
 	if (both != 48000) {
-		fprintf(stderr, "FAIL test_review_rate_detect: a 48 kHz session heard in both "
+		fprintf(stderr, "FAIL test_rate_detect: a 48 kHz session heard in both "
 		        "directions (1492 B downstream + 628 B return, 4000/s each) detects "
 		        "as %d — every 0x8819 frame is counted, whatever its geometry\n", both);
 		return 1;
 	}
-	printf("OK: test_review_rate_detect — both directions of a 48 kHz session detect as 48000\n");
+	printf("OK: test_rate_detect — both directions of a 48 kHz session detect as 48000\n");
 	return 0;
 }
