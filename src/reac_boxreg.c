@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 #include <reac/reac_boxreg.h>
+#include <reac/reac.h>   /* reac_box_width_ok */
 #include <string.h>
 #include <stdio.h>
 
@@ -52,7 +53,8 @@ static int lowest_free_base(const struct reac_boxreg *r, int nch)
 
 static int width_ok(const struct reac_boxreg *r, int nch)
 {
-	return nch >= 2 && nch <= r->fabric && (nch & 1) == 0;
+	/* A box width (even 2..40, reac.h), and inside this registry's fabric. */
+	return reac_box_width_ok(nch) && nch <= r->fabric;
 }
 
 int reac_boxreg_declare(struct reac_boxreg *r, int nch, const char *name, int base)
@@ -61,7 +63,10 @@ int reac_boxreg_declare(struct reac_boxreg *r, int nch, const char *name, int ba
 		return -1;
 	int pinned = base >= 0;
 	if (pinned) {
-		if (base + nch > r->fabric || range_taken(r, base, nch))
+		/* Subtract, never add: width_ok() bounds nch by the fabric, so
+		 * fabric - nch cannot overflow, while a CLI base near INT_MAX + nch did,
+		 * and the wrapped sum passed this bound. */
+		if (base > r->fabric - nch || range_taken(r, base, nch))
 			return -1;
 	} else {
 		base = lowest_free_base(r, nch);
@@ -81,6 +86,11 @@ int reac_boxreg_declare(struct reac_boxreg *r, int nch, const char *name, int ba
 int reac_boxreg_add(struct reac_boxreg *r, const uint8_t mac[6], int nch)
 {
 	if (!width_ok(r, nch))
+		return -1;
+	/* The zero MAC MEANS "pre-declared, unbound" in this table, so it can never be
+	 * a joined box's: registering it would add a row that reads as a free slot and
+	 * is never found again, one more per call. */
+	if (mac_is_zero(mac))
 		return -1;
 	int idx = reac_boxreg_find(r, mac);
 	if (idx >= 0)

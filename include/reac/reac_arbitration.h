@@ -120,12 +120,79 @@ struct reac_arbitration {
 
 
 /**
- * Classify a rival by the width its frames carry.
+ * Classify a rival by what it SAID and how it spoke — never by its width.
  *
- * 40 channels is the master downstream and nothing else is; every smaller legal geometry is a
- * box upstream of that width. 0 means no legal `52 + n*36` frame has been heard from the peer,
- * which is UNKNOWN rather than narrow — and unknown is refused, per §4's rule that a frame kind
- * nobody has captured must not flip the segment's topology.
+ * Operator ruling 2026-09-25: "BOX_MAX_CHANNELS = 40 ... boxes have their size of ins and outs,
+ * always even." A box may be 40 wide, so a 40-wide stream no longer proves a desk and a narrower
+ * one no longer proves a box. The evidence, in order:
+ *   - the peer DECLARED a box model (its own config-announce matched a row) -> BOX. A box
+ *     strapped to master still declares what it is; that is the stagebox §2b refuses;
+ *   - its role is BOX (a box-only signature: JOIN/box-ready/identity record, box heartbeat,
+ *     config announce, or a UNICAST FILLER — a desk BROADCASTS its downstream) -> BOX;
+ *   - no audio stream heard from it yet (channels 0) -> UNKNOWN, refused per §4;
+ *   - it announced itself MASTER (cfea, slot map, head-amp records, scene push) and declared
+ *     no box -> DESK.
+ * NULL is NONE.
+ */
+enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e);
+
+/**
+ * HOW LONG A BROADCAST SENDER IS GIVEN TO PROVE IT IS THE DESK.
+ *
+ * A broadcast audio stream whose source has sent nothing that names its role could be the
+ * desk's downstream (its master-only ops not heard yet) or a box's presence-flood. Width
+ * cannot decide it (a box may be 40 wide). Operator ruling 2026-09-25: HOLD WITH A DECLARED
+ * LIMIT — hold the verdict until the sender's own frames prove its role, but never longer
+ * than the SHORTEST master-only control cadence, in FRAMES at the current rate; at that
+ * window's end a broadcast sender that sent no master-only op is a BOX. The desk reveals
+ * itself fast: its cfea announce comes every 4000 frames of a 48 kHz downstream whether
+ * or not a box answers (the page 0x0019 window slows and the scene transfer repeats at
+ * longer counts). The window is a FRAME count per rate; a duration is only those frames
+ * at a pace (operator ruling 2026-09-25: "ms depends on frequency and is a derived
+ * figure").
+ *
+ * The cadence is a protocol fact: reac-protocol's master_cadence group
+ * (MASTER_ONLY_CADENCE_FRAMES_44K1 / _48K / _96K = 3675 / 4000 / 8000, from the
+ * m200i-s1608 cold-boot capture), read through the generated reac_facts_master_cadence.h
+ * — never typed here.
+ */
+#include <reac/reac_facts_master_cadence.h>
+
+/** The window in FRAMES at `fps` frames/s (snapped to the pace it means), or 0 when
+ *  `fps` <= 0 (no rate known). */
+uint32_t reac_master_only_cadence_frames(int fps);
+
+/** The same window as a duration: its frames at `fps`. With no rate known (`fps` <= 0)
+ *  it is the LONGEST of the three paces' windows — a hold that would be too short at some
+ *  pace is not a hold. (The three are each rate's own frame count, not one duration: the
+ *  44.1 and 96 kHz counts are INFERRED from the measured 48 kHz one by the per-rate law,
+ *  and the three durations agree only through that law.) */
+uint64_t reac_master_only_cadence_ns(int fps);
+
+/**
+ * What a sender IS, with the hold: reac_rival_kind_of() plus the window.
+ *
+ *   - declared a box model, or spoke as only a box does          -> BOX
+ *   - announced master (a master-only op) and declared no box    -> DESK (UNKNOWN until a
+ *     stream is heard, as in reac_rival_kind_of)
+ *   - neither (a broadcast stream, role unresolved), no stream heard            -> UNKNOWN
+ *   - neither, heard for less than one master-only cadence at `fps`             -> UNKNOWN
+ *     (HOLD: its master-only op may still come)
+ *   - neither, heard for the whole cadence with no master-only op               -> BOX
+ *
+ * `now_ns` is on the table's clock (the one reac_disco_table_observe was given); `fps` is
+ * the sender's pace if known, else 0 (reac_master_only_cadence_ns). NULL is NONE. Pure.
+ */
+enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t now_ns,
+                                      int fps);
+
+/**
+ * WIDTH ONLY — SUPERSEDED for desk-vs-box by reac_rival_kind_of().
+ *
+ * It says 40 -> DESK and narrower -> BOX, which the 2026-09-25 ruling overturned: a box may be
+ * 40 wide. Kept because it is public; nothing in libreac or libreac-transport decides
+ * desk-vs-box with it any more (reac_segment_ident's width-only answers, kept for reac-pw
+ * until it moves to the _kind variants, are the last callers). 0 is UNKNOWN.
  */
 enum reac_rival_kind reac_rival_kind_from_channels(unsigned channels);
 

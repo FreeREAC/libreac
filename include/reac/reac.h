@@ -65,7 +65,35 @@ extern "C" {
 #define REAC_UPSTREAM_OVERHEAD     52  /* 50 B header + 2 B end marker */
 #define REAC_UPSTREAM_BYTES_PER_CH 36  /* 12 samples x 3 B */
 
-/* THE GEOMETRY IS THE ROLE. A master's downstream is always the 40-channel
+/* A BOX'S WIDTH, EITHER DIRECTION. Operator ruling 2026-09-25: "BOX_MAX_CHANNELS =
+ * 40. We are dealing with a S-4000S-3208 (32 in, 8 out), we also have S-2416 (24 in,
+ * 16 out), and we tested an 8 in / 32 out box." A box's width is EVEN PER DIRECTION,
+ * REAC_BOX_MIN_CHANNELS..REAC_BOX_MAX_CHANNELS — one braid pair up to the whole
+ * fabric, 2..40. So a 40-wide (1492 B) frame is NOT only the desk's, and width is
+ * never what tells a desk's frame from a box's: direction, source and role do. Every
+ * box door (the builders, the model table, the registry, the upstream parser) asks
+ * reac_box_width_ok().
+ *
+ * THE LIMITS ARE PROTOCOL FACTS, NOT libreac's. They are declared once, in
+ * reac-protocol spec/protocol-facts.yaml (group box_width), and read here from the
+ * header generated out of it: reac_facts_box_width.h is written by
+ * tools/gen-facts-header.py with reac-protocol's own emitter, committed, and held to
+ * the schema by `make facts-drift-check`. */
+#include <reac/reac_facts_box_width.h>
+
+static inline int reac_box_width_ok(int n)
+{
+	return n >= REAC_BOX_MIN_CHANNELS && n <= REAC_BOX_MAX_CHANNELS && (n & 1) == 0;
+}
+
+/* A 40-WIDE FRAME — and ONLY that. Operator ruling 2026-09-25: a box may be 40 wide
+ * too, so this is a WIDTH predicate and never a verdict on who sent the frame; the
+ * paragraphs below are the rule it was written for, which that ruling overturned.
+ * Classify a desk against a box by direction, source and role (a desk BROADCASTS its
+ * downstream and announces itself master; a box UNICASTS its return and declares
+ * itself a box model). Kept, with its name, because it is public.
+ *
+ * THE GEOMETRY IS THE ROLE (SUPERSEDED). A master's downstream is always the 40-channel
  * solution (1492 B); a stagebox's upstream is its own, smaller, declared width.
  * Frame length therefore decides which side of the protocol a peer is, with
  * nothing to decode and no heuristic.
@@ -164,8 +192,11 @@ uint16_t reac_frame_counter(const uint8_t *frame);
 uint16_t reac_counter_gap(uint16_t last, uint16_t cur);
 
 /* Measure the live packet rate on a bound AF_PACKET capture fd and snap it to a
- * standard REAC sample rate. Polls the fd for up to window_ms, counting REAC
- * frames, and returns the snapped rate (44100 / 48000 / 96000), or 0 if no REAC
+ * standard REAC sample rate. Polls the fd for up to window_ms and measures ONE
+ * stream — one source MAC, a broadcast one (the downstream) when one is heard — by
+ * the advance of its own sequence counter, so a socket that hears both directions,
+ * its own transmissions or a mirrored copy of every frame still reads the session's
+ * pace. Returns the snapped rate (44100 / 48000 / 96000), or 0 if too little REAC
  * traffic was seen in the window. NOTE: this consumes the frames it reads during
  * the window (call it on a fresh capture before starting a pipeline). The fd
  * should be an AF_PACKET socket bound to the REAC EtherType; it is set
@@ -249,6 +280,29 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.6.0: THE 2026-09-25 REVIEW'S FIXES (docs/audits/2026-09-25-libreac-review.md). A minor,
+ *        not a patch, because reac_cfg.h's PUBLIC vocabulary moves: REAC_CFG_REFUSED_NONE is
+ *        "none" (was ""), REAC_ROLE_PROP and REAC_CFG_ROLE_STATE_HUNTING are ADDED, and
+ *        REAC_CFG_RATE_COUNT / REAC_CFG_RATE_LIST_INIT, which nothing read, are REMOVED. A
+ *        consumer pinned to the old header (openmixer's TS mirror) must move with it.
+ *        Behaviour: reac_detect_rate_fd measures one stream; a new clock reference is
+ *        LOCKING until measured; reac_ctrl_identity_reply requires both checksums;
+ *        reac_decode_plain_le refuses an oversize geometry; reac_boxreg refuses an
+ *        overflowing base and the zero MAC. A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40
+ *        (operator ruling 2026-09-25): REAC_BOX_MIN/MAX_CHANNELS (read from
+ *        reac-protocol's box_width facts, via the new generated
+ *        reac_facts_box_width.h) and reac_box_width_ok() are ADDED; every box door
+ *        refuses odd widths and anything past 40, and a 40-wide box is legal.
+ *        Desk-vs-box is decided by direction, source and role, never width:
+ *        reac_rival_kind_of() is ADDED and reac_arbitrate uses it, and
+ *        reac_upstream_channels() now answers 40 for a 1492 B return. A BROADCAST sender
+ *        is HELD until its own frames prove desk or box, for at most ONE MASTER-ONLY
+ *        CADENCE IN FRAMES AT THE CURRENT RATE (reac-protocol's master_cadence group,
+ *        through the generated reac_facts_master_cadence.h, ADDED), then is a box:
+ *        reac_sender_kind(), reac_master_only_cadence_frames() and _ns() are ADDED. The
+ *        hunt's vacancy window reads REAC_ANNOUNCE_PERIOD_MS from the generated
+ *        reac_facts_timing.h (ADDED). No struct or symbol moves or changes size, so
+ *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
  *        amendment of that date). reac_topo's tap was BPF-filtered to 0x8819, so a VLAN
@@ -291,7 +345,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 5
+#define LIBREAC_VERSION_MINOR 6
 #define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version

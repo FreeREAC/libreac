@@ -33,7 +33,7 @@ int reac_capture_open(struct reac_capture *c, const char *ifname)
 	if (idx == 0)
 		return -1;
 
-	int fd = reac_packet_socket_bound((int)idx, ETH_P_REAC, 0);
+	int fd = reac_packet_socket_bound((int)idx, ETH_P_REAC, SOCK_CLOEXEC);
 	if (fd < 0)
 		return -1;
 

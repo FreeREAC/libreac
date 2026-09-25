@@ -47,8 +47,12 @@
  * REAC on the parent and requires it classified; without it, arm D's silence on VID 13 and
  * arm C's silence before the fix are the same reading as a tap that never opened.
  *
- * EXIT: 0 measured and passed, 1 FAIL (the library is wrong), 2 NOTHING WAS TESTED — no
- * namespace, no iproute2, no veth, or an arm whose own control read zero. 2 is never a pass.
+ * EXIT: 0 measured and passed, 1 FAIL (the library is wrong), 77 SKIP — this environment
+ * lacks the capability (no namespace, no unshare, no veth, no 802.1Q; a GitHub runner is
+ * one), 2 NOT A RESULT — the capability was there and an arm's own control read zero, or
+ * an arm's frame could not be sent. 77 is the automake/reac-pw #114 skip code: a
+ * namespace body's rc is a verdict, and "could not run here" is a verdict of its own,
+ * never a pass and never a hang. 2 is red.
  *
  * Red on the code this test was written against (libreac 1.4.0, 2026-09-22, kernel
  * 7.2.6-200.fc44) — and the first measurement anywhere that §1 holds against a kernel that
@@ -104,6 +108,16 @@
 #define INNER_ENV "REAC_TOPO_VLAN_PROBE_INNER"
 
 static const char *PARENT = IF_TRUNK;
+
+/* The environment cannot host the measurement at all. */
+static int capability_missing(const char *why)
+{
+	printf("SKIP: test_topo_hears_vlans — %s.\n", why);
+	printf("  NOTHING WAS TESTED (exit 77). This is a missing capability in this environment,\n"
+	       "  never a verdict about reac_topo. Run it on a host shell with iproute2 and user\n"
+	       "  namespaces.\n");
+	return 77;
+}
 
 static int nothing_tested(const char *why)
 {
@@ -395,7 +409,7 @@ static int setup_and_measure(void)
 	char *const add_veth[] = { "ip", "link", "add", "name", (char *)IF_TRUNK,
 	                           "type", "veth", "peer", "name", (char *)IF_FAR, NULL };
 	if (run(add_veth) != 0)
-		return nothing_tested("this kernel/container cannot create a veth pair"
+		return capability_missing("this kernel/container cannot create a veth pair"
 		                      " (`ip link add ... type veth` failed)");
 
 	/* THE PAIR COMES UP BEFORE ITS VLANS. A sub-interface whose parent is down refuses
@@ -405,7 +419,7 @@ static int setup_and_measure(void)
 	for (unsigned i = 0; i < sizeof ifs / sizeof ifs[0]; i++) {
 		char *const up[] = { "ip", "link", "set", (char *)ifs[i], "up", NULL };
 		if (run(up) != 0)
-			return nothing_tested("the veth pair could not be brought up");
+			return capability_missing("the veth pair could not be brought up");
 	}
 
 	/* The VLAN netdevs live on the FAR end ONLY. The near end — the one under test — has
@@ -418,11 +432,11 @@ static int setup_and_measure(void)
 		char *const add_vlan[] = { "ip", "link", "add", "link", (char *)IF_FAR,
 		                           "name", name, "type", "vlan", "id", vid, NULL };
 		if (run(add_vlan) != 0)
-			return nothing_tested("this kernel/container cannot create an 802.1Q"
+			return capability_missing("this kernel/container cannot create an 802.1Q"
 			                      " sub-interface (`ip link add ... type vlan` failed)");
 		char *const up[] = { "ip", "link", "set", name, "up", NULL };
 		if (run(up) != 0)
-			return nothing_tested("a VLAN sub-interface could not be brought up");
+			return capability_missing("a VLAN sub-interface could not be brought up");
 	}
 	/* The namespace dies with this process and every netdev in it — there is no cleanup
 	 * path that could outlive a crash and leave interfaces behind. */
@@ -437,16 +451,37 @@ int main(void)
 	char self[4096];
 	ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
 	if (n <= 0)
-		return nothing_tested("/proc/self/exe is unreadable, so the probe cannot"
+		return capability_missing("/proc/self/exe is unreadable, so the probe cannot"
 		                      " re-exec itself in a namespace");
 	self[n] = '\0';
 	if (setenv(INNER_ENV, "1", 1) != 0)
-		return nothing_tested("setenv failed");
+		return capability_missing("setenv failed");
+
+	/* Can this environment make a user+net namespace at all? Asked FIRST, with a
+	 * body that cannot fail, so an unshare that fails reads as "no namespace here"
+	 * (77) and never as the measurement's own rc 1 (FAIL). */
+	{
+		pid_t p = fork();
+		if (p < 0)
+			return capability_missing("fork failed");
+		if (p == 0) {
+			char *const probe[] = { "unshare", "-Ur", "-n", "true", NULL };
+			execvp(probe[0], probe);
+			_exit(127);
+		}
+		int ps = 0;
+		if (waitpid(p, &ps, 0) < 0 || !WIFEXITED(ps))
+			return capability_missing("the namespace probe did not exit normally");
+		if (WEXITSTATUS(ps) == 127)
+			return capability_missing("`unshare` is not installed");
+		if (WEXITSTATUS(ps) != 0)
+			return capability_missing("this environment cannot make a user+net namespace");
+	}
 
 	char *const argv[] = { "unshare", "-Ur", "-n", self, NULL };
 	pid_t pid = fork();
 	if (pid < 0)
-		return nothing_tested("fork failed");
+		return capability_missing("fork failed");
 	if (pid == 0) {
 		execvp(argv[0], argv);
 		_exit(127);
@@ -456,9 +491,9 @@ int main(void)
 		return nothing_tested("the namespaced child did not exit normally");
 	int code = WEXITSTATUS(st);
 	if (code == 127)
-		return nothing_tested("`unshare` is not installed");
-	if (code == 1 || code == 0 || code == 2)
-		return code;
+		return capability_missing("`unshare` is not installed");
+	if (code == 1 || code == 0 || code == 2 || code == 77)
+		return code;   /* the namespace body's rc IS the verdict */
 	return nothing_tested("the namespaced child could not run"
 	                      " (no user namespaces in this kernel or container?)");
 }

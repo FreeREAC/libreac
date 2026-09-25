@@ -67,8 +67,16 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
 			 * abort the rest of a multi-thousand-frame capture. */
 			fprintf(stderr, "pcap_source: skipping oversized frame (%u > %zu bytes)\n",
 			        incl, cap);
-			if (fseek(ps->f, (long)incl, SEEK_CUR) != 0)
-				return -1;
+			/* READ past it, don't seek: fseek beyond EOF succeeds, so a record
+			 * cut short inside its own body read as a clean EOF (0) and a
+			 * truncated capture ended quietly. A short discard is the -1 a cut
+			 * record of any other size gets. */
+			for (uint32_t left = incl; left > 0; ) {
+				size_t chunk = left < cap ? left : cap;
+				if (chunk == 0 || fread(buf, 1, chunk, ps->f) != chunk)
+					return -1;
+				left -= (uint32_t)chunk;
+			}
 			continue;
 		}
 		if (fread(buf, 1, incl, ps->f) != incl)

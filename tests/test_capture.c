@@ -217,7 +217,8 @@ int main(void)
 	/* 6. malformed: a record body cut short mid-frame errors (-1, not 0) */
 	{
 		write_pcap(p3, 0, 0);
-		truncate(p3, 24 + 16 + FRAME_LEN + 16 + 100);   /* frame 1 body cut */
+		CHECK(truncate(p3, 24 + 16 + FRAME_LEN + 16 + 100) == 0,   /* frame 1 body cut */
+		      "truncated body: truncate");
 		struct pcap_source ps;
 		CHECK(pcap_source_open(&ps, p3) == 0, "truncated body: open ok");
 		uint8_t buf[2048];
@@ -225,6 +226,25 @@ int main(void)
 		      "truncated body: frame 0 intact");
 		CHECK(pcap_source_next(&ps, buf, sizeof buf, NULL) == -1,
 		      "truncated body: cut frame -> -1");
+		pcap_source_close(&ps);
+	}
+
+	/* 6b. a record too big for the buffer AND cut short inside its own body errors
+	 *     (-1): the skip reads past it, and a short read is a cut record, exactly
+	 *     as for a record that fits. It used to fseek, which succeeds past EOF, so
+	 *     the cut capture ended as a clean EOF (0). */
+	{
+		write_pcap(p3, 0, 1);
+		CHECK(truncate(p3, 24 + 3 * (16 + FRAME_LEN) + 16 + 100) == 0,
+		      "cut jumbo: truncate");
+		struct pcap_source ps;
+		CHECK(pcap_source_open(&ps, p3) == 0, "cut jumbo: open ok");
+		uint8_t buf[2048];
+		for (int i = 0; i < 3; i++)
+			CHECK(pcap_source_next(&ps, buf, sizeof buf, NULL) == FRAME_LEN,
+			      "cut jumbo: frames before it intact");
+		CHECK(pcap_source_next(&ps, buf, sizeof buf, NULL) == -1,
+		      "cut jumbo: the cut oversized record -> -1, not EOF");
 		pcap_source_close(&ps);
 	}
 
