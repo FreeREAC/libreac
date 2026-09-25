@@ -53,7 +53,7 @@ static int lowest_free_base(const struct reac_boxreg *r, int nch)
 
 static int width_ok(const struct reac_boxreg *r, int nch)
 {
-	/* A box width (even 2..38, reac.h), and inside this registry's fabric. */
+	/* A box width (even 2..40, reac.h), and inside this registry's fabric. */
 	return reac_box_width_ok(nch) && nch <= r->fabric;
 }
 

@@ -118,11 +118,13 @@ make test
   "none" (was ""), REAC_ROLE_PROP and REAC_CFG_ROLE_STATE_HUNTING are added, the unread
   REAC_CFG_RATE_COUNT / _LIST_INIT are removed, and the vendored reac-pw headers alias it.
   A source-level vocabulary change, hence the minor; LIBREAC_ABI stays 4.
-- A BOX IS NEVER 40 WIDE (operator ruling 2026-09-25: "mixer sends 40ch, boxes have
-  their size of ins and outs, always even"). reac.h adds REAC_BOX_MIN/MAX_CHANNELS and
-  reac_box_width_ok() (even 2..38); every box builder, reac_box_model_upstream_width,
-  reac_boxreg and reac_upstream_channels ask it. The 40-wide experiment rows become
-  fr3600 / fr0036 (36 is the widest a 4-channel-slot declaration can state).
+- A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40 (operator ruling 2026-09-25:
+  "BOX_MAX_CHANNELS = 40"; S-4000S-3208 32/8, S-2416 24/16, an 8/32 box tested).
+  reac.h adds REAC_BOX_MIN/MAX_CHANNELS and reac_box_width_ok(), bound to reac-protocol's
+  box_width facts; every box builder, reac_box_model_upstream_width, reac_boxreg and
+  reac_upstream_channels ask it, and a 40-wide box is legal. WIDTH NEVER SAYS DESK:
+  reac_rival_kind_of() classifies a rival by its declaration and role, and reac_arbitrate
+  uses it; reac_detect_rate_fd prefers the broadcast stream.
 - tests/test_boxreg.c is the fabric guard reac_slots.h claimed: widening the audio fabric
   to 48 now reds `make test`.
 
