@@ -145,9 +145,11 @@ enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e);
  * LIMIT — hold the verdict until the sender's own frames prove its role, but never longer
  * than the SHORTEST master-only control cadence, in FRAMES at the current rate; at that
  * window's end a broadcast sender that sent no master-only op is a BOX. The desk reveals
- * itself fast: its cfea announce comes once a second whether or not a box answers (the
- * page 0x0019 window slows to ~2 s and the scene transfer repeats every 2.695 s — both
- * longer).
+ * itself fast: its cfea announce comes every 4000 frames of a 48 kHz downstream whether
+ * or not a box answers (the page 0x0019 window slows and the scene transfer repeats at
+ * longer counts). The window is a FRAME count per rate; a duration is only those frames
+ * at a pace (operator ruling 2026-09-25: "ms depends on frequency and is a derived
+ * figure").
  *
  * The cadence is a protocol fact: reac-protocol's master_cadence group
  * (MASTER_ONLY_CADENCE_FRAMES_44K1 / _48K / _96K = 3675 / 4000 / 8000, from the
@@ -162,8 +164,9 @@ uint32_t reac_master_only_cadence_frames(int fps);
 
 /** The same window as a duration: its frames at `fps`. With no rate known (`fps` <= 0)
  *  it is the LONGEST of the three paces' windows — a hold that would be too short at some
- *  pace is not a hold. (The three are equal in time by derivation: one cadence per
- *  second at every pace.) */
+ *  pace is not a hold. (The three are each rate's own frame count, not one duration: the
+ *  44.1 and 96 kHz counts are INFERRED from the measured 48 kHz one by the per-rate law,
+ *  and the three durations agree only through that law.) */
 uint64_t reac_master_only_cadence_ns(int fps);
 
 /**
