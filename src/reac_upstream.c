@@ -23,8 +23,9 @@ int reac_upstream_channels(size_t len)
 	if ((len - REAC_UPSTREAM_OVERHEAD) % REAC_UPSTREAM_BYTES_PER_CH != 0)
 		return -1;
 	size_t nch = (len - REAC_UPSTREAM_OVERHEAD) / REAC_UPSTREAM_BYTES_PER_CH;
-	/* An even 2..38 (reac_box_width_ok): the braid carries channel PAIRS, and
-	 * 40 ch = 1492 B is the downstream broadcast, the desk's frame. */
+	/* A box width (reac_box_width_ok): an even 2..40 — the braid carries channel
+	 * PAIRS, and a box may fill the whole fabric (operator ruling 2026-09-25), so a
+	 * 1492 B return is a 40-wide box's, not a refusal. */
 	if (!reac_box_width_ok((int)nch))
 		return -1;
 	return (int)nch;

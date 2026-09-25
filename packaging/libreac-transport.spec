@@ -91,8 +91,11 @@ PC
 - No symbol or struct change in this library. reac_role_swap.h's REAC_ROLE_STATE_HUNTING
   and the vendored reac-pw cfg headers now alias libreac's reac_cfg.h instead of typing
   the vocabulary a second time; the version moves with libreac 1.6.0.
-- reac_slave clamps a configured box width to REAC_BOX_MAX_CHANNELS (38), not 40: a
-  40-wide frame is the desk's, and libreac's box builders now refuse it.
+- DIRECTION, NOT WIDTH: reac_rx's downstream gate takes only BROADCAST 1492 B frames and
+  its upstream gate locks only on a UNICAST return, so a 40-wide box's return and the
+  desk's downstream (the same length) land in their own rings; reac_tap files a unicast
+  stream as a box's at any width. reac_slave clamps a configured box width to
+  REAC_BOX_MAX_CHANNELS (40).
 
 * Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.5.0-1
 - THE CHANGE IS IN THIS LIBRARY: reac_topo's tap hears every 802.1Q tag on a trunk, not

@@ -492,8 +492,8 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
  * open question of the 2026-09-17 spec's §9, and this is what we will try.
  *
  * 0 — "not a box" — for a row whose inputs OR outputs are not zero or a box width
- * (an even 2..38, reac_box_width_ok in reac.h): 40 is the desk's frame (operator
- * ruling 2026-09-25), and every builder refuses a row this answers 0 for. */
+ * (an even 2..40, reac_box_width_ok in reac.h), and every builder refuses a row
+ * this answers 0 for. */
 int reac_box_model_upstream_width(const struct reac_box_model *m);
 
 /* Build one of a model's box->master control frames AS THAT MODEL — the door a

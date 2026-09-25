@@ -107,7 +107,7 @@ void reac_arbitrate(const struct reac_disco_table *table,
 		out->conflict = rival != NULL;
 		/* WHAT the rival is travels with the fact that there IS one: a surface told only
 		 * "conflict" cannot tell a desk to join from a box to fix. */
-		out->rival = rival ? reac_rival_kind_from_channels(rival->channels) : REAC_RIVAL_NONE;
+		out->rival = reac_rival_kind_of(rival);
 		out->rival_channels = rival ? rival->channels : 0;
 		if (our_mac) {
 			memcpy(out->mac, our_mac, 6);
@@ -123,8 +123,9 @@ void reac_arbitrate(const struct reac_disco_table *table,
 		memcpy(out->mac, rival->mac, 6);
 		out->have_mac = 1;
 		/* §2b: a DESK here is joined; a stagebox strapped to master claims exactly the same
-		 * thing and must be refused instead, and only the geometry separates them. */
-		out->rival = reac_rival_kind_from_channels(rival->channels);
+		 * thing and must be refused instead. What separates them is what the peer DECLARED
+		 * and how it spoke, never its width: a box may be 40 wide (ruling 2026-09-25). */
+		out->rival = reac_rival_kind_of(rival);
 		/* The evidence under that verdict travels with it: a box master that is JOINED
 		 * sizes the segment's nodes from this number (0.5.1's ruling, DESIGN.md). */
 		out->rival_channels = rival->channels;
@@ -147,7 +148,22 @@ void reac_arbitrate(const struct reac_disco_table *table,
 	/* Nothing established, nothing probing, no master evidence: the wire is silent. Reported
 	 * as NONE with no MAC, which is honestly different from "we drive". */
 	out->state = REAC_SEGMENT_NONE;
-}enum reac_rival_kind reac_rival_kind_from_channels(unsigned channels)
+}
+
+enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e)
+{
+	if (!e)
+		return REAC_RIVAL_NONE;
+	if (e->model != NULL || e->role == REAC_DISCO_ROLE_BOX)
+		return REAC_RIVAL_BOX;        /* it said what it is, or spoke as only a box does */
+	if (e->channels == 0)
+		return REAC_RIVAL_UNKNOWN;    /* no stream heard yet: refused, §4 */
+	if (e->role == REAC_DISCO_ROLE_MASTER)
+		return REAC_RIVAL_DESK;       /* announced master, declared no box */
+	return REAC_RIVAL_UNKNOWN;
+}
+
+enum reac_rival_kind reac_rival_kind_from_channels(unsigned channels)
 {
 	if (channels == 0)
 		return REAC_RIVAL_UNKNOWN;

@@ -49,7 +49,7 @@ extern "C" {
 /* Byte positions (pos[0]=lo, pos[1]=mid, pos[2]=hi) of time-sample s, channel
  * ch inside an n_ch-wide braided audio region (offsets relative to the region
  * start, frame[50]). n_ch is the frame's channel width: 40 for the downstream
- * broadcast, the box's even input count (2..38) for an upstream return.
+ * broadcast, the box's even input count (2..40) for an upstream return.
  * Caller guarantees 0 <= ch < n_ch and 0 <= s < 12; the positions returned are
  * then always inside the n_ch*36-byte region. static inline so RT encode/decode
  * paths pay no call cost. */

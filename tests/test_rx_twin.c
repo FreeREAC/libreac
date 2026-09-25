@@ -192,6 +192,72 @@ static void replay(const char *what, int downstream, int twins)
 	unlink(path);
 }
 
+/* A 40-wide BOX's return: the same 1492 B as the desk's downstream, UNICAST to
+ * that desk (operator ruling 2026-09-25: a box may fill the fabric). */
+static void mk_box40(uint8_t *out, uint16_t counter)
+{
+	mk_down(out, counter);
+	static const uint8_t master[6] = { 0x00, 0x40, 0xab, 0xc4, 0x91, 0x90 };
+	static const uint8_t box[6]    = { 0x00, 0x40, 0xab, 0x40, 0x40, 0x01 };
+	memcpy(out, master, 6);                     /* unicast, to the desk */
+	memcpy(out + 6, box, 6);
+}
+
+/* DIRECTION, NOT WIDTH: the desk's downstream and a 40-wide box's return are the
+ * same length on one wire, interleaved. Each gate takes its own stream only —
+ * the downstream the BROADCAST one, the upstream the UNICAST one — and refuses
+ * the other as "not ours". Before the ruling's fix the upstream gate refused
+ * every 1492 B frame and the downstream gate took both. */
+static void replay_same_width(int downstream)
+{
+	char path[] = "/tmp/libreac-rx-dir-XXXXXX";
+	int fd = mkstemp(path);
+	CHK(fd >= 0);
+	if (fd < 0)
+		return;
+	FILE *f = fdopen(fd, "wb");
+	if (!f) {
+		close(fd);
+		return;
+	}
+	pcap_hdr(f);
+	uint8_t fr[REAC_FRAME_BYTES];
+	for (int i = 0; i < NFRAMES; i++) {
+		mk_down(fr, (uint16_t)(CTR_BASE + i));
+		pcap_rec(f, fr, REAC_FRAME_BYTES);
+		mk_box40(fr, (uint16_t)(0x1000 + i));
+		pcap_rec(f, fr, REAC_FRAME_BYTES);
+	}
+	fclose(f);
+
+	struct reac_rx_cfg cfg = { .kind = REAC_RX_PCAP, .source = path,
+	                           .forced_rate = 48000, .pcap_realtime = 0,
+	                           .accept = downstream ? REAC_RX_ACCEPT_DOWNSTREAM
+	                                                : REAC_RX_ACCEPT_UPSTREAM };
+	struct reac_ring ring;
+	struct reac_rx rx;
+	CHK(reac_rx_open(&rx, &cfg, &ring) == 0);
+	CHK(run_rx(&rx, NFRAMES) == 0);
+	/* let the feeder finish the file: the refusals come interleaved */
+	uint64_t ok  = atomic_load(&rx.frames_ok);
+	uint64_t oth = atomic_load(&rx.frames_other);
+	printf("  %-10s 40+40   ok=%llu other=%llu\n", downstream ? "downstream" : "upstream",
+	       (unsigned long long)ok, (unsigned long long)oth);
+	/* The replay loops the file, so the counts are per pass: one stream in, the
+	 * other refused, the same number of each. */
+	CHK(ok >= NFRAMES && ok <= oth + 1 && oth <= ok + 1);
+	/* ...and the one taken is the right one: its own counters, its own source. */
+	const uint16_t last = rx.ppm_last_counter;
+	const int box_counter = last >= 0x1000 && last < 0x1000 + NFRAMES;
+	static const uint8_t box[6] = { 0x00, 0x40, 0xab, 0x40, 0x40, 0x01 };
+	if (downstream)
+		CHK(!box_counter);
+	else
+		CHK(box_counter && rx.up_src_locked && memcmp(rx.up_src, box, 6) == 0);
+	reac_rx_close(&rx);
+	unlink(path);
+}
+
 int main(void)
 {
 	printf("test_rx_twin: %d distinct frames, with and without their FCS-residue "
@@ -200,6 +266,8 @@ int main(void)
 	replay("upstream", 0, 1);
 	replay("downstream", 1, 0);
 	replay("downstream", 1, 1);
+	replay_same_width(1);
+	replay_same_width(0);
 
 	if (fails) {
 		fprintf(stderr, "%d check(s) failed\n", fails);

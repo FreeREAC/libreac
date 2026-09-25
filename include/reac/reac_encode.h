@@ -57,7 +57,7 @@ extern "C" {
  *   audio   points at the frame's audio region — frame + REAC_AUDIO_OFFSET
  *           (50). Must hold n_ch * 12 * 3 bytes.
  *   n_ch    the FRAME's channel width: 40 for the downstream broadcast, the
- *           box's even input count (2..38) for an upstream return. Every one
+ *           box's even input count (2..40) for an upstream return. Every one
  *           of these n_ch channels is written, so the region is fully defined
  *           on return — the braid is a bijection over it.
  *   planar  planar[ch][s], ch < n_src. A NULL planar, a NULL plane, or a

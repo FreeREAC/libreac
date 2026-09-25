@@ -100,8 +100,9 @@ static double mono_s(void)
  * cadence of the same session: a master's downstream and a box's return, its own
  * transmissions (PACKET_OUTGOING), or each frame twice off a mirrored port. Counting
  * every 0x8819 frame therefore reads 2x (48 kHz detected as 96 kHz). So the rate is
- * taken from ONE source MAC's frames, preferring the 40-channel master downstream
- * when one is heard (that IS the pace), and from the advance of that stream's own
+ * taken from ONE source MAC's frames, preferring a BROADCAST stream (the master's
+ * downstream is broadcast; a box's return is unicast to its master — direction, never
+ * width, since a box may be 40 wide too), and from the advance of that stream's own
  * sequence counter rather than from how many copies arrived: a repeated counter adds
  * nothing and a lost frame still advances it. */
 struct rate_track {
@@ -143,6 +144,7 @@ int reac_detect_rate_fd(int fd, int window_ms)
 
 	const double deadline = mono_s() + (window_ms > 0 ? window_ms : 1500) / 1000.0;
 	uint8_t buf[2048];
+	static const uint8_t BCAST[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 	struct rate_track down = { 0 }, other = { 0 };
 
 	while (mono_s() < deadline) {
@@ -157,14 +159,14 @@ int reac_detect_rate_fd(int fd, int window_ms)
 			if (n < REAC_HDR_COUNTER_OFF + 2 || !reac_frame_is_reac(buf, (size_t)n))
 				continue;
 			double now = mono_s();
-			if (reac_frame_is_master_downstream(reac_frame_clean_len((size_t)n)))
+			if (memcmp(buf, BCAST, 6) == 0)
 				rate_track_feed(&down, buf, now);
 			else
 				rate_track_feed(&other, buf, now);
 		}
 	}
 
-	/* The master's downstream when there is enough of it; any single stream else. */
+	/* A broadcast stream when there is enough of it; any single stream else. */
 	const struct rate_track *t = down.advance >= 50 ? &down : &other;
 	if (t->advance < 50)
 		return 0; /* no / too little REAC traffic in the window */

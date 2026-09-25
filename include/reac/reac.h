@@ -65,21 +65,31 @@ extern "C" {
 #define REAC_UPSTREAM_OVERHEAD     52  /* 50 B header + 2 B end marker */
 #define REAC_UPSTREAM_BYTES_PER_CH 36  /* 12 samples x 3 B */
 
-/* A BOX'S WIDTH, EITHER DIRECTION (operator ruling 2026-09-25: "mixer sends 40ch,
- * boxes have their size of ins and outs, always even"; reac-protocol spec/reac.ksy
- * num_channels: "40 is the downstream broadcast; an even 2..38 is a box's upstream
- * return"). 40 channels / 1492 B is the DESK's frame and only the desk's, so a box
- * width is an even 2..38 — declared once here, and every box door (the builders,
- * the model table, the registry, the upstream parser) asks reac_box_width_ok(). */
-#define REAC_BOX_MIN_CHANNELS  2
-#define REAC_BOX_MAX_CHANNELS  (REAC_MAX_CHANNELS - 2)   /* 38 */
+/* A BOX'S WIDTH, EITHER DIRECTION. Operator ruling 2026-09-25: "BOX_MAX_CHANNELS =
+ * 40. We are dealing with a S-4000S-3208 (32 in, 8 out), we also have S-2416 (24 in,
+ * 16 out), and we tested an 8 in / 32 out box." A box's width is EVEN PER DIRECTION,
+ * one braid pair up to the whole fabric: 2..40. So a 40-wide (1492 B) frame is NOT
+ * only the desk's, and width is never what tells a desk's frame from a box's —
+ * direction, source and role do. reac-protocol spec/protocol-facts.yaml `box_width`
+ * declares both numbers (tests/reac_facts_assert.h binds these to it); every box door
+ * (the builders, the model table, the registry, the upstream parser) asks
+ * reac_box_width_ok(). */
+#define REAC_BOX_MIN_CHANNELS  2                   /* one braid pair */
+#define REAC_BOX_MAX_CHANNELS  REAC_MAX_CHANNELS   /* 40, the whole fabric */
 
 static inline int reac_box_width_ok(int n)
 {
 	return n >= REAC_BOX_MIN_CHANNELS && n <= REAC_BOX_MAX_CHANNELS && (n & 1) == 0;
 }
 
-/* THE GEOMETRY IS THE ROLE. A master's downstream is always the 40-channel
+/* A 40-WIDE FRAME — and ONLY that. Operator ruling 2026-09-25: a box may be 40 wide
+ * too, so this is a WIDTH predicate and never a verdict on who sent the frame; the
+ * paragraphs below are the rule it was written for, which that ruling overturned.
+ * Classify a desk against a box by direction, source and role (a desk BROADCASTS its
+ * downstream and announces itself master; a box UNICASTS its return and declares
+ * itself a box model). Kept, with its name, because it is public.
+ *
+ * THE GEOMETRY IS THE ROLE (SUPERSEDED). A master's downstream is always the 40-channel
  * solution (1492 B); a stagebox's upstream is its own, smaller, declared width.
  * Frame length therefore decides which side of the protocol a peer is, with
  * nothing to decode and no heuristic.
@@ -179,7 +189,7 @@ uint16_t reac_counter_gap(uint16_t last, uint16_t cur);
 
 /* Measure the live packet rate on a bound AF_PACKET capture fd and snap it to a
  * standard REAC sample rate. Polls the fd for up to window_ms and measures ONE
- * stream — one source MAC, the 40-channel master downstream when one is heard — by
+ * stream — one source MAC, a broadcast one (the downstream) when one is heard — by
  * the advance of its own sequence counter, so a socket that hears both directions,
  * its own transmissions or a mirrored copy of every frame still reads the session's
  * pace. Returns the snapped rate (44100 / 48000 / 96000), or 0 if too little REAC
@@ -274,11 +284,12 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        Behaviour: reac_detect_rate_fd measures one stream; a new clock reference is
  *        LOCKING until measured; reac_ctrl_identity_reply requires both checksums;
  *        reac_decode_plain_le refuses an oversize geometry; reac_boxreg refuses an
- *        overflowing base and the zero MAC. A BOX IS NEVER 40 WIDE (operator ruling
- *        2026-09-25): REAC_BOX_MIN/MAX_CHANNELS and reac_box_width_ok() are ADDED and
- *        every box door refuses 40 and odd widths; the experiment rows' tokens move
- *        from fr4000 / fr0040 to fr3600 / fr0036, so a caller selecting those by token
- *        must move with it. No struct or symbol moves or changes size, so
+ *        overflowing base and the zero MAC. A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40
+ *        (operator ruling 2026-09-25): REAC_BOX_MIN/MAX_CHANNELS and reac_box_width_ok()
+ *        are ADDED and every box door refuses odd widths and anything past 40; a
+ *        40-wide box is legal. Desk-vs-box is decided by direction, source and role,
+ *        never width: reac_rival_kind_of() is ADDED and reac_arbitrate uses it, and
+ *        reac_upstream_channels() now answers 40 for a 1492 B return. No struct or symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,

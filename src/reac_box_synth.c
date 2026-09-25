@@ -264,7 +264,7 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
 int reac_box_model_upstream_width(const struct reac_box_model *m)
 {
 	/* EACH DIRECTION IS A BOX WIDTH (reac_box_width_ok, reac.h): zero, or an even
-	 * 2..38. 40 is the desk's frame, and a row declaring it is not a box. */
+	 * 2..40. Anything else — odd, or wider than the fabric — is not a box. */
 	if (!m || m->in_ch < 0 || m->out_ch < 0)
 		return 0;
 	if ((m->in_ch && !reac_box_width_ok(m->in_ch)) ||

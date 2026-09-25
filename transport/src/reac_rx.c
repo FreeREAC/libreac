@@ -80,7 +80,7 @@ static void feed_frame(struct reac_rx *rx, const struct reac_mode *mode,
 	uint8_t s24[REAC_MAX_CHANNELS * REAC_SAMPLES_PER_PKT * REAC_RESOLUTION];
 	int ns, nch;
 	if (rx->cfg.accept == REAC_RX_ACCEPT_UPSTREAM) {
-		nch = reac_upstream_channels(len);      /* < REAC_MAX_CHANNELS by contract */
+		nch = reac_upstream_channels(len);      /* <= REAC_MAX_CHANNELS by contract */
 		ns = nch > 0 ? reac_upstream_decode(frame, len, s24) : -1;
 	} else {
 		nch = mode->n_channels;
@@ -153,14 +153,31 @@ void reac_rx_peer_reset(struct reac_rx *rx, const uint8_t mac[6], unsigned sessi
  * calls anything, and reac_upstream_channels() refuses a residue length. */
 static int gate_accepts(struct reac_rx *rx, const uint8_t *frame, size_t len)
 {
-	if (rx->cfg.accept == REAC_RX_ACCEPT_DOWNSTREAM)
+	/* DIRECTION, NOT WIDTH, SAYS WHICH STREAM A FRAME IS. A box may be 40 wide
+	 * (operator ruling 2026-09-25), so 1492 B no longer means "the desk": a desk
+	 * BROADCASTS its downstream, a box UNICASTS its return to its master. */
+	static const uint8_t BCAST[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+	const int broadcast = memcmp(frame, BCAST, 6) == 0;
+	if (rx->cfg.accept == REAC_RX_ACCEPT_DOWNSTREAM) {
 		/* 1492 = the frame. `len` is the CLEAN length (the loop strips a capture
 		 * path's +2 at the door), so the mirror twin's two copies both arrive
-		 * here as 1492 and the dup guard below collapses the pair. */
-		return len == (size_t)REAC_FRAME_BYTES;
+		 * here as 1492 and the dup guard below collapses the pair. It must be
+		 * BROADCAST (a 40-wide box's unicast return is not the downstream), and
+		 * from the locked peer when one was named. */
+		if (len != (size_t)REAC_FRAME_BYTES || !broadcast)
+			return 0;
+		return !rx->up_src_locked || memcmp(rx->up_src, frame + 6, 6) == 0;
+	}
 	if (reac_upstream_channels(len) < 0)
 		return 0;
 	if (!rx->up_src_locked) {
+		/* Lock only on a UNICAST return: a broadcast frame here may be a master's
+		 * downstream — our own transmissions included — which, at 40 wide, is now
+		 * the same length as a 40-wide box's return. A caller that knows the box
+		 * (reac_rx_peer_reset, as reac_tap does) is locked already and takes its
+		 * broadcast presence-flood too. */
+		if (broadcast)
+			return 0;
 		memcpy(rx->up_src, frame + 6, 6);
 		rx->up_src_locked = 1;
 		return 1;
