@@ -199,6 +199,10 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# include/reac/reac_cfg.h is it; reac-pw's headers (vendored snapshot) include it
 	# and alias its names. The shape arm refuses a key typed twice or a macro nobody
 	# reads; test_cfg pins the values the shape cannot see.
+	# THE AUDIO FABRIC IS 40 (reac_slots.h's MUTATION-CHECKED note, #69): a 16-wide box
+	# at audio slot 32 must be refused. Widening REAC_AUDIO_FABRIC_SLOTS to 48 reds this.
+	$(CC) $(CFLAGS) $(INC) tests/test_boxreg.c libreac.a -lm -o test_boxreg
+	./test_boxreg
 	tests/conformance-cfg-declared-once.sh
 	$(CC) $(CFLAGS) $(INC) -Ipackaging/vendor/reac-pw-headers tests/test_cfg.c libreac.a -lm -o test_cfg
 	./test_cfg
@@ -363,7 +367,7 @@ review-2026-09-25: libreac.a
 	echo "review-2026-09-25: $$red proof(s) still red"; [ $$red -eq 0 ]
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans
 	rm -f $(REVIEW_20260925:%=test_review_%)
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d

@@ -58,3 +58,4 @@ test_topo_hears_vlans
 # the 2026-09-25 review proof tests (make review-2026-09-25)
 /test_review_*
 test_cfg
+test_boxreg
