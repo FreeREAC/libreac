@@ -73,7 +73,9 @@ int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
  * into the "coherence 0.999" reading which once argued for it.
  *
  * Same arguments, same planar output shape and same return contract as
- * reac_decode(), minus the braid geometry checks (a linear index needs none).
+ * reac_decode(), minus the braid's even-width check (a linear index does not pair
+ * channels). The SIZE check stays: a geometry wider than the 1440-byte region
+ * returns -1 here too.
  * Do not build new code on this layout. */
 int reac_decode_plain_le(const uint8_t *raw, size_t len,
                          const struct reac_mode *mode, uint8_t *out);
