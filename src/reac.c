@@ -90,6 +90,42 @@ static double mono_s(void)
 	return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
 }
 
+/* ONE STREAM, MEASURED BY ITS OWN COUNTER. A socket can hear more than one
+ * cadence of the same session: a master's downstream and a box's return, its own
+ * transmissions (PACKET_OUTGOING), or each frame twice off a mirrored port. Counting
+ * every 0x8819 frame therefore reads 2x (48 kHz detected as 96 kHz). So the rate is
+ * taken from ONE source MAC's frames, preferring the 40-channel master downstream
+ * when one is heard (that IS the pace), and from the advance of that stream's own
+ * sequence counter rather than from how many copies arrived: a repeated counter adds
+ * nothing and a lost frame still advances it. */
+struct rate_track {
+	int      have;
+	uint8_t  mac[6];
+	uint16_t last_counter;
+	unsigned long advance;   /* counter steps since the first frame */
+	double   first, last;
+};
+
+static void rate_track_feed(struct rate_track *t, const uint8_t *f, double now)
+{
+	uint16_t c = reac_frame_counter(f);
+	if (!t->have) {
+		memcpy(t->mac, f + 6, 6);
+		t->last_counter = c;
+		t->first = t->last = now;
+		t->have = 1;
+		return;
+	}
+	if (memcmp(t->mac, f + 6, 6) != 0)
+		return;                      /* another stream: not this one's pace */
+	uint16_t step = (uint16_t)(c - t->last_counter);
+	if (step == 0 || step > 0x8000)
+		return;                      /* a duplicate, or a stale/reordered copy */
+	t->advance += step;
+	t->last_counter = c;
+	t->last = now;
+}
+
 int reac_detect_rate_fd(int fd, int window_ms)
 {
 	if (fd < 0)
@@ -101,9 +137,7 @@ int reac_detect_rate_fd(int fd, int window_ms)
 
 	const double deadline = mono_s() + (window_ms > 0 ? window_ms : 1500) / 1000.0;
 	uint8_t buf[2048];
-	unsigned long frames = 0;
-	double first = 0, last = 0;
-	int have_first = 0;
+	struct rate_track down = { 0 }, other = { 0 };
 
 	while (mono_s() < deadline) {
 		struct pollfd pfd = { .fd = fd, .events = POLLIN, .revents = 0 };
@@ -114,21 +148,24 @@ int reac_detect_rate_fd(int fd, int window_ms)
 			ssize_t n = recv(fd, buf, sizeof buf, 0);
 			if (n < 0)
 				break; /* EAGAIN/EINTR: nothing more ready right now */
-			if (!reac_frame_is_reac(buf, (size_t)n))
+			if (n < REAC_HDR_COUNTER_OFF + 2 || !reac_frame_is_reac(buf, (size_t)n))
 				continue;
 			double now = mono_s();
-			if (!have_first) { first = now; have_first = 1; }
-			last = now;
-			frames++;
+			if (reac_frame_is_master_downstream(reac_frame_clean_len((size_t)n)))
+				rate_track_feed(&down, buf, now);
+			else
+				rate_track_feed(&other, buf, now);
 		}
 	}
 
-	if (!have_first || frames < 50)
+	/* The master's downstream when there is enough of it; any single stream else. */
+	const struct rate_track *t = down.advance >= 50 ? &down : &other;
+	if (t->advance < 50)
 		return 0; /* no / too little REAC traffic in the window */
-	double span = last - first;
+	double span = t->last - t->first;
 	if (span <= 0)
 		return 0;
-	double pps = (double)(frames - 1) / span; /* frames-1 intervals over span */
+	double pps = (double)t->advance / span; /* counter steps over span */
 	return reac_rate_snap(pps);
 }
 
