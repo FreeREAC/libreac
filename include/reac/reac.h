@@ -164,8 +164,11 @@ uint16_t reac_frame_counter(const uint8_t *frame);
 uint16_t reac_counter_gap(uint16_t last, uint16_t cur);
 
 /* Measure the live packet rate on a bound AF_PACKET capture fd and snap it to a
- * standard REAC sample rate. Polls the fd for up to window_ms, counting REAC
- * frames, and returns the snapped rate (44100 / 48000 / 96000), or 0 if no REAC
+ * standard REAC sample rate. Polls the fd for up to window_ms and measures ONE
+ * stream — one source MAC, the 40-channel master downstream when one is heard — by
+ * the advance of its own sequence counter, so a socket that hears both directions,
+ * its own transmissions or a mirrored copy of every frame still reads the session's
+ * pace. Returns the snapped rate (44100 / 48000 / 96000), or 0 if too little REAC
  * traffic was seen in the window. NOTE: this consumes the frames it reads during
  * the window (call it on a fresh capture before starting a pipeline). The fd
  * should be an AF_PACKET socket bound to the REAC EtherType; it is set
