@@ -2,19 +2,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 #
-# REVIEW 2026-09-25, finding M7 (docs/audits/2026-09-25-libreac-review.md).
-#
-# DECLARE ONCE, USE EVERYWHERE (operator ruling 2026-09-25). include/reac/reac_cfg.h
-# says it is "ONE DECLARATION, BOTH SIDES" of the reac.cfg.* / reac.rate.* vocabulary.
-# In this tree nothing reads it: the installed transport header reac_pacer.h includes
-# the VENDORED reac-pw copies (packaging/vendor/reac-pw-headers/reac_rate_cfg.h,
-# reac_role_cfg.h), which restate the same strings under other macro names — and
-# disagree with it on the "nothing refused" answer ("none" there, "" here).
+# DECLARE ONCE, USE EVERYWHERE (operator ruling 2026-09-25; libreac review 2026-09-25,
+# M7). include/reac/reac_cfg.h is the ONE declaration of the reac.cfg.* / reac.rate.* /
+# reac.role vocabulary. reac-pw's reac_rate_cfg.h and reac_role_cfg.h (snapshot in
+# packaging/vendor/reac-pw-headers/) include it and alias its names; before this arm
+# they spelled every string a second time and had drifted on the idle refusal value.
 #
 # A source-shape arm in the style of tools/conformance-*.sh:
 #   ARM 1  every macro reac_cfg.h declares has a reader outside reac_cfg.h;
 #   ARM 2  no other header restates one of its string literals under another name;
-#   ARM 3  the refusal sentinel is one value on both sides.
+#   ARM 3  every vendored reac-pw cfg header includes <reac/reac_cfg.h>.
 # It carries a planted good/bad pair, so it cannot pass (or fail) vacuously.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -36,6 +33,10 @@ check() {
 		v=$(sed -n "s/^#define $m[[:space:]]*\(\"[^\"]*\"\).*/\1/p" "$hdr")
 		[ -z "$v" ] && continue
 		[ "$v" = '""' ] && continue
+		# "none" is the estate's CONVENTION for "no value applies": each prop that uses
+		# it declares its own idle value (REAC_BOX_MAC_NONE, ...). What this arm guards
+		# is the cfg vocabulary's keys and codes being typed twice, not the convention.
+		[ "$v" = '"none"' ] && continue
 		dup=$(grep -rn "^#define [A-Z_0-9]*[[:space:]]*$v" "$@" 2>/dev/null \
 		      | grep -v "^$hdr:" | grep -vw "$m" | head -1)
 		if [ -n "$dup" ]; then
@@ -43,12 +44,16 @@ check() {
 			n=$((n + 1))
 		fi
 	done
-	none=$(sed -n 's/^#define REAC_CFG_REFUSED_NONE[[:space:]]*\("[^"]*"\).*/\1/p' "$hdr")
-	if [ -n "$none" ] && [ "$none" != '"none"' ] &&
-	   grep -rq '"none" when nothing is refused' "$@" 2>/dev/null; then
-		echo "  ARM 3: REAC_CFG_REFUSED_NONE is $none here; the consumer's header answers \"none\""
-		n=$((n + 1))
-	fi
+	for v in "$@"; do
+		for h in $(find "$v" -name '*_cfg.h' 2>/dev/null); do
+			[ "$h" = "$hdr" ] && continue
+			case "$h" in */vendor/*) ;; *) continue ;; esac
+			if ! grep -q '#include <reac/reac_cfg.h>' "$h"; then
+				echo "  ARM 3: $h does not include <reac/reac_cfg.h>"
+				n=$((n + 1))
+			fi
+		done
+	done
 	[ "$n" -gt 0 ]
 }
 
@@ -61,17 +66,17 @@ printf '#include "decl.h"\nconst char *k = REAC_X_PROP;\n' > "$tmp/good/use.c"
 printf '#define REAC_X_PROP "reac.x"\n' > "$tmp/bad/decl.h"
 printf '#define REAC_PROP_X "reac.x"\n' > "$tmp/bad/copy.h"
 if (cd "$tmp/good" && check decl.h . >/dev/null); then
-	echo "conformance-review-cfg-declared-once: the detector flagged its planted GOOD tree — the arm is broken" >&2
+	echo "conformance-cfg-declared-once: the detector flagged its planted GOOD tree — the arm is broken" >&2
 	exit 2
 fi
 if ! (cd "$tmp/bad" && check decl.h . >/dev/null); then
-	echo "conformance-review-cfg-declared-once: the detector missed its planted BAD tree — the arm is broken" >&2
+	echo "conformance-cfg-declared-once: the detector missed its planted BAD tree — the arm is broken" >&2
 	exit 2
 fi
 
 # shellcheck disable=SC2086
 if out=$(check "$CFG" $SCOPE); then
-	echo "FAIL conformance-review-cfg-declared-once: $CFG is not the one declaration:"
+	echo "FAIL conformance-cfg-declared-once: $CFG is not the one declaration:"
 	echo "$out"
 	exit 1
 fi
