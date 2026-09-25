@@ -22,6 +22,7 @@
 #include <reac/reac.h>
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -35,6 +36,7 @@
 struct feeder {
 	int fd;
 	int with_upstream;
+	atomic_int stop;      /* set once the detector has returned */
 };
 
 static void put_frame(uint8_t *f, size_t len, uint16_t counter)
@@ -49,18 +51,23 @@ static void put_frame(uint8_t *f, size_t len, uint16_t counter)
 
 static void *feed(void *arg)
 {
-	const struct feeder *fd = arg;
+	struct feeder *fd = arg;
 	static uint8_t down[REAC_FRAME_BYTES];
 	static uint8_t up[REAC_UPSTREAM_OVERHEAD + 16 * REAC_UPSTREAM_BYTES_PER_CH];
 	struct timespec t;
 	clock_gettime(CLOCK_MONOTONIC, &t);
 	const long ticks = (long)FEED_MS * 1000000L / PERIOD_NS;
-	for (long i = 0; i < ticks; i++) {
+	/* NEVER BLOCK. The detector stops reading after its window while this thread is
+	 * still pacing; a blocking send() into a full socket buffer then waits forever,
+	 * and the join below with it. Locally a 4 MB buffer hid that; a CI runner caps
+	 * SO_SNDBUF at net.core.wmem_max (~208 KB) and hung every run (2026-09-25). So
+	 * the send cannot block, and the thread leaves as soon as the detector is done. */
+	for (long i = 0; i < ticks && !atomic_load(&fd->stop); i++) {
 		put_frame(down, sizeof down, (uint16_t)i);
-		send(fd->fd, down, sizeof down, 0);
+		send(fd->fd, down, sizeof down, MSG_DONTWAIT);
 		if (fd->with_upstream) {
 			put_frame(up, sizeof up, (uint16_t)i);
-			send(fd->fd, up, sizeof up, 0);
+			send(fd->fd, up, sizeof up, MSG_DONTWAIT);
 		}
 		t.tv_nsec += PERIOD_NS;
 		while (t.tv_nsec >= 1000000000L) { t.tv_nsec -= 1000000000L; t.tv_sec++; }
@@ -78,10 +85,12 @@ static int run(int with_upstream)
 	setsockopt(sv[0], SOL_SOCKET, SO_RCVBUF, &big, sizeof big);
 	setsockopt(sv[1], SOL_SOCKET, SO_SNDBUF, &big, sizeof big);
 	struct feeder f = { .fd = sv[1], .with_upstream = with_upstream };
+	atomic_init(&f.stop, 0);
 	pthread_t th;
 	if (pthread_create(&th, NULL, feed, &f) != 0)
 		return -2;
 	int r = reac_detect_rate_fd(sv[0], WINDOW_MS);
+	atomic_store(&f.stop, 1);
 	pthread_join(th, NULL);
 	close(sv[0]);
 	close(sv[1]);
