@@ -120,8 +120,9 @@ make test
   A source-level vocabulary change, hence the minor; LIBREAC_ABI stays 4.
 - A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40 (operator ruling 2026-09-25:
   "BOX_MAX_CHANNELS = 40"; S-4000S-3208 32/8, S-2416 24/16, an 8/32 box tested).
-  reac.h adds REAC_BOX_MIN/MAX_CHANNELS and reac_box_width_ok(), bound to reac-protocol's
-  box_width facts; every box builder, reac_box_model_upstream_width, reac_boxreg and
+  REAC_BOX_MIN/MAX_CHANNELS are protocol facts: reac-protocol's box_width group declares
+  them and reac.h reads them from the new generated header reac_facts_box_width.h, held
+  to the schema by `make facts-drift-check`; reac_box_width_ok() is added. Every box builder, reac_box_model_upstream_width, reac_boxreg and
   reac_upstream_channels ask it, and a 40-wide box is legal. WIDTH NEVER SAYS DESK:
   reac_rival_kind_of() classifies a rival by its declaration and role, and reac_arbitrate
   uses it; reac_detect_rate_fd prefers the broadcast stream.
