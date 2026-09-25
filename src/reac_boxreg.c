@@ -61,7 +61,10 @@ int reac_boxreg_declare(struct reac_boxreg *r, int nch, const char *name, int ba
 		return -1;
 	int pinned = base >= 0;
 	if (pinned) {
-		if (base + nch > r->fabric || range_taken(r, base, nch))
+		/* Subtract, never add: width_ok() bounds nch by the fabric, so
+		 * fabric - nch cannot overflow, while a CLI base near INT_MAX + nch did,
+		 * and the wrapped sum passed this bound. */
+		if (base > r->fabric - nch || range_taken(r, base, nch))
 			return -1;
 	} else {
 		base = lowest_free_base(r, nch);
