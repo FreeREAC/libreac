@@ -63,6 +63,8 @@ int main(void)
 	CHK(reac_boxreg_add(&r, S1608, 16) == 0 && r.n == 2);              /* idempotent */
 	CHK(reac_boxreg_find(&r, S1608) == 0 && reac_boxreg_find(&r, S0808) == 1);
 	CHK(reac_boxreg_add(&r, S4000, 7) == -1);                          /* odd width */
+	static const uint8_t ZERO[6] = { 0 };
+	CHK(reac_boxreg_add(&r, ZERO, 8) == -1 && r.n == 2);   /* "unbound" is not a box */
 
 	if (fails) {
 		printf("%d reac_boxreg check(s) failed\n", fails);
