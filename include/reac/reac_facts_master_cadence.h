@@ -16,57 +16,52 @@
 /* ---- How soon a desk proves it is the desk -------------------------------------
  * A desk's downstream carries MASTER-ONLY control ops on a fixed cadence, so
  * a desk proves its role within one cadence of being heard. Measured on a
- * real M-200i driving a real S-1608
+ * real M-200i driving a real S-1608 at 48 kHz
  * (m200i-s1608-48k-mirror__real-m200-s1608-coldboot, 2026-07-11; the
- * enrolment timeline in reac.ksy and docs/mixer-protocol.md §3/§4):
+ * enrolment timeline in reac.ksy and docs/mixer-protocol.md §3/§4/§7), in
+ * frames of that 4000 fps downstream:
  *
- *   cfea master announce 1 Hz, steady AND with no box answering
- *   op 01 03 page 0x0019 1 Hz; slows to ~2 s while no box answers
+ *   cfea master announce one every 4000 frames, steady AND with no
+ *                              box answering
+ *   op 01 03 page 0x0019 one every 4000 frames; slows to ~8000 while
+ *                              no box answers
  *   the scene transfer op 01 01 header, 341 x op 01 00, op 01 02
  *                              final, the WHOLE transfer again every
- *                              2.695 s while the box stays silent
+ *                              ~10780 frames while the box stays silent
  *
  * The SHORTEST of these is the window a consumer holds a broadcast sender's
- * verdict for: a sender that has sent no master-only op for that long is not
- * a desk. That is the cfea announce's period, ANNOUNCE_PERIOD_MS, and it is
- * the one of the three that does not slow when no box answers. (The page
- * 0x0019 slowdown is approximate, "~2 s", so it is described here and not
- * declared as a number.)
+ * verdict for: a sender that has sent no master-only op for that many of its
+ * own frames is not a desk. That is the cfea announce's, and it is the one
+ * of the three that does not slow when no box answers. (The page 0x0019
+ * slowdown and the scene repeat are approximate, so they are described here
+ * and not declared as numbers.)
  *
- * IN FRAMES, AT THE CURRENT RATE. A desk counts its cadences in frames: one
- * announce per second is one per PKT_RATE frames, so the window is a frame
- * count that scales with the pace — 3675 / 4000 / 8000. The 48 kHz figure is
- * measured; the 44.1 and 96 kHz figures are the same one-per-second law at
- * those packet rates (the rate facts are measured, the per-second announce
- * at those rates is this group's derivation).
+ * FRAMES, PER RATE, ARE THE FACT (operator ruling, 2026-09-25: "we must only
+ * consider the frames per rate — ms depends on frequency and is a derived
+ * figure"). A desk counts its cadences in frames, so the window is a frame
+ * count at the current rate and is declared as one; a duration is that
+ * count over PKT_RATE and is never declared here. The 48 kHz count is
+ * measured. The 44.1 and 96 kHz counts are INFERRED by the same per-rate law
+ * (the 48 kHz count scaled by each rate's PKT_RATE) until a capture at that
+ * rate measures them.
  */
-/* While a box stays silent a desk repeats its whole scene transfer at this
- * period. [EVIDENCED (corpus) —
- * m200i-s1608-48k-mirror__real-m200-s1608-coldboot 2026-07-11, "the WHOLE
- * TRANSFER AGAIN every 2.695 s" (reac.ksy enrolment timeline;
- * docs/mixer-protocol.md §7).]
- */
-#define REAC_SCENE_REPEAT_PERIOD_MS     2695
-
-/* The shortest cadence at which a desk sends a master-only op — how long a
- * broadcast sender may be held before its silence proves it is not a desk.
- * [derived — the shorter of ANNOUNCE_PERIOD_MS (1 Hz cfea, which does not
- * slow with no box) and SCENE_REPEAT_PERIOD_MS.]
- */
-#define REAC_MASTER_ONLY_CADENCE_MS     1000
-
-/* MASTER_ONLY_CADENCE_MS in frames at 44.1 kHz. [derived — PKT_RATE_44K1
- * frames per second.]
- */
-#define REAC_MASTER_ONLY_CADENCE_FRAMES_44K1 3675
-
-/* MASTER_ONLY_CADENCE_MS in frames at 48 kHz. [derived — PKT_RATE_48K frames
- * per second; the 1 Hz cfea is measured at this rate (see the group doc).]
+/* The shortest cadence, in frames at 48 kHz, at which a desk sends a
+ * master-only op (the cfea announce) — how many of a broadcast sender's own
+ * frames may pass before its silence proves it is not a desk. [EVIDENCED
+ * (corpus) — m200i-s1608-48k-mirror__real-m200-s1608-coldboot 2026-07-11, one
+ * cfea announce every 4000 frames of the 48 kHz downstream, with and without
+ * the box answering.]
  */
 #define REAC_MASTER_ONLY_CADENCE_FRAMES_48K 4000
 
-/* MASTER_ONLY_CADENCE_MS in frames at 96 kHz. [derived — PKT_RATE_96K frames
- * per second.]
+/* The master-only cadence in frames at 44.1 kHz. [INFERRED — the 48 kHz count
+ * scaled by PKT_RATE_44K1 / PKT_RATE_48K; no 44.1 kHz capture measures it
+ * yet.]
+ */
+#define REAC_MASTER_ONLY_CADENCE_FRAMES_44K1 3675
+
+/* The master-only cadence in frames at 96 kHz. [INFERRED — the 48 kHz count
+ * scaled by PKT_RATE_96K / PKT_RATE_48K; no 96 kHz capture measures it yet.]
  */
 #define REAC_MASTER_ONLY_CADENCE_FRAMES_96K 8000
 

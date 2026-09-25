@@ -9,9 +9,10 @@
  * rate; at that window's end a broadcast sender that sent no master-only op is a BOX.
  *
  * The cadence is reac-protocol's master_cadence group (MASTER_ONLY_CADENCE_FRAMES_44K1 /
- * _48K / _96K: the cfea announce, once a second whether or not a box answers — shorter
- * than the page 0x0019 window's ~2 s and the scene transfer's 2.695 s), read through the
- * generated reac_facts_master_cadence.h. Driven through the real doors — reac_hunt_observe
+ * _48K / _96K: the cfea announce, every 4000 frames of a 48 kHz downstream whether or not
+ * a box answers — shorter than the page 0x0019 window and the scene repeat), read through
+ * the generated reac_facts_master_cadence.h. The fact is FRAMES per rate; a duration is
+ * only ever those frames at a pace (operator ruling 2026-09-25). Driven through the real doors — reac_hunt_observe
  * / reac_hunt_step and reac_sender_kind — on the hunt's own clock:
  *
  *   1. the window is the fact, in frames, at each pace — and one second at every pace;
@@ -112,16 +113,18 @@ int main(void)
 		{ REAC_CFG_RATE_48000, REAC_MASTER_ONLY_CADENCE_FRAMES_48K },
 		{ REAC_CFG_RATE_96000, REAC_MASTER_ONLY_CADENCE_FRAMES_96K },
 	};
+	uint64_t longest = 0;
 	for (unsigned i = 0; i < 3; i++) {
 		const int fps = pace[i].rate / REAC_SAMPLES_PER_PKT;
+		const uint64_t ns = (uint64_t)pace[i].frames * 1000000000ULL / (uint64_t)fps;
 		CHK(reac_master_only_cadence_frames(fps) == pace[i].frames);
-		CHK(reac_master_only_cadence_ns(fps) ==
-		    (uint64_t)pace[i].frames * 1000000000ULL / (uint64_t)fps);
-		CHK(reac_master_only_cadence_ns(fps) == REAC_MASTER_ONLY_CADENCE_MS * MS);
+		CHK(reac_master_only_cadence_ns(fps) == ns);   /* the frames, at this pace */
+		if (ns > longest)
+			longest = ns;
 	}
+	/* No pace known: the longest of the three windows, so the hold is never short. */
 	CHK(reac_master_only_cadence_frames(0) == 0);
-	CHK(reac_master_only_cadence_ns(0) == REAC_MASTER_ONLY_CADENCE_MS * MS);
-	CHK(REAC_MASTER_ONLY_CADENCE_MS < REAC_SCENE_REPEAT_PERIOD_MS);   /* the shortest */
+	CHK(reac_master_only_cadence_ns(0) == longest);
 	CHK(reac_master_only_cadence_ns(0) < REAC_HUNT_WINDOW_NS);        /* not the hunt's */
 
 	/* ---- 2. a desk whose master op arrives inside the window is the desk ---- */
