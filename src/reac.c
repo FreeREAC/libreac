@@ -7,26 +7,32 @@
 
 #define _POSIX_C_SOURCE 200809L
 #include "reac/reac.h"
+#include "reac/reac_cfg.h"   /* the closed rate list */
 #include <string.h>
 
 
-const struct reac_mode REAC_MODE_44K1 = { 44100, 40, 12 };
-const struct reac_mode REAC_MODE_48K  = { 48000, 40, 12 };
-const struct reac_mode REAC_MODE_96K  = { 96000, 40, 12 };
+/* The three rates are the closed list <reac/reac_cfg.h> declares; the geometry is
+ * reac.h's. Nothing here spells either again. */
+const struct reac_mode REAC_MODE_44K1 = { REAC_CFG_RATE_44100, REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT };
+const struct reac_mode REAC_MODE_48K  = { REAC_CFG_RATE_48000, REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT };
+const struct reac_mode REAC_MODE_96K  = { REAC_CFG_RATE_96000, REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT };
 
 const struct reac_mode *reac_mode_for(int sample_rate)
 {
-	if (sample_rate == 96000) return &REAC_MODE_96K;
-	if (sample_rate == 44100) return &REAC_MODE_44K1;
+	if (sample_rate == REAC_CFG_RATE_96000) return &REAC_MODE_96K;
+	if (sample_rate == REAC_CFG_RATE_44100) return &REAC_MODE_44K1;
 	return &REAC_MODE_48K; /* 48000 and anything unknown */
 }
 
 int reac_rate_snap(double pps)
 {
 	/* pps = rate/12: 44.1k=3675, 48k=4000, 96k=8000. Snap at the midpoints. */
-	if (pps < 3837.5) return 44100; /* mid(3675, 4000) */
-	if (pps < 6000.0) return 48000; /* mid(4000, 8000) */
-	return 96000;
+	const double p44 = (double)REAC_CFG_RATE_44100 / REAC_SAMPLES_PER_PKT;
+	const double p48 = (double)REAC_CFG_RATE_48000 / REAC_SAMPLES_PER_PKT;
+	const double p96 = (double)REAC_CFG_RATE_96000 / REAC_SAMPLES_PER_PKT;
+	if (pps < (p44 + p48) / 2) return REAC_CFG_RATE_44100; /* 3837.5 */
+	if (pps < (p48 + p96) / 2) return REAC_CFG_RATE_48000; /* 6000 */
+	return REAC_CFG_RATE_96000;
 }
 
 /* The pace code a master announces and a box follows (reac.h carries the law and

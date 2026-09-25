@@ -55,13 +55,10 @@
 #include "reac_role_cfg.h"  /* the answer vocabulary this one extends (see below) */
 #include <reac/reac_master.h>   /* enum reac_master_state — the master engine's FSM */
 
-/* The answer strings published on REAC_PROP_ROLE_STATE (reac_role_cfg.h). The
- * first two are that header's already-declared vocabulary, repeated by include
- * rather than by copy; HUNTING is this module's addition and, like the rest of
- * the answer side, is LOCAL to reac-pw until a later increment mirrors it into
- * libreac's reac_cfg.h the way rate's answer props were (reac_role_cfg.h's
- * "ANSWER SIDE" note). */
-#define REAC_ROLE_STATE_HUNTING "role_hunting"
+/* The answer strings published on REAC_PROP_ROLE_STATE (reac_role_cfg.h). All
+ * three — applied, pending and this module's HUNTING — are declared once, in
+ * libreac's <reac/reac_cfg.h>, and reach here by include, never by copy. */
+#define REAC_ROLE_STATE_HUNTING REAC_CFG_ROLE_STATE_HUNTING
 
 /* How far the engine that currently owns the segment has got with the job its
  * role names. Derived from that engine's own state, never stored. */
