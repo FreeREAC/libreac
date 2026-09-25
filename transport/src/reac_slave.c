@@ -80,7 +80,10 @@ void reac_slave_fsm_init(struct reac_slave *s, const struct reac_slave_cfg *cfg)
 	s->box_channels = s->model
 		? reac_box_model_upstream_width(s->model)
 		: ((cfg && cfg->box_channels > 0)
-		   ? (cfg->box_channels > REAC_MAX_CHANNELS ? REAC_MAX_CHANNELS : cfg->box_channels)
+		   /* a box is at most REAC_BOX_MAX_CHANNELS wide: 40 is the desk's frame,
+		    * and every box builder refuses it (operator ruling 2026-09-25) */
+		   ? (cfg->box_channels > REAC_BOX_MAX_CHANNELS ? REAC_BOX_MAX_CHANNELS
+		                                                : cfg->box_channels)
 		   : REAC_SLAVE_BOX_CHANNELS_DEFAULT);
 	s->sample_rate = cfg ? cfg->sample_rate : 0;
 

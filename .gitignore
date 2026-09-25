@@ -55,8 +55,8 @@ test_box_0832
 test_box_table
 test_topo_hears_vlans
 
-# the 2026-09-25 review guards (make test), and the one open question (run by hand)
-/test_review_*
+# the 2026-09-25 review guards (make test)
+test_box_width
 test_cfg
 test_boxreg
 test_rate_detect
