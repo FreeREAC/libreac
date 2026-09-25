@@ -4,7 +4,8 @@
 // reac_arbitration — see reac_arbitration.h for what this decides (nothing) and why.
 
 #include <reac/reac_arbitration.h>
-#include <reac/reac.h>   /* REAC_MAX_CHANNELS — the master downstream width */
+#include <reac/reac.h>   /* REAC_MAX_CHANNELS, reac_rate_snap */
+#include <reac/reac_cfg.h>   /* the closed rate list */
 
 #include <string.h>
 #include <stdint.h>
@@ -163,7 +164,42 @@ enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e)
 	return REAC_RIVAL_UNKNOWN;
 }
 
-enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t now_ns)
+uint32_t reac_master_only_cadence_frames(int fps)
+{
+	if (fps <= 0)
+		return 0;
+	switch (reac_rate_snap((double)fps)) {
+	case REAC_CFG_RATE_44100: return REAC_MASTER_ONLY_CADENCE_FRAMES_44K1;
+	case REAC_CFG_RATE_96000: return REAC_MASTER_ONLY_CADENCE_FRAMES_96K;
+	default:                  return REAC_MASTER_ONLY_CADENCE_FRAMES_48K;
+	}
+}
+
+/* frames at a pace, as nanoseconds: frames / (sample_rate / samples_per_pkt) s */
+static uint64_t frames_ns(uint32_t frames, int sample_rate)
+{
+	return (uint64_t)frames * 1000000000ULL * REAC_SAMPLES_PER_PKT / (uint64_t)sample_rate;
+}
+
+uint64_t reac_master_only_cadence_ns(int fps)
+{
+	if (fps > 0) {
+		const int rate = reac_rate_snap((double)fps);
+		return frames_ns(reac_master_only_cadence_frames(fps), rate);
+	}
+	static const int rates[] = { REAC_CFG_RATE_44100, REAC_CFG_RATE_48000, REAC_CFG_RATE_96000 };
+	uint64_t longest = 0;
+	for (unsigned i = 0; i < sizeof rates / sizeof rates[0]; i++) {
+		const uint64_t ns = frames_ns(
+			reac_master_only_cadence_frames(rates[i] / REAC_SAMPLES_PER_PKT), rates[i]);
+		if (ns > longest)
+			longest = ns;
+	}
+	return longest;
+}
+
+enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t now_ns,
+                                      int fps)
 {
 	if (!e)
 		return REAC_RIVAL_NONE;
@@ -171,9 +207,9 @@ enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t
 		return reac_rival_kind_of(e);   /* its own frames already said what it is */
 	if (e->channels == 0)
 		return REAC_RIVAL_UNKNOWN;      /* nothing heard to hold on */
-	/* A broadcast stream with no role-bearing frame: HOLD for the declared window, then
-	 * call it what the absence of any master-only frame makes it. */
-	if (now_ns <= e->first_seen_ns || now_ns - e->first_seen_ns < REAC_DESK_PROOF_WINDOW_NS)
+	/* A broadcast stream with no role-bearing frame: HOLD for one master-only cadence,
+	 * then call it what the absence of any master-only op makes it. */
+	if (now_ns <= e->first_seen_ns || now_ns - e->first_seen_ns < reac_master_only_cadence_ns(fps))
 		return REAC_RIVAL_UNKNOWN;
 	return REAC_RIVAL_BOX;
 }

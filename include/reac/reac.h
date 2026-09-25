@@ -296,10 +296,12 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        Desk-vs-box is decided by direction, source and role, never width:
  *        reac_rival_kind_of() is ADDED and reac_arbitrate uses it, and
  *        reac_upstream_channels() now answers 40 for a 1492 B return. A BROADCAST sender
- *        is HELD until its own frames prove desk or box, for at most
- *        REAC_DESK_ANNOUNCES_TO_WAIT x REAC_ANNOUNCE_PERIOD_MS (the generated
- *        reac_facts_timing.h, ADDED), then is a box: reac_sender_kind() is ADDED, and the
- *        hunt's window is that number. No struct or symbol moves or changes size, so
+ *        is HELD until its own frames prove desk or box, for at most ONE MASTER-ONLY
+ *        CADENCE IN FRAMES AT THE CURRENT RATE (reac-protocol's master_cadence group,
+ *        through the generated reac_facts_master_cadence.h, ADDED), then is a box:
+ *        reac_sender_kind(), reac_master_only_cadence_frames() and _ns() are ADDED. The
+ *        hunt's vacancy window reads REAC_ANNOUNCE_PERIOD_MS from the generated
+ *        reac_facts_timing.h (ADDED). No struct or symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,

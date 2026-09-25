@@ -127,9 +127,11 @@ make test
   reac_rival_kind_of() classifies a rival by its declaration and role, and reac_arbitrate
   uses it; reac_detect_rate_fd prefers the broadcast stream.
 - HOLD WITH A DECLARED LIMIT (operator ruling 2026-09-25): a broadcast sender is held until
-  its own frames prove desk or box, for at most 3 x REAC_ANNOUNCE_PERIOD_MS — a protocol
-  fact, read from the new generated reac_facts_timing.h — then is a box
-  (reac_sender_kind). The hunt's window is the same number.
+  its own frames prove desk or box, for at most one master-only cadence in frames at the
+  current rate — reac-protocol's master_cadence facts, read from the new generated
+  reac_facts_master_cadence.h — then is a box (reac_sender_kind,
+  reac_master_only_cadence_frames/_ns). The hunt's vacancy window reads
+  REAC_ANNOUNCE_PERIOD_MS from the new generated reac_facts_timing.h.
 - Every test runs under tests/run-test.sh: a timeout on each, exit 77 an explicit SKIP.
 - tests/test_boxreg.c is the fabric guard reac_slots.h claimed: widening the audio fabric
   to 48 now reds `make test`.

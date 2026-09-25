@@ -107,9 +107,9 @@ static int live(const struct reac_disco_entry *e, uint64_t now_ns)
  *     byte-verified 2026-07-11), and a broadcast FILLER is deliberately classified
  *     UNKNOWN because a master's downstream audio is byte-identical in kind. Its width
  *     does not settle it either — a box may be 40 wide (operator ruling 2026-09-25).
- *     What settles it is the HOLD WITH A DECLARED LIMIT (reac_sender_kind): the desk
- *     announces itself once per REAC_ANNOUNCE_PERIOD_MS, so a broadcast sender that sent
- *     no master-only frame for REAC_DESK_ANNOUNCES_TO_WAIT of those is a box.
+ *     What settles it is the HOLD WITH A DECLARED LIMIT (reac_sender_kind): a desk sends
+ *     a master-only op within one master-only cadence (reac-protocol's master_cadence
+ *     group), so a broadcast sender that sent none for that long is a box.
  *
  * Refusing the second kind would be the founding bug of this whole area: two boxes sat
  * ungranted on 2026-09-08 while the daemon hunted, because nothing turned "a box is
@@ -124,7 +124,7 @@ static int box_present(const struct reac_disco_table *t, uint64_t now_ns)
 		if (e->role == REAC_DISCO_ROLE_BOX)
 			return 1;
 		if (e->role == REAC_DISCO_ROLE_UNKNOWN &&
-		    reac_sender_kind(e, now_ns) == REAC_RIVAL_BOX)
+		    reac_sender_kind(e, now_ns, 0 /* the hunt runs before any pace is set */) == REAC_RIVAL_BOX)
 			return 1;
 	}
 	return 0;
@@ -148,7 +148,7 @@ static int desk_geometry_live(const struct reac_disco_table *t, const uint8_t ou
 		if (our_mac && memcmp(e->mac, our_mac, 6) == 0)
 			continue;
 		if (e->role == REAC_DISCO_ROLE_UNKNOWN && e->channels > 0 &&
-		    reac_sender_kind(e, now_ns) == REAC_RIVAL_UNKNOWN)
+		    reac_sender_kind(e, now_ns, 0 /* the hunt runs before any pace is set */) == REAC_RIVAL_UNKNOWN)
 			return 1;
 	}
 	return 0;
