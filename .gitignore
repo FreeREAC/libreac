@@ -63,3 +63,4 @@ test_rate_detect
 test_clock
 test_identity_cksum
 test_decode_plain_le
+test_desk_or_box

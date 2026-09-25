@@ -626,22 +626,22 @@ static const struct reac_box_model BOX_MODELS[] = {
 	  .has_identity_record = 1, .name = "FR-4000M",
 	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
 	/* ---- THE EXPERIMENT (operator, 2026-09-17: "test if we can emulate a 40
-	 * channels input or output box"), NARROWED BY THE RULING of 2026-09-25: "mixer
-	 * sends 40ch, boxes have their size of ins and outs, always even". A 40-channel
-	 * frame is the DESK's frame, so no box row may declare 40 either way: a box width
-	 * is an even 2..38 (reac_box_width_ok). The declaration carries widths in
-	 * 4-channel port slots (REAC_PORTS_CH_PER_SLOT), so the widest row it can state
-	 * inside that bound is 36 — 36/0 and 0/36 — and 20/20 stays the widest
-	 * symmetric one. These were fr4000 / fr0040 (40 wide) until the ruling. ---- */
-	{ .token = "fr3600", .display = "FreeREAC 36 in / 0 out", .in_ch = 36, .out_ch = 0,
+	 * channels input or output box"). No Roland model is behind these. 40 is the
+	 * AUDIO FABRIC's full width and it is not 48: the port table spans twelve
+	 * 4-channel slots = 48 channels, but the downstream frame carries 40 slots
+	 * (REAC_AUDIO_FABRIC_SLOTS), so 40/0 and 0/40 are the widest rows the fabric
+	 * can actually carry and 20/20 is the widest symmetric one. A 40-wide box is a
+	 * BOX (operator ruling 2026-09-25, REAC_BOX_MAX_CHANNELS): its 1492 B return is
+	 * told from a desk's downstream by direction and role, never by width. ---- */
+	{ .token = "fr4000", .display = "FreeREAC 40 in / 0 out", .in_ch = 40, .out_ch = 0,
 	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
 	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
-	  .has_identity_record = 1, .name = "FR-3600",
+	  .has_identity_record = 1, .name = "FR-4000",
 	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
-	{ .token = "fr0036", .display = "FreeREAC 0 in / 36 out", .in_ch = 0, .out_ch = 36,
+	{ .token = "fr0040", .display = "FreeREAC 0 in / 40 out", .in_ch = 0, .out_ch = 40,
 	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
 	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
-	  .has_identity_record = 1, .name = "FR-0036",
+	  .has_identity_record = 1, .name = "FR-0040",
 	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
 	{ .token = "fr2020", .display = "FreeREAC 20 in / 20 out", .in_ch = 20, .out_ch = 20,
 	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
@@ -900,15 +900,15 @@ static size_t ctrl_emit_as(uint8_t *out, const struct ctrl_frame *f,
                            uint16_t counter, int n_ch, const uint8_t *args,
                            float *const *planar, int ns)
 {
-	/* A BOX FRAME IS A BOX WIDTH: even, 2..38 (reac_box_width_ok). 40 is the
-	 * desk's 1492 B frame — a box that sent it would read as a master — and the
-	 * braid packs channel PAIRS. Rows sized from the matrix carry a verified width
-	 * already; a model handed in brings its width in n_ch and is checked below. */
+	/* A BOX FRAME IS A BOX WIDTH: even, 2..40 (reac_box_width_ok) — the braid packs
+	 * channel PAIRS, and a box may fill the whole fabric (operator ruling
+	 * 2026-09-25). Rows sized from the matrix carry a verified width already; a
+	 * model handed in brings its width in n_ch and is checked below. */
 	if (f->len == LEN_ARG_WIDTH && !reac_box_width_ok(n_ch))
 		return 0;
 	if (f->len != LEN_DOWNSTREAM && (model || f->len == LEN_MODEL_WIDTH) &&
 	    !reac_box_width_ok(n_ch))
-		return 0;   /* a width-keyed row too: 40 must not quietly become an S-1608 */
+		return 0;   /* a width-keyed row too: 41 must not quietly become an S-1608 */
 
 	/* THE ROW IS THE CALLER'S WHEN THE CALLER HAS ONE. A width can only ever
 	 * name a captured model (reac_box_model_by_channels answers for those

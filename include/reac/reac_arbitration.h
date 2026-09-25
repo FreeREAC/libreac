@@ -120,12 +120,29 @@ struct reac_arbitration {
 
 
 /**
- * Classify a rival by the width its frames carry.
+ * Classify a rival by what it SAID and how it spoke — never by its width.
  *
- * 40 channels is the master downstream and nothing else is; every smaller legal geometry is a
- * box upstream of that width. 0 means no legal `52 + n*36` frame has been heard from the peer,
- * which is UNKNOWN rather than narrow — and unknown is refused, per §4's rule that a frame kind
- * nobody has captured must not flip the segment's topology.
+ * Operator ruling 2026-09-25: "BOX_MAX_CHANNELS = 40 ... boxes have their size of ins and outs,
+ * always even." A box may be 40 wide, so a 40-wide stream no longer proves a desk and a narrower
+ * one no longer proves a box. The evidence, in order:
+ *   - the peer DECLARED a box model (its own config-announce matched a row) -> BOX. A box
+ *     strapped to master still declares what it is; that is the stagebox §2b refuses;
+ *   - its role is BOX (a box-only signature: JOIN/box-ready/identity record, box heartbeat,
+ *     config announce, or a UNICAST FILLER — a desk BROADCASTS its downstream) -> BOX;
+ *   - no audio stream heard from it yet (channels 0) -> UNKNOWN, refused per §4;
+ *   - it announced itself MASTER (cfea, slot map, head-amp records, scene push) and declared
+ *     no box -> DESK.
+ * NULL is NONE.
+ */
+enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e);
+
+/**
+ * WIDTH ONLY — SUPERSEDED for desk-vs-box by reac_rival_kind_of().
+ *
+ * It says 40 -> DESK and narrower -> BOX, which the 2026-09-25 ruling overturned: a box may be
+ * 40 wide. Kept because it is public and because two callers that see only a width still use
+ * it (reac_hunt's unresolved-broadcast rule, reac_segment_ident's answer); those are listed as
+ * open in docs/audits/2026-09-25-libreac-review.md. 0 is UNKNOWN.
  */
 enum reac_rival_kind reac_rival_kind_from_channels(unsigned channels);
 

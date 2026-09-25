@@ -116,7 +116,18 @@ int reac_tap_survey_frame(struct reac_tap_survey *s, const uint8_t *frame, size_
 
 	enum reac_tap_stream_kind kind;
 	unsigned channels;
-	if (reac_frame_is_master_downstream(clean)) {
+	/* DIRECTION BEFORE WIDTH. A master BROADCASTS its downstream; a box UNICASTS its
+	 * return to its master, at any box width up to the whole fabric (operator ruling
+	 * 2026-09-25) — so a unicast stream is a box's even when it is 40 wide. Only a
+	 * BROADCAST stream is still sized into master-or-box by its width: a box's
+	 * presence-flood is broadcast too, and telling the two apart without a width is
+	 * the open question in docs/audits/2026-09-25-libreac-review.md. */
+	static const uint8_t BCAST[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+	const int unicast = memcmp(frame, BCAST, 6) != 0;
+	if (unicast && reac_upstream_channels(clean) > 0) {
+		kind = REAC_TAP_STREAM_BOX;
+		channels = (unsigned)reac_upstream_channels(clean);
+	} else if (reac_frame_is_master_downstream(clean)) {
 		kind = REAC_TAP_STREAM_MASTER;
 		channels = REAC_MAX_CHANNELS;
 	} else if (reac_upstream_channels(clean) > 0) {

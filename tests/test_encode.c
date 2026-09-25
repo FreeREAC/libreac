@@ -21,7 +21,7 @@
  *    same constant from the other side of the wrap, so the two repos cannot
  *    drift apart silently.
  * 2. ROUND TRIP. reac_braid_encode -> reac_upstream_decode is the identity (up
- *    to 24-bit quantization) for every even box width 2..38 — the encoder and
+ *    to 24-bit quantization) for every even box width 2..40 — the encoder and
  *    the decoder are inverses, which is the whole point of both living here.
  * 3. COVERAGE. The encode writes every byte of the audio region exactly once
  *    (bijection), so a memset + encode leaves no stale bytes behind.
@@ -148,7 +148,7 @@ int main(void)
 	}
 
 	/* ---- 2. encode -> decode is the identity, every box width ---- */
-	for (int nch = 2; nch < REAC_MAX_CHANNELS; nch += 2) {
+	for (int nch = REAC_BOX_MIN_CHANNELS; nch <= REAC_BOX_MAX_CHANNELS; nch += 2) {
 		size_t len = REAC_UPSTREAM_OVERHEAD + (size_t)nch * REAC_UPSTREAM_BYTES_PER_CH;
 		uint8_t frame[REAC_FRAME_BYTES];
 		uint8_t out[REAC_MAX_CHANNELS * REAC_SAMPLES_PER_PKT * 3];
