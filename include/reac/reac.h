@@ -252,6 +252,16 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.6.0: THE 2026-09-25 REVIEW'S FIXES (docs/audits/2026-09-25-libreac-review.md). A minor,
+ *        not a patch, because reac_cfg.h's PUBLIC vocabulary moves: REAC_CFG_REFUSED_NONE is
+ *        "none" (was ""), REAC_ROLE_PROP and REAC_CFG_ROLE_STATE_HUNTING are ADDED, and
+ *        REAC_CFG_RATE_COUNT / REAC_CFG_RATE_LIST_INIT, which nothing read, are REMOVED. A
+ *        consumer pinned to the old header (openmixer's TS mirror) must move with it.
+ *        Behaviour: reac_detect_rate_fd measures one stream; a new clock reference is
+ *        LOCKING until measured; reac_ctrl_identity_reply requires both checksums;
+ *        reac_decode_plain_le refuses an oversize geometry; reac_boxreg refuses an
+ *        overflowing base and the zero MAC. No struct or symbol moves or changes size, so
+ *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
  *        amendment of that date). reac_topo's tap was BPF-filtered to 0x8819, so a VLAN
@@ -294,7 +304,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 5
+#define LIBREAC_VERSION_MINOR 6
 #define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
