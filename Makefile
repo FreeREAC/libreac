@@ -203,6 +203,19 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# at audio slot 32 must be refused. Widening REAC_AUDIO_FABRIC_SLOTS to 48 reds this.
 	$(CC) $(CFLAGS) $(INC) tests/test_boxreg.c libreac.a -lm -o test_boxreg
 	./test_boxreg
+	# THE 2026-09-25 REVIEW'S GUARDS (docs/audits/2026-09-25-libreac-review.md), each red
+	# on ee205b6 and each with a control arm that exits 2 (NOT A RESULT) if its own
+	# harness is broken. Rate detection measures one stream (M1); a new clock reference
+	# is acquired before it is locked (M2); an identity reply must close both checksums
+	# (M3); the plain-LE diagnostic refuses a geometry wider than the region (M6).
+	$(CC) $(CFLAGS) $(INC) tests/test_rate_detect.c libreac.a -lm -lpthread -o test_rate_detect
+	./test_rate_detect
+	$(CC) $(CFLAGS) $(INC) tests/test_clock.c libreac.a -lm -o test_clock
+	./test_clock
+	$(CC) $(CFLAGS) $(INC) tests/test_identity_cksum.c libreac.a -lm -o test_identity_cksum
+	./test_identity_cksum
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) tests/test_decode_plain_le.c libreac.a -lm -o test_decode_plain_le
+	./test_decode_plain_le
 	tests/conformance-cfg-declared-once.sh
 	$(CC) $(CFLAGS) $(INC) -Ipackaging/vendor/reac-pw-headers tests/test_cfg.c libreac.a -lm -o test_cfg
 	./test_cfg
@@ -353,23 +366,9 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	    -lm -lpthread -o test_topo_hears_vlans
 	./test_topo_hears_vlans
 
-# THE 2026-09-25 REVIEW'S PROOF TESTS (docs/audits/2026-09-25-libreac-review.md).
-# Each one is RED on purpose until its finding is fixed, so this target is NOT part of
-# `make test`: it runs every proof, says which are still red, and exits 0 only when all
-# are green. Exit 2 from a test is NOT A RESULT (its control arm failed).
-REVIEW_20260925 := rate_detect clock identity_cksum box_width boxreg decode_plain_le
-
-review-2026-09-25: libreac.a
-	@red=0; for t in $(REVIEW_20260925); do \
-	  $(CC) $(CFLAGS) $(INC) tests/test_review_$$t.c libreac.a -lm -lpthread -o test_review_$$t || exit 1; \
-	  ./test_review_$$t; rc=$$?; [ $$rc -eq 0 ] || red=$$((red + 1)); \
-	done; \
-	echo "review-2026-09-25: $$red proof(s) still red"; [ $$red -eq 0 ]
-
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_rate_detect test_clock test_identity_cksum test_decode_plain_le etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans
-	rm -f $(REVIEW_20260925:%=test_review_%)
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
-.PHONY: all test test-transport conformance corpus wire-tools clean transport review-2026-09-25
+.PHONY: all test test-transport conformance corpus wire-tools clean transport

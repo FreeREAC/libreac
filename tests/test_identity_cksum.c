@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* REVIEW 2026-09-25, finding M3 (docs/audits/2026-09-25-libreac-review.md).
+/* A CORRUPT IDENTITY REPLY IS NOT EVIDENCE. Guard for libreac review 2026-09-25, M3
+ * (docs/audits/2026-09-25-libreac-review.md); red on ee205b6, green since the fix.
  *
  * reac_ctrl_identity_reply() returns 1 for a DT1 identity reply whose OUTER
  * block checksum (sum-to-0 over [18:50]) and INNER record checksum
@@ -63,7 +64,7 @@ int main(void)
 	    reac_ctrl_record_cksum_verify(frame + REAC_CTRL_BLOCK_OFF + 16, 9) != 0 ||
 	    reac_ctrl_identity_reply(frame, sizeof frame, &addr, &pl, &pll) != 1 ||
 	    addr != REAC_IDENTITY_ADDR_FIRMWARE || pll != 4) {
-		printf("NOT A RESULT: test_review_identity_cksum — the captured control reply "
+		printf("NOT A RESULT: test_identity_cksum — the captured control reply "
 		       "does not verify/extract, so the corrupt arm proves nothing\n");
 		return 2;
 	}
@@ -85,6 +86,6 @@ int main(void)
 		        "(the box sent 2200)\n", id.fw_milli);
 		return 1;
 	}
-	printf("OK: test_review_identity_cksum — a reply that fails its checksums is not evidence\n");
+	printf("OK: test_identity_cksum — a reply that fails its checksums is not evidence\n");
 	return 0;
 }

@@ -55,7 +55,11 @@ test_box_0832
 test_box_table
 test_topo_hears_vlans
 
-# the 2026-09-25 review proof tests (make review-2026-09-25)
+# the 2026-09-25 review guards (make test), and the one open question (run by hand)
 /test_review_*
 test_cfg
 test_boxreg
+test_rate_detect
+test_clock
+test_identity_cksum
+test_decode_plain_le

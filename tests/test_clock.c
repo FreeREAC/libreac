@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* REVIEW 2026-09-25, finding M2 (docs/audits/2026-09-25-libreac-review.md).
+/* A LOCK BELONGS TO ITS REFERENCE. Guard for libreac review 2026-09-25, M2
+ * (docs/audits/2026-09-25-libreac-review.md); red on ee205b6, green since the fix.
  *
  * reac_clock_disc_update() resets in_band and the stability series when the
  * selected reference CHANGES, but leaves `state` alone unless a measurement
@@ -30,7 +31,7 @@ int main(void)
 	for (int i = 0; i < 2 * REAC_DLL_LOCK_UPDATES; i++)
 		reac_clock_disc_update(&c, REAC_CLOCK_AVAIL_BOX, 0.0, 1);
 	if (c.state != REAC_CLOCK_LOCKED || c.src != REAC_CLOCK_SRC_BOX) {
-		printf("NOT A RESULT: test_review_clock — the control never locked to the box\n");
+		printf("NOT A RESULT: test_clock — the control never locked to the box\n");
 		return 2;
 	}
 
@@ -48,6 +49,6 @@ int main(void)
 		fprintf(stderr, "  the discipline now says: \"%s\" after 0 PHC samples\n", buf);
 		return 1;
 	}
-	printf("OK: test_review_clock — a newly selected reference is not reported locked before it is measured\n");
+	printf("OK: test_clock — a newly selected reference is not reported locked before it is measured\n");
 	return 0;
 }

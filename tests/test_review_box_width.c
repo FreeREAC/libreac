@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* REVIEW 2026-09-25, finding M4 (docs/audits/2026-09-25-libreac-review.md).
+/* REVIEW 2026-09-25, finding M4 (docs/audits/2026-09-25-libreac-review.md) —
+ * AN OPERATOR QUESTION, NOT A FIX STEP. It is red on purpose and is NOT part of
+ * `make test`: the operator's 40-channel experiment row and the spec's even 2..38
+ * box width cannot both stand, and which one moves is the operator's call. Run it
+ * by hand to see where the question stands:
+ *   cc -std=c11 -Iinclude tests/test_review_box_width.c libreac.a -lm -o test_review_box_width
+ *   ./test_review_box_width
  *
  * The settled spec (reac-protocol spec/reac.ksy, num_channels and "The role is
  * the geometry"): 40 channels / 1492 B is the MASTER's downstream; a box's
