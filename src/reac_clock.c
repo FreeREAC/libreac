@@ -12,6 +12,11 @@
  * can assert it directly. Each source appears once per list, so "best available"
  * is a total order with no ties to resolve. */
 
+_Static_assert(REAC_CLOCK_SRC_COUNT == REAC_CLOCK_SRC_WIRE + 1,
+               "REAC_CLOCK_SRC_COUNT counts enum reac_clock_source");
+_Static_assert(REAC_CLOCK_Q_COUNT == REAC_CLOCK_Q_DESIGNATED + 1,
+               "REAC_CLOCK_Q_COUNT counts enum reac_clock_quality");
+
 static const enum reac_clock_source master_hier[] = {
 	REAC_CLOCK_SRC_PHC,     /* independent of both the host and the segment  */
 	REAC_CLOCK_SRC_GRAPH,   /* hardware-driven graph only (see the header)   */
@@ -313,6 +318,12 @@ void reac_clock_disc_update(struct reac_clock_disc *c, uint32_t avail,
 		 * reference; carrying it over would let one device's steadiness vouch for
 		 * another's. applied_ppm survives — that is holdover, a separate promise. */
 		reac_dll_stability_reset(&c->dll);
+		/* And so does the LOCK. A reference that has produced no sample yet is being
+		 * acquired, not followed: LOCKED names the old one, and left standing it would
+		 * publish the new reference's name over the old one's correction. A sample in
+		 * this same call moves it on below; FREERUN decides its own state below. */
+		if (src != REAC_CLOCK_SRC_FREERUN)
+			c->state = REAC_CLOCK_LOCKING;
 	}
 	c->src = src;
 

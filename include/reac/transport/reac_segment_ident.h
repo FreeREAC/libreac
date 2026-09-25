@@ -47,6 +47,7 @@
 #include <stdint.h>
 
 #include <reac/transport/reac_mac.h>   /* reac_mac48_pack/unpack — the master MAC as ONE atomic */
+#include <reac/reac_arbitration.h>     /* enum reac_rival_kind — what the peer IS */
 
 /* The segment's own name, on the node that carries its door. The value is the
  * per-instance name (`--name` / `REAC_NAME`), or REAC_SEGMENT_NAME_DEFAULT for a
@@ -154,6 +155,15 @@ void reac_segment_answer_slave(struct reac_segment_answer *out, int heard,
                                uint64_t master_mac48, int rate_hz,
                                unsigned wire_channels);
 
+/* THE SAME ANSWER, WITH THE PEER'S KIND GIVEN RATHER THAN INFERRED FROM A WIDTH.
+ * Operator ruling 2026-09-25: a box may be 40 wide, so `wire_channels` above cannot
+ * tell a joined desk from a joined box on M. The caller passes what it decided from
+ * the peer's own frames — reac_sender_kind() on its discovery entry, or arbitration's
+ * `rival` — and this publishes exactly that. Prefer this over the width-only door. */
+void reac_segment_answer_slave_kind(struct reac_segment_answer *out, int heard,
+                                    uint64_t master_mac48, int rate_hz,
+                                    enum reac_rival_kind peer);
+
 /* Fill the answer a REFUSED segment publishes — the DOOR-ONLY segment of
  * DESIGN.md's 0.5.1 ruling: a wire pinned MASTER with a stagebox mastering it,
  * or a rival whose geometry nobody has captured. No engine of any kind is
@@ -173,5 +183,11 @@ void reac_segment_answer_slave(struct reac_segment_answer *out, int heard,
 void reac_segment_answer_refused(struct reac_segment_answer *out,
                                  unsigned rival_channels, uint64_t rival_mac48,
                                  int rate_hz);
+
+/* The refused answer with the rival's kind given — arbitration's `rival`, decided by
+ * direction, source and role — rather than inferred from its width. Prefer this. */
+void reac_segment_answer_refused_kind(struct reac_segment_answer *out,
+                                      enum reac_rival_kind rival, uint64_t rival_mac48,
+                                      int rate_hz);
 
 #endif /* REAC_SEGMENT_IDENT_H */

@@ -62,6 +62,12 @@ endif
 
 all: libreac.a
 
+# Every test runs through tests/run-test.sh: a timeout on each (a hang is red, never a
+# stall), and exit 77 reported as an explicit SKIP (a capability the environment lacks).
+RUN_TEST := tests/run-test.sh
+SKIP_LOG := $(BUILD_DIR)/skipped.txt
+export REAC_SKIP_LOG := $(abspath $(SKIP_LOG))
+
 # -MMD -MP emits a .d per object listing the headers it included, and the include
 # below feeds them back to make. WITHOUT THIS A HEADER EDIT REBUILDS NOTHING:
 # `make` reported "libreac.a is up to date" after a header change, so the archive
@@ -83,16 +89,54 @@ $(BUILD_DIR)/reac_facts_assert.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
 	@mkdir -p $(BUILD_DIR)
 	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@
 
+# A FACT libreac READS INSTEAD OF DECLARING. include/reac/reac_facts_box_width.h is
+# reac-protocol's generated definition of the box_width group (REAC_BOX_MIN/MAX_CHANNELS),
+# included by reac.h and committed so a standalone build and an installed -devel
+# have it. The gate below holds the committed copy to the schema.
+$(BUILD_DIR)/reac_facts_box_width.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
+	@mkdir -p $(BUILD_DIR)
+	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
+	  --groups box_width --guard REAC_FACTS_BOX_WIDTH_H
+
+# The same for the TIMING group: the periods a desk or box fixes (REAC_ANNOUNCE_PERIOD_MS
+# and friends). reac_arbitration.h reads the announce period from it to size the window a
+# broadcast sender is given to prove it is the desk (operator ruling 2026-09-25).
+$(BUILD_DIR)/reac_facts_timing.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
+	@mkdir -p $(BUILD_DIR)
+	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
+	  --groups timing --guard REAC_FACTS_TIMING_H
+
+# The MASTER-ONLY CADENCE (reac-protocol's master_cadence group): the shortest interval at
+# which a desk sends a master-only op, in frames at each rate. It is the limit of the hold
+# on a broadcast sender's desk-or-box verdict (operator ruling 2026-09-25).
+$(BUILD_DIR)/reac_facts_master_cadence.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
+	@mkdir -p $(BUILD_DIR)
+	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
+	  --groups master_cadence --guard REAC_FACTS_MASTER_CADENCE_H
+
 # The drift gate: only meaningful when the schema is reachable (nothing to
 # compare the fallback against otherwise). Regenerates and diffs against the
 # committed tests/reac_facts_assert.h; a difference fails the build rather
 # than passing quietly on a stale copy.
 .PHONY: facts-drift-check
 ifeq ($(HAVE_SCHEMA),1)
-facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h
+facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_width.h \
+                   $(BUILD_DIR)/reac_facts_timing.h $(BUILD_DIR)/reac_facts_master_cadence.h
 	@diff -u tests/reac_facts_assert.h $(BUILD_DIR)/reac_facts_assert.h || \
 	  { echo "tests/reac_facts_assert.h has drifted from $(FACTS_SCHEMA)."; \
 	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_assert.h tests/reac_facts_assert.h"; \
+	    exit 1; }
+	@diff -u include/reac/reac_facts_box_width.h $(BUILD_DIR)/reac_facts_box_width.h || \
+	  { echo "include/reac/reac_facts_box_width.h has drifted from $(FACTS_SCHEMA)."; \
+	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_box_width.h include/reac/reac_facts_box_width.h"; \
+	    exit 1; }
+	@diff -u include/reac/reac_facts_timing.h $(BUILD_DIR)/reac_facts_timing.h || \
+	  { echo "include/reac/reac_facts_timing.h has drifted from $(FACTS_SCHEMA)."; \
+	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_timing.h include/reac/reac_facts_timing.h"; \
+	    exit 1; }
+	@diff -u include/reac/reac_facts_master_cadence.h $(BUILD_DIR)/reac_facts_master_cadence.h || \
+	  { echo "include/reac/reac_facts_master_cadence.h has drifted from $(FACTS_SCHEMA)."; \
+	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_master_cadence.h include/reac/reac_facts_master_cadence.h"; \
 	    exit 1; }
 else
 facts-drift-check:
@@ -100,10 +144,11 @@ facts-drift-check:
 endif
 
 test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c libreac.a $(FACTS_ASSERT_H)
+	@mkdir -p $(BUILD_DIR); rm -f $(SKIP_LOG)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
-	./test_reac
+	$(RUN_TEST) ./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
-	./test_capture
+	$(RUN_TEST) ./test_capture
 	# THE SNIFFER IS DEAF UNTIL IT IS BOUND (#19). A live measurement, not a claim
 	# about the code: two veth pairs in a user+net namespace of its own making (no
 	# root), a 0x8819 flood on one, reac_capture_open() opened 400 times on the
@@ -112,48 +157,62 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# capture are each reported as NOT A RESULT instead of a pass; an environment
 	# with no `ip` or no user namespace prints SKIPPED and says nothing was tested.
 	$(CC) $(CFLAGS) $(INC) tests/test_sniffer_binds_first.c libreac.a -lm -o test_sniffer_binds_first
-	./test_sniffer_binds_first
+	$(RUN_TEST) ./test_sniffer_binds_first
 	$(CC) $(CFLAGS) $(INC) tests/test_braid.c libreac.a -lm -o test_braid
-	./test_braid
+	$(RUN_TEST) ./test_braid
 	$(CC) $(CFLAGS) $(INC) tests/test_upstream.c libreac.a -lm -o test_upstream
-	./test_upstream
+	$(RUN_TEST) ./test_upstream
 	$(CC) $(CFLAGS) $(INC) tests/test_encode.c libreac.a -lm -o test_encode
-	./test_encode
+	$(RUN_TEST) ./test_encode
 	$(CC) $(CFLAGS) $(INC) tests/test_decode.c libreac.a -lm -o test_decode
-	./test_decode
+	$(RUN_TEST) ./test_decode
 	$(CC) $(CFLAGS) $(INC) tests/test_ports.c libreac.a -lm -o test_ports
-	./test_ports
+	$(RUN_TEST) ./test_ports
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_box_0832.c libreac.a -lm -o test_box_0832
-	./test_box_0832
+	$(RUN_TEST) ./test_box_0832
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_ctrl.c libreac.a -lm -o test_ctrl
-	./test_ctrl
+	$(RUN_TEST) ./test_ctrl
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_link.c libreac.a -lm -o test_link
-	./test_link
+	$(RUN_TEST) ./test_link
 	$(CC) $(CFLAGS) -I$(dir $(FACTS_ASSERT_H)) $(INC) tests/test_facts.c libreac.a -lm -o test_facts
-	./test_facts
+	$(RUN_TEST) ./test_facts
 	$(CC) $(CFLAGS) $(INC) tests/test_identity.c libreac.a -lm -o test_identity
-	./test_identity
+	$(RUN_TEST) ./test_identity
 	# WHEN A WIRE NOBODY CONFIGURED MAY BE DRIVEN, and how long a sighting the
 	# topology tap has not placed holds the hunt off it. Both are the hunt's own
 	# inputs (docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md)
 	# and both used to live in reac-pw, where a libreac change could not see them
 	# go red. Pure: a clock and a verdict, no socket, no frame.
 	$(CC) $(CFLAGS) $(INC) tests/test_reac_knock.c libreac.a -lm -o test_reac_knock
-	./test_reac_knock
+	$(RUN_TEST) ./test_reac_knock
 	$(CC) $(CFLAGS) $(INC) tests/test_reac_tapwait.c libreac.a -lm -o test_reac_tapwait
-	./test_reac_tapwait
+	$(RUN_TEST) ./test_reac_tapwait
 	# Library reads no environment (2026-09-17-tunables-api-and-shared-refusal-codes.md).
 	$(CC) $(CFLAGS) $(INC) tests/test_no_getenv_conformance.c -o test_no_getenv_conformance
-	./test_no_getenv_conformance
+	$(RUN_TEST) ./test_no_getenv_conformance
 	# THE TABLE IS DATA. Every block synthesised from a row's declared facts, with
 	# the three captured rows' real bytes as the oracle for the synthesis - which
 	# is the only thing that licenses a row for a model nobody has ever seen.
 	$(CC) $(CFLAGS) $(INC) tests/test_box_table.c libreac.a -lm -o test_box_table
-	./test_box_table
+	$(RUN_TEST) ./test_box_table
+	# A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40 (operator ruling 2026-09-25): every box
+	# builder, the model door, the registry and the upstream parser take 40 and refuse
+	# every odd width and anything wider. And width never says desk or box: a box
+	# returning 40 upstream is a box, the 40-wide broadcast downstream that announces
+	# master is the desk — decided by direction and role (test_desk_or_box).
+	$(CC) $(CFLAGS) $(INC) tests/test_box_width.c libreac.a -lm -o test_box_width
+	$(RUN_TEST) ./test_box_width
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_desk_or_box.c libreac.a -lm -o test_desk_or_box
+	$(RUN_TEST) ./test_desk_or_box
+	# HOLD WITH A DECLARED LIMIT (operator ruling 2026-09-25): a broadcast sender is held
+	# until its own frames prove desk or box, for at most REAC_DESK_ANNOUNCES_TO_WAIT x the
+	# protocol's REAC_ANNOUNCE_PERIOD_MS; then, with no master-only frame, it is a box.
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_hold.c libreac.a -lm -o test_hold
+	$(RUN_TEST) ./test_hold
 	$(CC) $(CFLAGS) $(INC) tests/test_master_carriers.c libreac.a -lm -o test_master_carriers
-	./test_master_carriers
+	$(RUN_TEST) ./test_master_carriers
 	$(CC) $(CFLAGS) $(INC) tests/test_master_capture.c libreac.a -lm -o test_master_capture
-	./test_master_capture
+	$(RUN_TEST) ./test_master_capture
 	# THE EMISSION LAW, against real traffic checked into the repo. A master emits
 	# each downstream frame ONCE; the doubling reported in reac-pw #92 was the
 	# mirrored capture port, and nothing asserted otherwise until this file. It
@@ -161,41 +220,67 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# tests/wire-invariants.inc is generated by tools/gen-wire-invariants.py from
 	# the capture corpus; the gate itself needs no corpus and no network.
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_wire_invariants.c libreac.a -lm -o test_wire_invariants
-	./test_wire_invariants
+	$(RUN_TEST) ./test_wire_invariants
 	# The ETF pacing backend's arithmetic and preconditions. It joins `make test`
 	# rather than `test-transport` because reac_etf.c reaches no libreac symbol and
 	# no reac-pw header: it is pure arithmetic plus two syscalls, so it builds
 	# wherever the library does, including a release tarball with no REACPW_INCLUDE.
 	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src \
 	    tests/test_reac_etf.c transport/src/reac_etf.c -o test_reac_etf
-	./test_reac_etf
+	$(RUN_TEST) ./test_reac_etf
 	# THE QDISC THE DAEMON OWNS. Byte-exact against what iproute2 puts on a netlink
 	# socket (captured with strace inside `unshare -rn`; the capture is in the test's
 	# header), because a wrong attribute length fails exactly like a missing module.
 	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src \
 	    tests/test_reac_etf_qdisc.c transport/src/reac_etf_qdisc.c \
 	    -o test_reac_etf_qdisc
-	./test_reac_etf_qdisc
+	$(RUN_TEST) ./test_reac_etf_qdisc
 	# THE ABI RATCHET. Every other test is rebuilt against the headers it is
 	# testing and therefore cannot see a struct member move; reac-pw is not.
 	# Needs the transport headers' vendored reac-pw ones, like the transport
 	# build does.
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests $(INC) -Ipackaging/vendor/reac-pw-headers \
 	    tests/test_abi_layout.c libreac.a -lm -o test_abi_layout
-	./test_abi_layout
+	$(RUN_TEST) ./test_abi_layout
 	# A SOURCE-SHAPE ARM, not a value arm. The head-amp base must have exactly
 	# one source in the code — the announced strap. A per-width table agrees
 	# with the announce on every chassis we own, so no test built from our own
 	# captures can catch its return; only the shape of the code can.
-	tools/conformance-headamp-base.sh
+	$(RUN_TEST) tools/conformance-headamp-base.sh
 	# ANOTHER SOURCE-SHAPE ARM, for the same reason. test_sniffer_binds_first
 	# measures the sniffer that had the defect; nothing measures the NEXT socket
 	# somebody opens, and #19 IS #18 written again five days later in another
 	# file. This one refuses a packet socket created with a protocol anywhere in
 	# the tree, and it carries a planted good/bad pair so it cannot pass (or fail)
 	# vacuously.
-	tools/conformance-packet-socket.sh
+	$(RUN_TEST) tools/conformance-packet-socket.sh
+	# THE CFG VOCABULARY IS DECLARED ONCE (libreac review 2026-09-25, M7).
+	# include/reac/reac_cfg.h is it; reac-pw's headers (vendored snapshot) include it
+	# and alias its names. The shape arm refuses a key typed twice or a macro nobody
+	# reads; test_cfg pins the values the shape cannot see.
+	# THE AUDIO FABRIC IS 40 (reac_slots.h's MUTATION-CHECKED note, #69): a 16-wide box
+	# at audio slot 32 must be refused. Widening REAC_AUDIO_FABRIC_SLOTS to 48 reds this.
+	$(CC) $(CFLAGS) $(INC) tests/test_boxreg.c libreac.a -lm -o test_boxreg
+	$(RUN_TEST) ./test_boxreg
+	# THE 2026-09-25 REVIEW'S GUARDS (docs/audits/2026-09-25-libreac-review.md), each red
+	# on ee205b6 and each with a control arm that exits 2 (NOT A RESULT) if its own
+	# harness is broken. Rate detection measures one stream (M1); a new clock reference
+	# is acquired before it is locked (M2); an identity reply must close both checksums
+	# (M3); the plain-LE diagnostic refuses a geometry wider than the region (M6).
+	$(CC) $(CFLAGS) $(INC) tests/test_rate_detect.c libreac.a -lm -lpthread -o test_rate_detect
+	$(RUN_TEST) ./test_rate_detect
+	$(CC) $(CFLAGS) $(INC) tests/test_clock.c libreac.a -lm -o test_clock
+	$(RUN_TEST) ./test_clock
+	$(CC) $(CFLAGS) $(INC) tests/test_identity_cksum.c libreac.a -lm -o test_identity_cksum
+	$(RUN_TEST) ./test_identity_cksum
+	$(CC) $(CFLAGS) $(INC) tests/test_decode_plain_le.c libreac.a -lm -o test_decode_plain_le
+	$(RUN_TEST) ./test_decode_plain_le
+	$(RUN_TEST) tests/conformance-cfg-declared-once.sh
+	$(CC) $(CFLAGS) $(INC) -Ipackaging/vendor/reac-pw-headers tests/test_cfg.c libreac.a -lm -o test_cfg
+	$(RUN_TEST) ./test_cfg
 	@$(MAKE) --no-print-directory facts-drift-check
+	@echo "make test: PASS — every arm above ran to the end; make stops at the first red one;" \
+	  "skipped (exit 77, nothing tested): $$(if [ -s $(SKIP_LOG) ]; then tr '\n' ' ' < $(SKIP_LOG); else echo none; fi)"
 
 # THE CAPTURE CORPUS IS A REGRESSION SUITE. The unit suite above runs on
 # goldens; a change that decodes the frames in front of you better and quietly
@@ -207,15 +292,15 @@ corpus_check: tools/corpus_check.c libreac.a
 	$(CC) $(CFLAGS) $(INC) tools/corpus_check.c libreac.a -lm -o corpus_check
 
 conformance:
-	tools/conformance-headamp-base.sh
-	tools/conformance-packet-socket.sh
+	$(RUN_TEST) tools/conformance-headamp-base.sh
+	$(RUN_TEST) tools/conformance-packet-socket.sh
 	# THE HARNESS IS AN INSTRUMENT, AND AN INSTRUMENT IS GATED LIKE ONE. The
 	# pacer comparison (2026-09-13-reac-kernel-module-backend.md, lane 1) is
 	# decided by a table; a table whose two columns cannot be made to differ
 	# would read as "no difference" on the day. This drives pace_hist and the
 	# table renderer with a clean grid and with the userspace pacer's own
 	# measured miss distribution, and requires them to separate.
-	tools/conformance-pace-harness.sh
+	$(RUN_TEST) tools/conformance-pace-harness.sh
 
 corpus: corpus_check
 	tools/run-corpus.sh
@@ -318,9 +403,9 @@ transport: libreac-transport.a
 REAC_TAP_CAPTURE ?=
 
 test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlans.c libreac-transport.a libreac.a
-	$(CC) $(CFLAGS) $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
-	./test_tap $(REAC_TAP_CAPTURE)
-	tools/conformance-tap-silent.sh
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
+	$(RUN_TEST) ./test_tap $(REAC_TAP_CAPTURE)
+	$(RUN_TEST) tools/conformance-tap-silent.sh
 	# THE DOOR STRIPS THE CAPTURE'S +2, and nothing behind it tolerates one. Since
 	# the parsers refuse a residue length (2026-09-21) that one line in reac_rx's
 	# loop is what keeps a mirror twin a DUPLICATE instead of "not ours"; this
@@ -328,21 +413,22 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	# and requires it, with a no-twin control so `dups` cannot pass vacuously.
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_rx_twin.c libreac-transport.a libreac.a \
 	    -lm -lpthread -o test_rx_twin
-	./test_rx_twin
+	$(RUN_TEST) ./test_rx_twin
 	# THE TAP AGAINST A KERNEL THAT REALLY TAGS. Every other arm on reac_topo is fed
 	# buffers this repo builds, and a hand-built buffer cannot say whether the kernel
 	# accelerated the tag into tp_vlan_tci or left it in the bytes — the one question
 	# the classifier exists to answer. A veth trunk in a private user+net namespace,
-	# VLAN netdevs on the FAR end only, so the kernel inserts every tag. It exits 2
-	# saying NOTHING WAS TESTED where iproute2 or user namespaces are missing; that is
-	# not a pass and is not swallowed here, because this target is host-shell only
-	# already (REACPW_INCLUDE has no meaning in a release tarball).
+	# VLAN netdevs on the FAR end only, so the kernel inserts every tag. Where iproute2,
+	# a user namespace or veth is missing (a GitHub runner: unshare cannot write uid_map)
+	# it exits 77 saying NOTHING WAS TESTED, and tests/run-test.sh reports it as SKIP —
+	# never a pass, and never a hang. Exit 2 is kept for NOT A RESULT: the namespace
+	# stood and an arm's own control read zero.
 	$(CC) $(CFLAGS) $(INC) tests/test_topo_hears_vlans.c libreac-transport.a libreac.a \
 	    -lm -lpthread -o test_topo_hears_vlans
-	./test_topo_hears_vlans
+	$(RUN_TEST) ./test_topo_hears_vlans
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_rate_detect test_clock test_identity_cksum test_decode_plain_le etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 

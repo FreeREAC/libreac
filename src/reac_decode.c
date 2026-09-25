@@ -104,6 +104,13 @@ int reac_decode_plain_le(const uint8_t *raw, size_t len,
 	const int nch = mode->n_channels;
 	const int ns = mode->samples_per_pkt;
 
+	/* A linear index needs no pairing, but it does need the region to be as big
+	 * as the geometry says: the same size bound reac_decode() applies, or a wide
+	 * caller descriptor reads past the frame's end. */
+	if (nch <= 0 || ns <= 0 ||
+	    (size_t)nch * (size_t)ns * REAC_RESOLUTION > (size_t)REAC_AUDIO_BYTES)
+		return -1;
+
 	uint8_t *dptr = out;
 	for (int ch = 0; ch < nch; ch++) {
 		for (int s = 0; s < ns; s++) {

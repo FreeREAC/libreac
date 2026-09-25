@@ -4,7 +4,8 @@
 // reac_arbitration — see reac_arbitration.h for what this decides (nothing) and why.
 
 #include <reac/reac_arbitration.h>
-#include <reac/reac.h>   /* REAC_MAX_CHANNELS — the master downstream width */
+#include <reac/reac.h>   /* REAC_MAX_CHANNELS, reac_rate_snap */
+#include <reac/reac_cfg.h>   /* the closed rate list */
 
 #include <string.h>
 #include <stdint.h>
@@ -107,7 +108,7 @@ void reac_arbitrate(const struct reac_disco_table *table,
 		out->conflict = rival != NULL;
 		/* WHAT the rival is travels with the fact that there IS one: a surface told only
 		 * "conflict" cannot tell a desk to join from a box to fix. */
-		out->rival = rival ? reac_rival_kind_from_channels(rival->channels) : REAC_RIVAL_NONE;
+		out->rival = reac_rival_kind_of(rival);
 		out->rival_channels = rival ? rival->channels : 0;
 		if (our_mac) {
 			memcpy(out->mac, our_mac, 6);
@@ -123,8 +124,9 @@ void reac_arbitrate(const struct reac_disco_table *table,
 		memcpy(out->mac, rival->mac, 6);
 		out->have_mac = 1;
 		/* §2b: a DESK here is joined; a stagebox strapped to master claims exactly the same
-		 * thing and must be refused instead, and only the geometry separates them. */
-		out->rival = reac_rival_kind_from_channels(rival->channels);
+		 * thing and must be refused instead. What separates them is what the peer DECLARED
+		 * and how it spoke, never its width: a box may be 40 wide (ruling 2026-09-25). */
+		out->rival = reac_rival_kind_of(rival);
 		/* The evidence under that verdict travels with it: a box master that is JOINED
 		 * sizes the segment's nodes from this number (0.5.1's ruling, DESIGN.md). */
 		out->rival_channels = rival->channels;
@@ -147,7 +149,72 @@ void reac_arbitrate(const struct reac_disco_table *table,
 	/* Nothing established, nothing probing, no master evidence: the wire is silent. Reported
 	 * as NONE with no MAC, which is honestly different from "we drive". */
 	out->state = REAC_SEGMENT_NONE;
-}enum reac_rival_kind reac_rival_kind_from_channels(unsigned channels)
+}
+
+enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e)
+{
+	if (!e)
+		return REAC_RIVAL_NONE;
+	if (e->model != NULL || e->role == REAC_DISCO_ROLE_BOX)
+		return REAC_RIVAL_BOX;        /* it said what it is, or spoke as only a box does */
+	if (e->channels == 0)
+		return REAC_RIVAL_UNKNOWN;    /* no stream heard yet: refused, §4 */
+	if (e->role == REAC_DISCO_ROLE_MASTER)
+		return REAC_RIVAL_DESK;       /* announced master, declared no box */
+	return REAC_RIVAL_UNKNOWN;
+}
+
+uint32_t reac_master_only_cadence_frames(int fps)
+{
+	if (fps <= 0)
+		return 0;
+	switch (reac_rate_snap((double)fps)) {
+	case REAC_CFG_RATE_44100: return REAC_MASTER_ONLY_CADENCE_FRAMES_44K1;
+	case REAC_CFG_RATE_96000: return REAC_MASTER_ONLY_CADENCE_FRAMES_96K;
+	default:                  return REAC_MASTER_ONLY_CADENCE_FRAMES_48K;
+	}
+}
+
+/* frames at a pace, as nanoseconds: frames / (sample_rate / samples_per_pkt) s */
+static uint64_t frames_ns(uint32_t frames, int sample_rate)
+{
+	return (uint64_t)frames * 1000000000ULL * REAC_SAMPLES_PER_PKT / (uint64_t)sample_rate;
+}
+
+uint64_t reac_master_only_cadence_ns(int fps)
+{
+	if (fps > 0) {
+		const int rate = reac_rate_snap((double)fps);
+		return frames_ns(reac_master_only_cadence_frames(fps), rate);
+	}
+	static const int rates[] = { REAC_CFG_RATE_44100, REAC_CFG_RATE_48000, REAC_CFG_RATE_96000 };
+	uint64_t longest = 0;
+	for (unsigned i = 0; i < sizeof rates / sizeof rates[0]; i++) {
+		const uint64_t ns = frames_ns(
+			reac_master_only_cadence_frames(rates[i] / REAC_SAMPLES_PER_PKT), rates[i]);
+		if (ns > longest)
+			longest = ns;
+	}
+	return longest;
+}
+
+enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t now_ns,
+                                      int fps)
+{
+	if (!e)
+		return REAC_RIVAL_NONE;
+	if (e->model != NULL || e->role == REAC_DISCO_ROLE_BOX || e->role == REAC_DISCO_ROLE_MASTER)
+		return reac_rival_kind_of(e);   /* its own frames already said what it is */
+	if (e->channels == 0)
+		return REAC_RIVAL_UNKNOWN;      /* nothing heard to hold on */
+	/* A broadcast stream with no role-bearing frame: HOLD for one master-only cadence,
+	 * then call it what the absence of any master-only op makes it. */
+	if (now_ns <= e->first_seen_ns || now_ns - e->first_seen_ns < reac_master_only_cadence_ns(fps))
+		return REAC_RIVAL_UNKNOWN;
+	return REAC_RIVAL_BOX;
+}
+
+enum reac_rival_kind reac_rival_kind_from_channels(unsigned channels)
 {
 	if (channels == 0)
 		return REAC_RIVAL_UNKNOWN;

@@ -489,7 +489,11 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
  *
  * SAID PLAINLY BECAUSE IT IS AN ASSUMPTION: no capture of an output-only box
  * exists anywhere in this project. What a real S-4000D puts on the wire is the
- * open question of the 2026-09-17 spec's §9, and this is what we will try. */
+ * open question of the 2026-09-17 spec's §9, and this is what we will try.
+ *
+ * 0 — "not a box" — for a row whose inputs OR outputs are not zero or a box width
+ * (an even 2..40, reac_box_width_ok in reac.h), and every builder refuses a row
+ * this answers 0 for. */
 int reac_box_model_upstream_width(const struct reac_box_model *m);
 
 /* Build one of a model's box->master control frames AS THAT MODEL — the door a
@@ -584,7 +588,8 @@ size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
  * straight to reac_identity_ingest.
  *
  * Returns 1 when the frame is such a reply, 0 when it is not (any other frame,
- * an RQ1 poll rather than a DT1 reply, or a malformed record), and <0 on a NULL
+ * an RQ1 poll rather than a DT1 reply, a malformed record, or a block or record
+ * checksum that does not close — a corrupt reply is not evidence), and <0 on a NULL
  * argument. It handles ONLY single-record replies — the firmware (0x0000) and
  * the hardware block (0x0600), which fit one control block. The model NAME
  * arrives as TWO link-4 fragments (REAC_CTRL_RECORD_FRAGMENT) and is not

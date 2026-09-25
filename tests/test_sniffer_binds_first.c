@@ -176,12 +176,14 @@ static unsigned long drain(int fd, unsigned bound_idx, unsigned long *foreign)
 	return n;
 }
 
+/* Exit 77, the skip code (automake, reac-pw #114): "could not run here" is its own
+ * verdict. It used to be 0, which a CI log could not tell from a pass. */
 static int skip(const char *why)
 {
-	printf("SKIPPED: test_sniffer_binds_first — %s.\n", why);
-	printf("  NOTHING WAS TESTED. This is a missing capability in this environment,\n"
+	printf("SKIP: test_sniffer_binds_first — %s.\n", why);
+	printf("  NOTHING WAS TESTED (exit 77). This is a missing capability in this environment,\n"
 	       "  never a verdict about reac_capture_open(). Run it on a host shell.\n");
-	return 0;
+	return 77;
 }
 
 static int measure(long opens)

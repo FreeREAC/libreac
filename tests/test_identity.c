@@ -65,8 +65,11 @@ static size_t build_identity_reply(uint8_t *frame, uint16_t addr_lo,
 	b[18] = (uint8_t)(addr_lo >> 8); b[19] = (uint8_t)(addr_lo & 0xff);
 	for (size_t i = 0; i < plen; i++)
 		b[20 + i] = payload[i];
-	b[20 + plen] = 0x7f;                                 /* stand-in SysEx cksum */
 	b[21 + plen] = 0xf7;
+	/* Both checksums, as a real box closes them: the record (TAG..CKSUM, sum to
+	 * 0x80) first, because the block checksum covers its byte. */
+	reac_ctrl_record_cksum_stamp(&b[16], 4 + plen + 1);
+	reac_ctrl_checksum_apply(frame);
 	return REAC_FRAME_BYTES;
 }
 
@@ -231,6 +234,7 @@ int main(void)
 		/* An RQ1 POLL (command 0x11), not a reply, is not extracted. */
 		build_identity_reply(frame, REAC_IDENTITY_ADDR_FIRMWARE, FW_S0808, 4);
 		frame[REAC_CTRL_BLOCK_OFF + 15] = REAC_DT1_CMD_RQ1;   /* 0x12 -> 0x11 */
+		reac_ctrl_checksum_apply(frame);   /* still well-formed: only the cmd refuses */
 		CHK(reac_ctrl_identity_reply(frame, sizeof frame, &got_addr, &pl, &pll) == 0);
 
 		/* A non-identity frame (a FILLER) is not extracted. */

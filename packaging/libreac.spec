@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.5.0
+Version:        1.6.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -107,6 +107,35 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
+- THE 2026-09-25 REVIEW'S MEDIUM FINDINGS, each fixed against a proof that was red and now
+  runs in `make test` (docs/audits/2026-09-25-libreac-review.md): reac_detect_rate_fd
+  measures one stream by its own counter (a 48 kHz session heard both ways read 96 kHz); a
+  newly selected clock reference is LOCKING until measured; reac_ctrl_identity_reply
+  requires both checksums; reac_boxreg_declare cannot overflow its bound;
+  reac_decode_plain_le refuses an oversize geometry.
+- reac_cfg.h IS THE ONE DECLARATION of the reac.cfg.* vocabulary: REAC_CFG_REFUSED_NONE is
+  "none" (was ""), REAC_ROLE_PROP and REAC_CFG_ROLE_STATE_HUNTING are added, the unread
+  REAC_CFG_RATE_COUNT / _LIST_INIT are removed, and the vendored reac-pw headers alias it.
+  A source-level vocabulary change, hence the minor; LIBREAC_ABI stays 4.
+- A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40 (operator ruling 2026-09-25:
+  "BOX_MAX_CHANNELS = 40"; S-4000S-3208 32/8, S-2416 24/16, an 8/32 box tested).
+  REAC_BOX_MIN/MAX_CHANNELS are protocol facts: reac-protocol's box_width group declares
+  them and reac.h reads them from the new generated header reac_facts_box_width.h, held
+  to the schema by `make facts-drift-check`; reac_box_width_ok() is added. Every box builder, reac_box_model_upstream_width, reac_boxreg and
+  reac_upstream_channels ask it, and a 40-wide box is legal. WIDTH NEVER SAYS DESK:
+  reac_rival_kind_of() classifies a rival by its declaration and role, and reac_arbitrate
+  uses it; reac_detect_rate_fd prefers the broadcast stream.
+- HOLD WITH A DECLARED LIMIT (operator ruling 2026-09-25): a broadcast sender is held until
+  its own frames prove desk or box, for at most one master-only cadence in frames at the
+  current rate — reac-protocol's master_cadence facts, read from the new generated
+  reac_facts_master_cadence.h — then is a box (reac_sender_kind,
+  reac_master_only_cadence_frames/_ns). The hunt's vacancy window reads
+  REAC_ANNOUNCE_PERIOD_MS from the new generated reac_facts_timing.h.
+- Every test runs under tests/run-test.sh: a timeout on each, exit 77 an explicit SKIP.
+- tests/test_boxreg.c is the fabric guard reac_slots.h claimed: widening the audio fabric
+  to 48 now reds `make test`.
+
 * Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.5.0-1
 - A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TOPOLOGY TAP HEARS THEM (operator ruling
   2026-09-22, "we must autodetect VLANs when plugged in a switch trunk"; reac-pw's

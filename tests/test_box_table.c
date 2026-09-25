@@ -27,6 +27,7 @@
  *          FreeREAC row claims REAC major 9, which no Roland box has ever sent,
  *          and every CAPTURED row is Roland-shaped.
  */
+#include <reac/reac.h>
 #include <reac/reac_ctrl.h>
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_identity.h>
@@ -194,6 +195,17 @@ int main(void)
 	CHK(m->origin == REAC_BOX_DERIVED && m->identity_shape == REAC_BOX_IDENTITY_FREEREAC);
 	CHK((m = reac_box_model_by_token("fr0040")) && m->in_ch == 0 && m->out_ch == 40);
 	CHK((m = reac_box_model_by_token("fr2020")) && m->in_ch == 20 && m->out_ch == 20);
+	/* EVERY ROW is a box: each direction zero or an even 2..40 (reac_box_width_ok) —
+	 * 40 included, a box may fill the fabric (operator ruling 2026-09-25). */
+	{
+		size_t n;
+		const struct reac_box_model *t = reac_box_model_table(&n);
+		for (size_t i = 0; i < n; i++) {
+			CHK(t[i].in_ch == 0 || reac_box_width_ok(t[i].in_ch));
+			CHK(t[i].out_ch == 0 || reac_box_width_ok(t[i].out_ch));
+			CHK(reac_box_width_ok(reac_box_model_upstream_width(&t[i])));
+		}
+	}
 
 	/* A WIDTH STILL NAMES ONLY A CAPTURED ROW. Derived rows are addressed by
 	 * token alone — otherwise an experiment row would start answering for a real
@@ -203,7 +215,9 @@ int main(void)
 	CHK((m = reac_box_model_by_channels(8)) && strcmp(m->token, "s0808") == 0);
 	CHK(m->origin == REAC_BOX_CAPTURED);   /* NOT the 8-input S-4000H */
 	CHK((m = reac_box_model_by_channels(32)) && strcmp(m->token, "s4000s") == 0);
-	CHK((m = reac_box_model_by_channels(40)) && m->origin == REAC_BOX_CAPTURED);
+	/* A width with no captured row falls back to the S-1608 — the documented
+	 * default, asserted by name (an origin check here could never fail). */
+	CHK((m = reac_box_model_by_channels(40)) && strcmp(m->token, "s1608") == 0);
 
 	/* ---- THE ROW REACHES THE WIRE. A width can only name a CAPTURED row, so
 	 * this is the door a derived model declares itself through: build the

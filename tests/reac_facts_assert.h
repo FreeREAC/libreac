@@ -114,7 +114,11 @@ _Static_assert(REAC_PORT_SLOT_EMPTY == 0x03,
                "REAC_PORT_SLOT_EMPTY has drifted from protocol-facts.yaml PORT_SLOT_EMPTY");
 _Static_assert(REAC_PORT_SLOT_IN_SPLIT == 0x00,
                "REAC_PORT_SLOT_IN_SPLIT has drifted from protocol-facts.yaml PORT_SLOT_IN_SPLIT");
+_Static_assert(REAC_BOX_MIN_CHANNELS == 2,
+               "REAC_BOX_MIN_CHANNELS has drifted from protocol-facts.yaml BOX_MIN_CHANNELS");
+_Static_assert(REAC_BOX_MAX_CHANNELS == 40,
+               "REAC_BOX_MAX_CHANNELS has drifted from protocol-facts.yaml BOX_MAX_CHANNELS");
 
-#define REAC_FACTS_ASSERTIONS 47
+#define REAC_FACTS_ASSERTIONS 49
 
 #endif /* REAC_FACTS_ASSERT_H */
