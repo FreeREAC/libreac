@@ -30,8 +30,13 @@
  *
  * REFUSED, NEVER CLAMPED. An asserted rate outside the drivable subset, off
  * the closed list, or asserted onto a segment with no rate to own (a slave)
- * comes back as a refusal CODE on `reac.cfg.rate.refused` — one of the three
- * short kebab strings below — never a silently substituted value.
+ * comes back as a refusal CODE on `reac.cfg.rate.refused` — one of the
+ * REAC_CFG_REFUSED_* codes below — never a silently substituted value.
+ *
+ * THIS FILE IS THE DECLARATION, AND THE ONLY ONE. reac-pw's reac_rate_cfg.h and
+ * reac_role_cfg.h (snapshot in packaging/vendor/reac-pw-headers/) include it and
+ * name these macros; they spell none of the strings themselves. A key or code
+ * typed a second time anywhere is a red test (tests/conformance-cfg-declared-once.sh).
  */
 #ifndef REAC_CFG_H
 #define REAC_CFG_H
@@ -39,7 +44,7 @@
 /* ---- the config channel: what the console WRITES -------------------------- */
 
 /* The desired REAC pace, Hz, as a decimal ASCII SPA prop. Legal values are
- * exactly the three below; anything else is refused (`not-in-list`) before it
+ * exactly the three below; anything else is refused (`not_closed`) before it
  * ever reaches the pacer. Written on the segment's own
  * `reac-playback[.<inst>]` node — the same node `reac.headamp.*` already
  * addresses, through the same door. */
@@ -55,6 +60,9 @@
 #define REAC_CFG_ROLE_PROP            "reac.cfg.role"
 #define REAC_CFG_ROLE_MASTER          0
 #define REAC_CFG_ROLE_SLAVE           1
+
+/* The RUNNING role, published: "0" | "1", the same encoding as the write side. */
+#define REAC_ROLE_PROP                "reac.role"
 
 /* ---- the config channel: how the daemon ANSWERS ---------------------------- */
 
@@ -94,15 +102,6 @@
 #define REAC_CFG_RATE_48000  48000
 #define REAC_CFG_RATE_96000  96000
 
-/* The count of members in the closed list, for a caller that wants to assert
- * it rather than count braces. */
-#define REAC_CFG_RATE_COUNT  3
-
-/* The list itself, for a caller that wants to iterate it rather than name each
- * member — e.g. the drivability probe's "which of these three can this NIC
- * pace" sweep. A brace-init, not a scalar prop — nothing on the wire carries
- * this shape directly. */
-#define REAC_CFG_RATE_LIST_INIT { REAC_CFG_RATE_44100, REAC_CFG_RATE_48000, REAC_CFG_RATE_96000 }
 
 /* ---- refusal codes: why `reac.cfg.rate` was refused, on `.refused` -------- */
 
@@ -118,8 +117,11 @@
 #define REAC_CFG_REFUSED_ROLE_SLAVE         "role_slave"
 /* The assertion did not parse as a rate at all — a malformed pod, not a wrong value. */
 #define REAC_CFG_REFUSED_MALFORMED          "malformed"
-/* Empty string: nothing refused — the standing answer when the last assertion applied. */
-#define REAC_CFG_REFUSED_NONE               ""
+/* Nothing refused — the standing answer when the last assertion applied. "none" is
+ * the estate's sentinel for "no value applies" (reac.master.mac, and libreac's own
+ * reac_rival_refusal()); it was "" here while reac-pw published "none", so the two
+ * sides of one prop disagreed on its idle value. */
+#define REAC_CFG_REFUSED_NONE               "none"
 
 /* The assertion's lifecycle, published beside the refusal: an accepted rate re-establishes
  * the segment, so the truth passes through "pending" before it is "applied" and every
@@ -136,5 +138,8 @@
 #define REAC_CFG_ROLE_REFUSED_PROP          "reac.cfg.role.refused"
 #define REAC_CFG_ROLE_STATE_APPLIED         "applied"
 #define REAC_CFG_ROLE_STATE_PENDING         "role_reestablish_pending"
+/* The swap landed on a slave that no master has enrolled yet: the role is right, the
+ * job it names is not being done (reac_role_swap.h). */
+#define REAC_CFG_ROLE_STATE_HUNTING         "role_hunting"
 
 #endif /* REAC_CFG_H */
