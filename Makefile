@@ -341,9 +341,24 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	    -lm -lpthread -o test_topo_hears_vlans
 	./test_topo_hears_vlans
 
+# THE 2026-09-25 REVIEW'S PROOF TESTS (docs/audits/2026-09-25-libreac-review.md).
+# Each one is RED on purpose until its finding is fixed, so this target is NOT part of
+# `make test`: it runs every proof, says which are still red, and exits 0 only when all
+# are green. Exit 2 from a test is NOT A RESULT (its control arm failed).
+REVIEW_20260925 := rate_detect clock identity_cksum box_width boxreg decode_plain_le
+
+review-2026-09-25: libreac.a
+	@red=0; for t in $(REVIEW_20260925); do \
+	  $(CC) $(CFLAGS) $(INC) tests/test_review_$$t.c libreac.a -lm -lpthread -o test_review_$$t || exit 1; \
+	  ./test_review_$$t; rc=$$?; [ $$rc -eq 0 ] || red=$$((red + 1)); \
+	done; \
+	tests/conformance-review-cfg-declared-once.sh || red=$$((red + 1)); \
+	echo "review-2026-09-25: $$red proof(s) still red"; [ $$red -eq 0 ]
+
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_box_0832 test_ctrl test_link test_facts test_identity test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans
+	rm -f $(REVIEW_20260925:%=test_review_%)
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
-.PHONY: all test test-transport conformance corpus wire-tools clean transport
+.PHONY: all test test-transport conformance corpus wire-tools clean transport review-2026-09-25
