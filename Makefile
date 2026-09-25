@@ -83,16 +83,29 @@ $(BUILD_DIR)/reac_facts_assert.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
 	@mkdir -p $(BUILD_DIR)
 	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@
 
+# A FACT libreac READS INSTEAD OF DECLARING. include/reac/reac_facts_box_width.h is
+# reac-protocol's generated definition of the box_width group (REAC_BOX_MIN/MAX_CHANNELS),
+# included by reac.h and committed so a standalone build and an installed -devel
+# have it. The gate below holds the committed copy to the schema.
+$(BUILD_DIR)/reac_facts_box_width.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_TOOL)
+	@mkdir -p $(BUILD_DIR)
+	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
+	  --groups box_width --guard REAC_FACTS_BOX_WIDTH_H
+
 # The drift gate: only meaningful when the schema is reachable (nothing to
 # compare the fallback against otherwise). Regenerates and diffs against the
 # committed tests/reac_facts_assert.h; a difference fails the build rather
 # than passing quietly on a stale copy.
 .PHONY: facts-drift-check
 ifeq ($(HAVE_SCHEMA),1)
-facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h
+facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_width.h
 	@diff -u tests/reac_facts_assert.h $(BUILD_DIR)/reac_facts_assert.h || \
 	  { echo "tests/reac_facts_assert.h has drifted from $(FACTS_SCHEMA)."; \
 	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_assert.h tests/reac_facts_assert.h"; \
+	    exit 1; }
+	@diff -u include/reac/reac_facts_box_width.h $(BUILD_DIR)/reac_facts_box_width.h || \
+	  { echo "include/reac/reac_facts_box_width.h has drifted from $(FACTS_SCHEMA)."; \
+	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_box_width.h include/reac/reac_facts_box_width.h"; \
 	    exit 1; }
 else
 facts-drift-check:

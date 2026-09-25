@@ -66,13 +66,18 @@ extern "C" {
 #define REAC_UPSTREAM_BYTES_PER_CH 36  /* 12 samples x 3 B */
 
 /* A BOX'S WIDTH, EITHER DIRECTION (operator ruling 2026-09-25: "mixer sends 40ch,
- * boxes have their size of ins and outs, always even"; reac-protocol spec/reac.ksy
- * num_channels: "40 is the downstream broadcast; an even 2..38 is a box's upstream
- * return"). 40 channels / 1492 B is the DESK's frame and only the desk's, so a box
- * width is an even 2..38 — declared once here, and every box door (the builders,
- * the model table, the registry, the upstream parser) asks reac_box_width_ok(). */
-#define REAC_BOX_MIN_CHANNELS  2
-#define REAC_BOX_MAX_CHANNELS  (REAC_MAX_CHANNELS - 2)   /* 38 */
+ * boxes have their size of ins and outs, always even"). 40 channels / 1492 B is the
+ * DESK's frame and only the desk's, so a box width is an even
+ * REAC_BOX_MIN_CHANNELS..REAC_BOX_MAX_CHANNELS (2..38), and every box door (the
+ * builders, the model table, the registry, the upstream parser) asks
+ * reac_box_width_ok().
+ *
+ * THE LIMITS ARE PROTOCOL FACTS, NOT libreac's. They are declared once, in
+ * reac-protocol spec/protocol-facts.yaml (group box_width), and read here from the
+ * header generated out of it: reac_facts_box_width.h is written by
+ * tools/gen-facts-header.py with reac-protocol's own emitter, committed, and held to
+ * the schema by `make facts-drift-check`. */
+#include <reac/reac_facts_box_width.h>
 
 static inline int reac_box_width_ok(int n)
 {
@@ -275,8 +280,9 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        LOCKING until measured; reac_ctrl_identity_reply requires both checksums;
  *        reac_decode_plain_le refuses an oversize geometry; reac_boxreg refuses an
  *        overflowing base and the zero MAC. A BOX IS NEVER 40 WIDE (operator ruling
- *        2026-09-25): REAC_BOX_MIN/MAX_CHANNELS and reac_box_width_ok() are ADDED and
- *        every box door refuses 40 and odd widths; the experiment rows' tokens move
+ *        2026-09-25): REAC_BOX_MIN/MAX_CHANNELS (read from reac-protocol's
+ *        box_width facts, via the new generated reac_facts_box_width.h) and
+ *        reac_box_width_ok() are ADDED and every box door refuses 40 and odd widths; the experiment rows' tokens move
  *        from fr4000 / fr0040 to fr3600 / fr0036, so a caller selecting those by token
  *        must move with it. No struct or symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).

@@ -119,8 +119,10 @@ make test
   REAC_CFG_RATE_COUNT / _LIST_INIT are removed, and the vendored reac-pw headers alias it.
   A source-level vocabulary change, hence the minor; LIBREAC_ABI stays 4.
 - A BOX IS NEVER 40 WIDE (operator ruling 2026-09-25: "mixer sends 40ch, boxes have
-  their size of ins and outs, always even"). reac.h adds REAC_BOX_MIN/MAX_CHANNELS and
-  reac_box_width_ok() (even 2..38); every box builder, reac_box_model_upstream_width,
+  their size of ins and outs, always even"). reac.h adds reac_box_width_ok() (even
+  2..38). REAC_BOX_MIN/MAX_CHANNELS are protocol facts: reac-protocol's box_width group
+  declares them, and reac.h reads them from the new generated header
+  reac_facts_box_width.h, held to the schema by `make facts-drift-check`. Every box builder, reac_box_model_upstream_width,
   reac_boxreg and reac_upstream_channels ask it. The 40-wide experiment rows become
   fr3600 / fr0036 (36 is the widest a 4-channel-slot declaration can state).
 - tests/test_boxreg.c is the fabric guard reac_slots.h claimed: widening the audio fabric
