@@ -295,8 +295,11 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        refuses odd widths and anything past 40, and a 40-wide box is legal.
  *        Desk-vs-box is decided by direction, source and role, never width:
  *        reac_rival_kind_of() is ADDED and reac_arbitrate uses it, and
- *        reac_upstream_channels() now answers 40 for a 1492 B return. No struct or
- *        symbol moves or changes size, so
+ *        reac_upstream_channels() now answers 40 for a 1492 B return. A BROADCAST sender
+ *        is HELD until its own frames prove desk or box, for at most
+ *        REAC_DESK_ANNOUNCES_TO_WAIT x REAC_ANNOUNCE_PERIOD_MS (the generated
+ *        reac_facts_timing.h, ADDED), then is a box: reac_sender_kind() is ADDED, and the
+ *        hunt's window is that number. No struct or symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
