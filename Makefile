@@ -406,10 +406,11 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	# buffers this repo builds, and a hand-built buffer cannot say whether the kernel
 	# accelerated the tag into tp_vlan_tci or left it in the bytes — the one question
 	# the classifier exists to answer. A veth trunk in a private user+net namespace,
-	# VLAN netdevs on the FAR end only, so the kernel inserts every tag. It exits 2
-	# saying NOTHING WAS TESTED where iproute2 or user namespaces are missing; that is
-	# not a pass and is not swallowed here, because this target is host-shell only
-	# already (REACPW_INCLUDE has no meaning in a release tarball).
+	# VLAN netdevs on the FAR end only, so the kernel inserts every tag. Where iproute2,
+	# a user namespace or veth is missing (a GitHub runner: unshare cannot write uid_map)
+	# it exits 77 saying NOTHING WAS TESTED, and tests/run-test.sh reports it as SKIP —
+	# never a pass, and never a hang. Exit 2 is kept for NOT A RESULT: the namespace
+	# stood and an arm's own control read zero.
 	$(CC) $(CFLAGS) $(INC) tests/test_topo_hears_vlans.c libreac-transport.a libreac.a \
 	    -lm -lpthread -o test_topo_hears_vlans
 	$(RUN_TEST) ./test_topo_hears_vlans
