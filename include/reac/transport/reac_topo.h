@@ -257,9 +257,24 @@ int reac_topo_tap_open(struct reac_topo_tap *t, const char *parent);
 /* The pollable descriptor for the caller's event loop (spec §7); -1 when not open. */
 int reac_topo_tap_fd(const struct reac_topo_tap *t);
 
-/* Read ONE frame from the tap and classify it. Returns 1 with `*kind`/`*vid` filled, 0 when
- * the socket is dry (EAGAIN), -1 on error. The VID comes from PACKET_AUXDATA when the kernel
- * supplies it, from the buffer when the driver left the tag in it. */
+/* One frame off the tap, with what the kernel says about it. `ifindex` is where the frame
+ * really arrived (sockaddr_ll.sll_ifindex — on a trunk, the parent or a sub-interface,
+ * which no name the caller holds can answer), `outgoing` is set for our own transmission
+ * (PACKET_OUTGOING), `src` is the source MAC (zero for a frame shorter than 12 bytes). */
+struct reac_topo_frame {
+	enum reac_topo_kind kind;
+	uint16_t vid;
+	uint8_t  src[6];
+	unsigned ifindex;
+	int      outgoing;
+};
+
+/* Read ONE frame from the tap and classify it. Returns 1 with `*f` filled, 0 when the socket
+ * is dry (EAGAIN), -1 on error. The VID comes from PACKET_AUXDATA when the kernel supplies
+ * it, from the buffer when the driver left the tag in it. */
+int reac_topo_tap_read(struct reac_topo_tap *t, struct reac_topo_frame *f);
+
+/* reac_topo_tap_read, for a caller that needs only the class and the VID. */
 int reac_topo_tap_next(struct reac_topo_tap *t, enum reac_topo_kind *kind, uint16_t *vid);
 
 void reac_topo_tap_close(struct reac_topo_tap *t);

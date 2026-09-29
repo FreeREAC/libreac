@@ -203,6 +203,8 @@ struct heard {
 	unsigned long on_vid;      /* frames carrying the VID this arm is about    */
 	unsigned long reac_on_vid; /* of those, classified REAC_TOPO_TAGGED        */
 	unsigned long other_on_vid;/* of those, classified REAC_TOPO_TAGGED_OTHER  */
+	unsigned long reac_here;   /* of reac_on_vid, read as arriving on the tapped
+	                            * parent's own ifindex, from a nonzero source MAC */
 };
 
 /* ENSURE events, per VID, ACROSS ALL ARMS — and the arms need that, because the table and
@@ -237,11 +239,13 @@ static void drain(struct reac_topo_tap *tap, struct reac_topo *t, uint16_t vid_o
 		if (poll(&p, 1, (int)(ms - elapsed)) <= 0)
 			continue;
 		for (;;) {
-			enum reac_topo_kind kind = REAC_TOPO_NOT_REAC;
-			uint16_t vid = 0;
-			int r = reac_topo_tap_next(tap, &kind, &vid);
+			struct reac_topo_frame f;
+			int r = reac_topo_tap_read(tap, &f);
 			if (r <= 0)
 				break;
+			enum reac_topo_kind kind = f.kind;
+			uint16_t vid = f.vid;
+			static const uint8_t zero_mac[6];
 			h->frames++;
 			uint64_t ns = (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 			if (kind == REAC_TOPO_UNTAGGED)
@@ -250,6 +254,9 @@ static void drain(struct reac_topo_tap *tap, struct reac_topo *t, uint16_t vid_o
 				h->on_vid++;
 				if (kind == REAC_TOPO_TAGGED)
 					h->reac_on_vid++;
+				if (kind == REAC_TOPO_TAGGED && f.ifindex == if_nametoindex(PARENT) &&
+				    memcmp(f.src, zero_mac, sizeof zero_mac) != 0)
+					h->reac_here++;
 				if (kind == REAC_TOPO_TAGGED_OTHER)
 					h->other_on_vid++;
 			}
@@ -284,7 +291,7 @@ static int measure(void)
 
 	/* ---- ARM C, FIRST AND ON A VIRGIN TABLE: the switch's own voice on a cold VLAN.
 	 * Nothing REAC has been heard anywhere yet, which is the cold-rig state exactly. */
-	struct heard c = { 0, 0, 0, 0, 0 };
+	struct heard c = { 0 };
 	int sent_c = blast(cold_if, LLDP_ETHERTYPE, 5);
 	if (sent_c <= 0) {
 		reac_topo_tap_close(&tap);
@@ -299,7 +306,7 @@ static int measure(void)
 
 	/* ---- ARM B: the tap can detect presence. Untagged REAC straight onto the parent's
 	 * far end, which is what an access port — and the desk's NATIVE VLAN — looks like. */
-	struct heard b = { 0, 0, 0, 0, 0 };
+	struct heard b = { 0 };
 	int sent_b = blast(IF_FAR, REAC_ETHERTYPE, 5);
 	if (sent_b <= 0) {
 		reac_topo_tap_close(&tap);
@@ -311,7 +318,7 @@ static int measure(void)
 	       "(control: the tap hears)\n", sent_b, b.untagged, trunk_after_b);
 
 	/* ---- ARM A: §1 itself. Tagged REAC on a VID with no sub-interface on this side. */
-	struct heard a = { 0, 0, 0, 0, 0 };
+	struct heard a = { 0 };
 	int sent_a = blast(reac_if, REAC_ETHERTYPE, 5);
 	if (sent_a <= 0) {
 		reac_topo_tap_close(&tap);
@@ -345,6 +352,12 @@ static int measure(void)
 		        "  either PACKET_AUXDATA is not being read or the classifier lost the\n"
 		        "  tag. (2026-09-16-segments-and-roles-are-autodetected.md §1.)\n",
 		        sent_a, VID_REAC);
+		rc = 1;
+	} else if (a.reac_here != a.reac_on_vid) {
+		fprintf(stderr, "test_topo_hears_vlans: FAIL — %lu of %lu tagged REAC frame(s)\n"
+		        "  read back without the tapped parent's ifindex or a source MAC:\n"
+		        "  reac_topo_tap_read did not fill the frame's own facts.\n",
+		        a.reac_on_vid - a.reac_here, a.reac_on_vid);
 		rc = 1;
 	} else if (va == NULL || ensures(VID_REAC) == 0) {
 		fprintf(stderr, "test_topo_hears_vlans: FAIL — vid %d was heard and no ENSURE\n"
