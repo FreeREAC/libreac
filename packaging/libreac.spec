@@ -108,6 +108,10 @@ make test
 
 %changelog
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
+- SHARED CODE HAS ONE HOME (docs/design/specs/2026-09-29-shared-code-has-one-home.md):
+  reac_code.h's one list in a daemon half and a library half, with reac-pw's seven own
+  codes; reac_cfg.h carries the rate bits, the rate/role refusal enums and code tables
+  and REAC_CFG_ROLE_STATE_TAP. reac-pw drops its copies and requires >= 1.6.0.
 - THE 2026-09-25 REVIEW'S MEDIUM FINDINGS, each fixed against a proof that was red and now
   runs in `make test` (docs/audits/2026-09-25-libreac-review.md): reac_detect_rate_fd
   measures one stream by its own counter (a 48 kHz session heard both ways read 96 kHz); a
@@ -116,7 +120,7 @@ make test
   reac_decode_plain_le refuses an oversize geometry.
 - reac_cfg.h IS THE ONE DECLARATION of the reac.cfg.* vocabulary: REAC_CFG_REFUSED_NONE is
   "none" (was ""), REAC_ROLE_PROP and REAC_CFG_ROLE_STATE_HUNTING are added, the unread
-  REAC_CFG_RATE_COUNT / _LIST_INIT are removed, and the vendored reac-pw headers alias it.
+  REAC_CFG_RATE_COUNT / _LIST_INIT are removed.
   A source-level vocabulary change, hence the minor; LIBREAC_ABI stays 4.
 - A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40 (operator ruling 2026-09-25:
   "BOX_MAX_CHANNELS = 40"; S-4000S-3208 32/8, S-2416 24/16, an 8/32 box tested).

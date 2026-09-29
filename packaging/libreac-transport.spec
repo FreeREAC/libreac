@@ -84,9 +84,14 @@ PC
 
 %changelog
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
-- No symbol or struct change in this library. reac_role_swap.h's REAC_ROLE_STATE_HUNTING
-  and the vendored reac-pw cfg headers now alias libreac's reac_cfg.h instead of typing
-  the vocabulary a second time; the version moves with libreac 1.6.0.
+- reac_pacer.h and reac_role_swap.h include <reac/reac_cfg.h> instead of reac-pw's
+  cfg headers; the vendored snapshot and REACPW_INCLUDE are gone. ADDED:
+  reac_topo_tap_read() and struct reac_topo_frame (the frame's ifindex, direction and
+  source MAC; reac_topo_tap_next wraps it), reac_etf_qdisc_dump() (the one bounded
+  qdisc dump). reac_etf_qdisc_state answers UNREADABLE for a dump the kernel refused.
+- No struct change in this library. reac_role_swap.h's REAC_ROLE_STATE_HUNTING aliases
+  libreac's reac_cfg.h instead of typing the vocabulary a second time; the version moves
+  with libreac 1.6.0.
 - DIRECTION, NOT WIDTH: reac_rx's downstream gate takes only BROADCAST 1492 B frames and
   its upstream gate locks only on a UNICAST return, so a 40-wide box's return and the
   desk's downstream (the same length) land in their own rings; reac_tap files a unicast

@@ -301,7 +301,16 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        through the generated reac_facts_master_cadence.h, ADDED), then is a box:
  *        reac_sender_kind(), reac_master_only_cadence_frames() and _ns() are ADDED. The
  *        hunt's vacancy window reads REAC_ANNOUNCE_PERIOD_MS from the generated
- *        reac_facts_timing.h (ADDED). No struct or symbol moves or changes size, so
+ *        reac_facts_timing.h (ADDED). SHARED CODE HAS ONE HOME (docs/design/specs/
+ *        2026-09-29-shared-code-has-one-home.md): reac_code.h's list is split into a
+ *        daemon half and a library half and carries reac-pw's seven own codes; reac_cfg.h
+ *        takes the rate bits, enum reac_rate_refuse / reac_role_refuse, their code
+ *        tables and REAC_CFG_ROLE_STATE_TAP (ADDED), so the transport headers include
+ *        no reac-pw header and the vendored snapshot is gone; reac_topo_tap_read() with
+ *        struct reac_topo_frame and reac_etf_qdisc_dump() are ADDED, and
+ *        reac_etf_qdisc_state answers UNREADABLE (was NONE) for a dump the kernel
+ *        refused. A consumer that defined those enums itself (reac-pw) must drop them:
+ *        reac-pw's floor is >= 1.6.0. No struct or symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
