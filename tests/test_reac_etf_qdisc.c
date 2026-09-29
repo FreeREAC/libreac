@@ -206,6 +206,26 @@ static void test_state_of_no_device(void)
 	       s == REAC_ETF_QDISC_NONE ? "no etf" : "unreadable");
 }
 
+/* ---- 7. the one dump: it completes, it reaches the device, it refuses nonsense ---- */
+static void count_one(const struct tcmsg *tcm, const struct rtattr *attrs, size_t attrlen,
+                      void *ctx)
+{
+	(void)tcm; (void)attrs; (void)attrlen;
+	++*(int *)ctx;
+}
+
+static void test_dump(void)
+{
+	int n = 0;
+	CHECK(reac_etf_qdisc_dump(1, count_one, &n) == 0,
+	      "the dump of ifindex 1 did not reach NLMSG_DONE");
+	CHECK(n >= 1, "the dump of ifindex 1 walked no qdisc — loopback always has one");
+	n = 0;
+	CHECK(reac_etf_qdisc_dump(0, count_one, &n) == -EINVAL && n == 0,
+	      "ifindex 0 was dumped");
+	CHECK(reac_etf_qdisc_dump(1, NULL, NULL) == -EINVAL, "a NULL callback was accepted");
+}
+
 int main(void)
 {
 	printf("test_reac_etf_qdisc: the qdisc the daemon owns\n");
@@ -213,6 +233,7 @@ int main(void)
 	test_del_is_byte_exact();
 	test_delta_reaches_the_message();
 	test_short_buffer_refuses();
+	test_dump();
 	test_errno_classification();
 	test_state_of_no_device();
 

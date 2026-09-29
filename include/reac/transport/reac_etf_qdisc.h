@@ -70,6 +70,20 @@ enum reac_etf_qdisc_state {
  * per TX queue under an `mq` root. */
 enum reac_etf_qdisc_state reac_etf_qdisc_state(int ifindex, char *root_kind, size_t cap);
 
+/* THE ONE QDISC DUMP (docs/design/specs/2026-09-29-shared-code-has-one-home.md §4).
+ * One RTM_GETQDISC dump, `each` called for every qdisc of `ifindex` with its tcmsg
+ * and that message's attributes. Bounded in both directions — a fixed number of
+ * reads and a poll timeout per read — so a silent netlink socket cannot hold the
+ * caller. Control plane only. Returns 0 when the dump reached NLMSG_DONE, or
+ * -errno: the kernel's own error for a refused dump, -ETIMEDOUT when the bound ran
+ * out before the end, -EINVAL for a bad ifindex or a NULL `each`. A partial dump is
+ * never a result. */
+struct tcmsg;
+struct rtattr;
+typedef void (*reac_etf_qdisc_each_fn)(const struct tcmsg *tcm, const struct rtattr *attrs,
+                                       size_t attrlen, void *ctx);
+int reac_etf_qdisc_dump(int ifindex, reac_etf_qdisc_each_fn each, void *ctx);
+
 /* ---- the two doors -------------------------------------------------------- *
  *
  * Both return 0, or -errno — NEVER a strerror match. The errno IS the diagnosis and
