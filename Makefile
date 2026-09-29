@@ -224,7 +224,7 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# The ETF pacing backend's arithmetic and preconditions. It joins `make test`
 	# rather than `test-transport` because reac_etf.c reaches no libreac symbol and
 	# no reac-pw header: it is pure arithmetic plus two syscalls, so it builds
-	# wherever the library does, including a release tarball with no REACPW_INCLUDE.
+	# wherever the library does.
 	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src \
 	    tests/test_reac_etf.c transport/src/reac_etf.c -o test_reac_etf
 	$(RUN_TEST) ./test_reac_etf
@@ -237,9 +237,7 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) ./test_reac_etf_qdisc
 	# THE ABI RATCHET. Every other test is rebuilt against the headers it is
 	# testing and therefore cannot see a struct member move; reac-pw is not.
-	# Needs the transport headers' vendored reac-pw ones, like the transport
-	# build does.
-	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests $(INC) -Ipackaging/vendor/reac-pw-headers \
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests $(INC) \
 	    tests/test_abi_layout.c libreac.a -lm -o test_abi_layout
 	$(RUN_TEST) ./test_abi_layout
 	# A SOURCE-SHAPE ARM, not a value arm. The head-amp base must have exactly
@@ -255,8 +253,8 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# vacuously.
 	$(RUN_TEST) tools/conformance-packet-socket.sh
 	# THE CFG VOCABULARY IS DECLARED ONCE (libreac review 2026-09-25, M7).
-	# include/reac/reac_cfg.h is it; reac-pw's headers (vendored snapshot) include it
-	# and alias its names. The shape arm refuses a key typed twice or a macro nobody
+	# include/reac/reac_cfg.h is it; reac-pw's headers include it and alias its
+	# names. The shape arm refuses a key typed twice or a macro nobody
 	# reads; test_cfg pins the values the shape cannot see.
 	# THE AUDIO FABRIC IS 40 (reac_slots.h's MUTATION-CHECKED note, #69): a 16-wide box
 	# at audio slot 32 must be refused. Widening REAC_AUDIO_FABRIC_SLOTS to 48 reds this.
@@ -276,7 +274,7 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(CC) $(CFLAGS) $(INC) tests/test_decode_plain_le.c libreac.a -lm -o test_decode_plain_le
 	$(RUN_TEST) ./test_decode_plain_le
 	$(RUN_TEST) tests/conformance-cfg-declared-once.sh
-	$(CC) $(CFLAGS) $(INC) -Ipackaging/vendor/reac-pw-headers tests/test_cfg.c libreac.a -lm -o test_cfg
+	$(CC) $(CFLAGS) $(INC) tests/test_cfg.c libreac.a -lm -o test_cfg
 	$(RUN_TEST) ./test_cfg
 	@$(MAKE) --no-print-directory facts-drift-check
 	@echo "make test: PASS — every arm above ran to the end; make stops at the first red one;" \
@@ -367,12 +365,9 @@ topo_bind_probe: tools/topo_bind_probe.c transport/src/reac_topo.c transport/src
 # family -- never folded into the OBJS glob above, or every transport file becomes part
 # of libreac's own soname and the whole point of a second library is lost.
 #
-# REACPW_INCLUDE points at a reac-pw checkout's src/ for the two headers that stay there
-# (reac_rate_cfg.h, reac_role_cfg.h) but are #include-d by a moved header for their pure
-# declarations only (spec §2/§5 names the seam). Unset by default: every transport object
-# that does not reach those two headers still builds; the two that do fail loudly at
-# compile time rather than silently skipping.
-REACPW_INCLUDE ?=
+# It needs no reac-pw header: the pure declarations reac_pacer.h and reac_role_swap.h
+# once took from reac-pw's reac_rate_cfg.h / reac_role_cfg.h are in reac_cfg.h since
+# 1.6.0 (docs/design/specs/2026-09-29-shared-code-has-one-home.md §2).
 TRANSPORT_SRC_DIR := transport/src
 TRANSPORT_OBJS := $(patsubst $(TRANSPORT_SRC_DIR)/%.c,transport/%.o,$(wildcard $(TRANSPORT_SRC_DIR)/*.c))
 
@@ -382,7 +377,7 @@ TRANSPORT_OBJS := $(patsubst $(TRANSPORT_SRC_DIR)/%.c,transport/%.o,$(wildcard $
 # (SPA's inline string.h needs it too); libreac's own OBJS never needed it before now.
 transport/%.o: $(TRANSPORT_SRC_DIR)/%.c
 	@mkdir -p transport
-	$(CC) $(CFLAGS) -D_GNU_SOURCE -MMD -MP -Iinclude -I$(TRANSPORT_SRC_DIR) $(if $(REACPW_INCLUDE),-I$(REACPW_INCLUDE)) -c $< -o $@
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -MMD -MP -Iinclude -I$(TRANSPORT_SRC_DIR) -c $< -o $@
 
 -include $(TRANSPORT_OBJS:.o=.d)
 
@@ -393,9 +388,7 @@ transport: libreac-transport.a
 
 # The transport tier's own harness (spec 2026-09-11-reac-transport-library §8 leaves
 # room for one; before this there was none and transport ran only under reac-pw's
-# meson test). It needs libreac-transport.a, so it is NOT part of `make test`:
-# building the transport tier needs REACPW_INCLUDE pointed at a reac-pw checkout for
-# the two headers that stay there, and a release tarball has none.
+# meson test). It needs libreac-transport.a, so it is NOT part of `make test`.
 #
 # THE CORPUS ARM IS OPT-IN AND SAYS SO. REAC_TAP_CAPTURE names a VLAN-STRIPPED pcap of
 # a REAC segment (`tcprewrite --enet-vlan=del`, because nothing in libreac parses an

@@ -38,12 +38,8 @@ Headers and pkg-config for building against libreac-transport.
 %autosetup -n libreac-%{version}
 
 %build
-# See packaging/vendor/README.md: two of these headers (reac_pacer.h, reac_role_swap.h)
-# #include a reac-pw header for pure declarations only (the design spec's own named seam,
-# not an oversight). The vendored snapshot lets this SRPM build without a reac-pw checkout;
-# refresh it by hand when reac-pw's two headers change, until the real header split lands.
 for f in transport/src/*.c; do
-  cc %{optflags} -fPIC -D_GNU_SOURCE -Iinclude -Ipackaging/vendor/reac-pw-headers \
+  cc %{optflags} -fPIC -D_GNU_SOURCE -Iinclude \
      -c "$f" -o "$(basename "$f" .c).o"
 done
 # -lreac (via pkg-config, BuildRequires above) resolves every reac_ctrl_*/reac_hunt_*/
