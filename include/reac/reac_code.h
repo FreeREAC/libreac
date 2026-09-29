@@ -9,11 +9,8 @@
  * not only messages" (operator, 2026-09-17). `reac_code_emit` puts the TOKEN first,
  * always, so prose and script/log-scraper matching can move independently.
  *
- * Header-only, so linking against this changes no ABI. A consumer built against an
- * older libreac that does not ship this file keeps its own local copy; once it links
- * a libreac new enough to provide this header, its copy becomes a thin
- * `#include <reac/reac_code.h>` (reac-pw's own tests probe for the header before
- * relying on it — see that repo's meson.build).
+ * Header-only, so linking against this changes no ABI. Since 1.6.0 it is the only
+ * copy: reac-pw's src/reac_code.h is a thin `#include <reac/reac_code.h>`.
  *
  * X-MACRO so the enum, the token table and any enumeration (a conformance test that
  * lists every token) derive from ONE list and cannot drift apart. */
@@ -23,25 +20,45 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-#define REAC_CODE_LIST(X) \
-	/* refusals / failures — reac-pw's own (main.c) */ \
+/* ONE LIST, TWO OWNERS (docs/design/specs/2026-09-29-shared-code-has-one-home.md §1).
+ * A daemon's code is added to the DAEMON half here and ships with a libreac release;
+ * a consumer never carries a list of its own. */
+#define REAC_CODE_LIST_DAEMON(X) \
+	/* refusals / failures */ \
 	X(RC_E_SIZING,          "E_SIZING") \
 	X(RC_E_ROOT_REFUSED,    "E_ROOT_REFUSED") \
 	X(RC_E_SEGMENT_HELD,    "E_SEGMENT_HELD") \
 	X(RC_E_ENROLL_REFUSED,  "E_ENROLL_REFUSED") \
-	/* status — reac-pw's own (main.c) */ \
+	X(RC_E_LINK_BUDGET,     "E_LINK_BUDGET") \
+	/* A listener still held a node pair where it must not have, or an open that failed \
+	 * had already built one: the pair is destroyed at the code. */ \
+	X(RC_E_ORPHAN_PAIR,     "E_ORPHAN_PAIR") \
+	/* A roster property REMOVAL cannot be delivered (PipeWire merges only what is \
+	 * left of a NULL-valued dict item). Refused, never pretended. */ \
+	X(RC_E_ROSTER_REMOVE,   "E_ROSTER_REMOVE") \
+	/* There is no roster on the graph: the node could not be created or rebuilt. */ \
+	X(RC_E_ROSTER_NODE,     "E_ROSTER_NODE") \
+	X(RC_E_UNKNOWN_KNOB,    "E_UNKNOWN_KNOB") \
+	/* status */ \
 	X(RC_S_SEGMENT_HEARD,   "S_SEGMENT_HEARD") \
+	X(RC_S_BUDGET_YIELDED,  "S_BUDGET_YIELDED") \
 	X(RC_S_SEGMENT_UP,      "S_SEGMENT_UP") \
 	X(RC_S_SEGMENT_DROPPED, "S_SEGMENT_DROPPED") \
 	X(RC_S_KNOB_SET,        "S_KNOB_SET") \
 	X(RC_S_KNOB_SUMMARY,    "S_KNOB_SUMMARY") \
-	/* refusals / failures — libreac-transport's own */ \
+	X(RC_S_NO_OVERRIDES,    "S_NO_OVERRIDES")
+
+#define REAC_CODE_LIST_LIBRARY(X) \
+	/* refusals / failures */ \
 	X(RC_E_PROMISC_FAILED,  "E_PROMISC_FAILED") \
 	X(RC_E_CAPTURE_FAILED,  "E_CAPTURE_FAILED") \
 	X(RC_E_QDISC_READ_FAILED, "E_QDISC_READ_FAILED") \
 	X(RC_E_ETF_REFUSED,     "E_ETF_REFUSED") \
+	/* status */ \
 	X(RC_S_KNOB_IGNORED,    "S_KNOB_IGNORED") \
 	X(RC_S_HEADAMP_SUPPRESSED, "S_HEADAMP_SUPPRESSED")
+
+#define REAC_CODE_LIST(X) REAC_CODE_LIST_DAEMON(X) REAC_CODE_LIST_LIBRARY(X)
 
 enum reac_code {
 	RC_NONE = 0,
