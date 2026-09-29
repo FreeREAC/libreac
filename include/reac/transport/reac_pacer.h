@@ -42,7 +42,7 @@
 #include <reac/reac_headamp_tx.h>
 #include <reac/reac_clock.h>
 #include <reac/reac_arbitration.h>  /* enum reac_pace_source: what a segment PUBLISHES */
-#include "reac_rate_cfg.h"
+#include <reac/reac_cfg.h>      /* REAC_RATE_ALL_BITS, enum reac_rate_refuse */
 #include <reac/transport/reac_rt.h>
 #include <reac/reac_identity.h>   /* the box identity-page decode (DT1 tag 0x0500) */
 

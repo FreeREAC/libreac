@@ -62,12 +62,12 @@ const char *reac_role_swap_state(const struct reac_role_swap *s,
                                  enum reac_role_engine engine)
 {
 	if (!s || !s->engine_up || engine == REAC_ROLE_ENGINE_DOWN)
-		return REAC_ROLE_STATE_REESTABLISH_PENDING;
+		return REAC_CFG_ROLE_STATE_PENDING;
 	if (s->running != s->asserted)
-		return REAC_ROLE_STATE_REESTABLISH_PENDING;
+		return REAC_CFG_ROLE_STATE_PENDING;
 	if (engine == REAC_ROLE_ENGINE_HUNTING)
 		return REAC_ROLE_STATE_HUNTING;
-	return REAC_ROLE_STATE_APPLIED;
+	return REAC_CFG_ROLE_STATE_APPLIED;
 }
 
 int reac_role_emits_headamp(enum reac_role role)

@@ -34,9 +34,10 @@
  * REAC_CFG_REFUSED_* codes below — never a silently substituted value.
  *
  * THIS FILE IS THE DECLARATION, AND THE ONLY ONE. reac-pw's reac_rate_cfg.h and
- * reac_role_cfg.h (snapshot in packaging/vendor/reac-pw-headers/) include it and
- * name these macros; they spell none of the strings themselves. A key or code
- * typed a second time anywhere is a red test (tests/conformance-cfg-declared-once.sh).
+ * reac_role_cfg.h include it and name these macros; they spell none of the strings
+ * themselves, and the refusal enums and rate bits the transport headers need live
+ * here too (docs/design/specs/2026-09-29-shared-code-has-one-home.md §2). A key or
+ * code typed a second time anywhere is a red test (tests/conformance-cfg-declared-once.sh).
  */
 #ifndef REAC_CFG_H
 #define REAC_CFG_H
@@ -141,5 +142,51 @@
 /* The swap landed on a slave that no master has enrolled yet: the role is right, the
  * job it names is not being done (reac_role_swap.h). */
 #define REAC_CFG_ROLE_STATE_HUNTING         "role_hunting"
+
+/* A tap serves and asserts nothing: it opens no TX socket and is granted nothing, so
+ * it can never truthfully answer "applied" (a role change PERFORMED on the wire) or
+ * "role_hunting" (a courtship it is defined by not running). */
+#define REAC_CFG_ROLE_STATE_TAP             "role_tap"
+
+/* ---- the decisions' shared vocabulary ---------------------------------------
+ * What reac_pacer.h and reac_role_swap.h need from the rate and role decisions
+ * (reac-pw's reac_rate_cfg / reac_role_cfg implement them). */
+
+/* One bit per closed-list rate, for a segment's drivable mask. */
+#define REAC_RATE_BIT_44100  (1u << 0)
+#define REAC_RATE_BIT_48000  (1u << 1)
+#define REAC_RATE_BIT_96000  (1u << 2)
+#define REAC_RATE_ALL_BITS   (REAC_RATE_BIT_44100 | REAC_RATE_BIT_48000 | REAC_RATE_BIT_96000)
+
+/* Why a `reac.cfg.rate` assertion was refused. REFUSE_NONE doubles as the
+ * published state once a refusal is superseded by an accepted rate. */
+enum reac_rate_refuse {
+	REAC_RATE_REFUSE_NONE = 0,
+	REAC_RATE_REFUSE_NOT_CLOSED,    /* not one of 44100 / 48000 / 96000           */
+	REAC_RATE_REFUSE_NOT_DRIVABLE,  /* in the closed list, outside this segment's */
+	REAC_RATE_REFUSE_ROLE_SLAVE,    /* a slave has no rate setting of its own     */
+	REAC_RATE_REFUSE_MALFORMED,     /* the prop value was not a usable number     */
+};
+
+/* The published code for each refusal, indexed by enum reac_rate_refuse. */
+#define REAC_RATE_REFUSE_CODES_INIT { \
+	[REAC_RATE_REFUSE_NONE]         = REAC_CFG_REFUSED_NONE,         \
+	[REAC_RATE_REFUSE_NOT_CLOSED]   = REAC_CFG_REFUSED_NOT_CLOSED,   \
+	[REAC_RATE_REFUSE_NOT_DRIVABLE] = REAC_CFG_REFUSED_NOT_DRIVABLE, \
+	[REAC_RATE_REFUSE_ROLE_SLAVE]   = REAC_CFG_REFUSED_ROLE_SLAVE,   \
+	[REAC_RATE_REFUSE_MALFORMED]    = REAC_CFG_REFUSED_MALFORMED,    \
+}
+
+/* Why a `reac.cfg.role` assertion was refused: only a value that is not 0 or 1. */
+enum reac_role_refuse {
+	REAC_ROLE_REFUSE_NONE = 0,
+	REAC_ROLE_REFUSE_MALFORMED,
+};
+
+/* The published code for each refusal, indexed by enum reac_role_refuse. */
+#define REAC_ROLE_REFUSE_CODES_INIT { \
+	[REAC_ROLE_REFUSE_NONE]      = REAC_CFG_REFUSED_NONE,      \
+	[REAC_ROLE_REFUSE_MALFORMED] = REAC_CFG_REFUSED_MALFORMED, \
+}
 
 #endif /* REAC_CFG_H */
