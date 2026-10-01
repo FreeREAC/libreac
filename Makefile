@@ -278,6 +278,13 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) tests/conformance-cfg-declared-once.sh
 	$(CC) $(CFLAGS) $(INC) -Ipackaging/vendor/reac-pw-headers tests/test_cfg.c libreac.a -lm -o test_cfg
 	$(RUN_TEST) ./test_cfg
+	# THE PUBLIC TREE CARRIES AUTHORED DOCS, NOT INTERNALS. Specs, notes and audits live in
+	# freereac-ops and are cited by bare slug: the public half refuses a docs path, a docs
+	# tree or a build command in the README; the ops half resolves every slug in the
+	# sibling checkout, and says OPS-ABSENT (SKIP) where there is none.
+	$(RUN_TEST) tests/conformance-public-docs.sh
+	$(RUN_TEST) tools/ops-slugs.sh --self-test
+	$(RUN_TEST) tools/ops-slugs.sh
 	@$(MAKE) --no-print-directory facts-drift-check
 	@echo "make test: PASS — every arm above ran to the end; make stops at the first red one;" \
 	  "skipped (exit 77, nothing tested): $$(if [ -s $(SKIP_LOG) ]; then tr '\n' ' ' < $(SKIP_LOG); else echo none; fi)"
