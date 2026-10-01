@@ -77,7 +77,7 @@
  * consumer that keys a stagebox registry by box address — openmixer keys its
  * `reac:<box mac>` patch names exactly that way — read reac.master.mac, matched
  * our own NIC against a registry of Roland addresses, and missed on every rig
- * (openmixer docs/design/notes/2026-09-06-rig-headamp-and-clip-findings.md §5).
+ * (openmixer 2026-09-06-rig-headamp-and-clip-findings §5).
  * The alternative was for every consumer to re-derive the peer from a discovery
  * sighting list, which is a second implementation of a fact only the master
  * actually holds. */
@@ -110,7 +110,7 @@
  * to the reac.link-state/box-* keys above, which describe only the peer THIS master
  * joined. Same seam, same node, same 200 ms poll; see reac_disco.h for the rules that
  * keep the device list honest, and openmixer's
- * docs/design/specs/2026-07-16-reac-discovery-via-reac-pw.md for the contract.
+ * 2026-07-16-reac-discovery-via-reac-pw for the contract.
  *
  * A reader that finds reac-playback WITHOUT these keys is talking to a reac-pw that
  * predates discovery — which is "could not scan", never "scanned and found nothing". */

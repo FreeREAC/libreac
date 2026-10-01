@@ -3,7 +3,7 @@
 
 /* reac_role_cfg — the `reac.cfg.role` live control, the ROLE half of runtime
  * config alongside reac_rate_cfg's pace half
- * (docs/design/specs/2026-08-26-reac-runtime-config.md, in the openmixer tree).
+ * (2026-08-26-reac-runtime-config, in the openmixer tree).
  *
  * THE VOCABULARY — write side and answer side — IS libreac's <reac/reac_cfg.h>. This
  * header names its macros and spells none of the strings (libreac review 2026-09-25,

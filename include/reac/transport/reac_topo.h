@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
  *
  * reac_topo — is this NIC an access port or a TRUNK, and which VLANs carry REAC on it.
- * (openmixer's docs/design/specs/2026-08-23-reac-trunk-vlan-daemon.md §3, §4, §5.)
+ * (openmixer's 2026-08-23-reac-trunk-vlan-daemon §3, §4, §5.)
  *
  * OBSERVE ONCE TO LEARN THE TOPOLOGY; NEVER PARSE A TAG IN THE AUDIO PATH. Learning that
  * tagged 0x8819 frames arrive, and which VIDs they carry, is a read-only discovery act;

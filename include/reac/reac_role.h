@@ -77,7 +77,7 @@ enum reac_role_intent {
 	 * wire this is the slave end of the pairing — reac_slave is the engine and
 	 * there is no second one — so what `box` adds is an INTENT: which model we
 	 * declare, and which way round the two PipeWire doors face
-	 * (reac-pw docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md).
+	 * (reac-pw 2026-09-17-the-daemon-can-be-a-box).
 	 *
 	 * EXPLICIT ONLY, exactly like `tap` and for the mirror-image reason: a mixer
 	 * never wants a surprise stagebox appearing on its fabric and taking

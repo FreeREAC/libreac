@@ -15,7 +15,7 @@
  * queued on both sockets.
  *
  * WHY THE WAIT IS BOUNDED, AND WHAT IT COST NOT TO BE (2026-09-21 22:17:45; the journal and
- * the measurements are in docs/design/notes/2026-09-21-one-stray-frame-pinned-a-wire.md).
+ * the measurements are in 2026-09-21-one-stray-frame-pinned-a-wire).
  * The wait was written as two EVER questions — "has anything been heard here at all" and
  * "has the tap classified an untagged frame here, ever" — and on `enp128s20f0u6`, a direct
  * point-to-point cable with one cold S-0808 on it, a frame belonging to the S-1608 on

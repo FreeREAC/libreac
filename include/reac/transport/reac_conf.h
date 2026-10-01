@@ -32,7 +32,7 @@
  *      is the key SUFFIXED with the segment's name — REAC_ROLE_enp131s0 — in
  *      any of the layers below, and it outranks the bare key in every one of
  *      them. Segments are discovered, not declared (openmixer's
- *      2026-08-23-reac-trunk-vlan-daemon.md, amendment 2026-09-02), so there
+ *      2026-08-23-reac-trunk-vlan-daemon, amendment 2026-09-02), so there
  *      is no per-segment FILE to create: a segment's name is its interface's,
  *      and the console generates the key into reac-pw.env.
  *

@@ -16,7 +16,7 @@
  * WHAT THAT BOUGHT ELSEWHERE. reac_repacer, the OpenWrt de-jitter relay, is the
  * prior art for all of this and measured the egress cadence tighten from 3.6 us to
  * 1.4 us of jitter when the same mechanism was switched on
- * (reac-aes67-split-src/docs/design/specs/2026-06-11-etf-localin-clock-recovery.md).
+ * (2026-06-11-etf-localin-clock-recovery (reac-aes67)).
  * Its two hard-won laws are carried here rather than rediscovered: the grid is
  * ACCUMULATED and never re-based on `now` (substituting `deadline = now + period`
  * put that rig 526.7 ppm off the master where accumulating held it to 8.7 ppm —

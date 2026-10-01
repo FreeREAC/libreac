@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* THE RATE IS ONE STREAM'S. Guard for libreac review 2026-09-25, M1
- * (docs/audits/2026-09-25-libreac-review.md); red on ee205b6, green since the fix.
+ * (2026-09-25-libreac-review); red on ee205b6, green since the fix.
  *
  * reac_detect_rate_fd() counts EVERY 0x8819 frame it reads and divides by the
  * span, so a socket that hears both directions of one 48 kHz session — the
