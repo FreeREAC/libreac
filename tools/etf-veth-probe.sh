@@ -43,7 +43,7 @@ trap cleanup EXIT
 
 # ---- what this environment can and cannot do, named one at a time ------------
 #
-# THE TOOLS FIRST, AND SEPARATELY. The first run of this script on the build node reported
+# THE TOOLS FIRST, AND SEPARATELY. The first run of this script on a remote build node reported
 # "cannot create a network namespace -- this needs CAP_NET_ADMIN" when the real
 # cause was that the build container has no iproute2 at all. A diagnosis that
 # names the wrong cause is worse than none: it sends the reader to fix a
