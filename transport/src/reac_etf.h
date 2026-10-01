@@ -72,7 +72,7 @@ enum reac_etf_refusal {
 	                                * or the socket family does not carry it */
 	REAC_ETF_REFUSE_TXTIME_EPERM,  /* SO_TXTIME exists and we are not allowed to set
 	                                * it: it is gated on CAP_NET_ADMIN. MEASURED
-	                                * 2026-09-14 on r1 (kernel 7.1.9), uid 0 inside a
+	                                * 2026-09-14 on a remote build node (kernel 7.1.9), uid 0 inside a
 	                                * container with NET_RAW but not NET_ADMIN: EPERM
 	                                * on both an AF_PACKET and a UDP socket. A
 	                                * DIFFERENT problem from "the kernel has no
