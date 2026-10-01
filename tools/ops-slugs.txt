@@ -1,0 +1,13 @@
+# The slugs of libreac's own design specs, notes and audit, which live in freereac-ops
+# under libreac/docs/. tools/ops-slugs.sh checks each one resolves there.
+2026-09-11-reac-transport-library
+2026-09-12-bounded-ungranted-courtship
+2026-09-13-rate-carriers-and-the-enroll-group-map
+2026-09-13-reac-kernel-module-backend
+2026-09-14-capturing-a-linked-silent-box
+2026-09-17-tunables-api-and-shared-refusal-codes
+2026-09-22-enrolment-decisions-belong-to-the-library
+2026-09-14-kmod-phase1
+2026-09-21-master-tx-doubling-refuted
+2026-09-14-etf-pacing-record
+2026-09-25-libreac-review
