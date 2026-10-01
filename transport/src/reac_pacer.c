@@ -846,7 +846,7 @@ int reac_pacer_log_drain(struct reac_pacer *p, FILE *out)
 				 * S-4000S it was written from (reac-captures
 				 * desk-arrival-q4-2026-09-14: a completed transfer captured a
 				 * linked, silent box with its cable never touched) and FALSE as
-				 * a general law. 2026-09-16, msi: an S-1608 that dropped while
+				 * a general law. 2026-09-16, on the desk: an S-1608 that dropped while
 				 * the desk was suspended ignored ~1620 completed pushes over 73
 				 * minutes and two processes. Its own firmware says why — "PHY
 				 * LINK-UP (the only establish trigger; a data gap does NOT)",
