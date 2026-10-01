@@ -5,7 +5,7 @@
  * for a BOUNDED time.
  *
  * THE DEFECT THIS EXISTS AGAINST, measured on the operator's desk 2026-09-21 22:17:45
- * (docs/design/notes/2026-09-21-one-stray-frame-pinned-a-wire.md): the wait was two EVER
+ * (2026-09-21-one-stray-frame-pinned-a-wire): the wait was two EVER
  * questions, so one misattributed frame suspended role election on `enp128s20f0u6` for the
  * life of the process. That wire is a direct point-to-point cable with one cold S-0808 on
  * the far end; it carried 0 RX packets for the next nine minutes while the daemon reported

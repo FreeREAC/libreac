@@ -208,7 +208,7 @@ int main(void)
 	 * still agree if that one function drifted. These are the measured values:
 	 * 0x00 at 48 kHz and 0x02 at 44.1 kHz off one M-200 MAC, 0x01 at a measured
 	 * 8005 pps off an S-1608 and an S-4000S (17 040 announces, 105 capture files,
-	 * reac-captures analysis/2026-09-13-announce-bytes-and-headamp-base.md). */
+	 * reac-captures 2026-09-13-announce-bytes-and-headamp-base). */
 	{
 		static const struct { int fps; uint8_t code; } RATE[] = {
 			{ 4000, 0x00 },   /* 48 kHz   */

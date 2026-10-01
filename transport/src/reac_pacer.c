@@ -1207,7 +1207,7 @@ int reac_pacer_headamp_drain(struct reac_pacer *p)
 	return applied;
 }
 
-/* ---- live rate re-establish (2026-08-26-reac-runtime-config.md) --------- */
+/* ---- live rate re-establish (2026-08-26-reac-runtime-config) --------- */
 
 /* Resolve a reac_pacer_cfg.catchup_max_slots RAW value into the slot budget
  * for a given fps — the exact ternary reac_pacer_open has always applied, kept
@@ -1946,7 +1946,7 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 	p->prev_state = REAC_M_IDLE;
 	atomic_store_explicit(&p->fsm_state, REAC_M_IDLE, memory_order_relaxed);
 
-	/* Drivability + the standing rate (2026-08-26-reac-runtime-config.md §0):
+	/* Drivability + the standing rate (2026-08-26-reac-runtime-config §0):
 	 * a zero-initialised cfg means "declare the whole closed list drivable" —
 	 * the honest default for a daemon with no real probe (see reac_rate_cfg.h).
 	 * The rate the caller opened at (cfg->fps * REAC_SAMPLES_PER_PKT) is

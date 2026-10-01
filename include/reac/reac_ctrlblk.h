@@ -399,7 +399,7 @@ struct reac_box_model {
 	uint8_t     port_layout;    /* enum reac_box_port_layout                       */
 };
 /* ---- THE ROW'S DECLARED FACTS, AND THE BLOCKS SYNTHESISED FROM THEM ----
- * (docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §2, in reac-pw's tree.)
+ * (2026-09-17-the-daemon-can-be-a-box §2, in reac-pw's tree.)
  *
  * A row used to BE its captured bytes, and that is exactly why a model nobody has
  * captured could not be a row: it has no bytes. So every block above is DERIVED

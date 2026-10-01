@@ -252,7 +252,7 @@ static void scene_prepare(struct reac_master *m)
  * forget_box, which is the one part of that timeline this master does not model.
  * The whole block is corpus-named — width, pace code and count are the last three
  * bytes that were once "unknown2"
- * (reac-captures analysis/2026-09-13-announce-bytes-and-headamp-base.md,
+ * (reac-captures 2026-09-13-announce-bytes-and-headamp-base,
  * 17 040 announces over 105 files). */
 static void gen_cfea(uint8_t out[34], const uint8_t src[6],
                      const struct reac_console_cfg *cfg, uint16_t box_count)

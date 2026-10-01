@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* A LOCK BELONGS TO ITS REFERENCE. Guard for libreac review 2026-09-25, M2
- * (docs/audits/2026-09-25-libreac-review.md); red on ee205b6, green since the fix.
+ * (2026-09-25-libreac-review); red on ee205b6, green since the fix.
  *
  * reac_clock_disc_update() resets in_band and the stability series when the
  * selected reference CHANGES, but leaves `state` alone unless a measurement

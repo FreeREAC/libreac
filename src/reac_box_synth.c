@@ -3,7 +3,7 @@
 
 /* reac_box_synth — a box model's wire blocks, SYNTHESISED from the row's
  * declared facts (reac_ctrlblk.h's struct reac_box_model; the ruling is
- * docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §2, in reac-pw's tree).
+ * 2026-09-17-the-daemon-can-be-a-box §2, in reac-pw's tree).
  *
  * WHY THIS FILE EXISTS. A row used to BE its captured bytes, so a model nobody
  * has captured could not be a row — only code. Here a row is its FACTS and the
