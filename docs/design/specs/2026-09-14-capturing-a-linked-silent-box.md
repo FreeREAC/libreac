@@ -169,7 +169,7 @@ remembers.
 
 ## Amendment 2026-09-16 — §4's rig run was run, and it FAILED for an S-1608
 
-The one owed run happened by accident and the answer is on the record. Desk msi, reac-pw
+The one owed run happened by accident and the answer is on the record. On the desk, reac-pw
 1.0.10 mastering `enp131s0` at 96 kHz with an S-1608 (`00:40:ab:c4:80:41`) enrolled; the
 desk went to s2idle for 77 minutes. On resume the daemon re-took the wire and pushed
 correctly for **73 minutes across two processes — about 1620 completed transfers, the NIC's
