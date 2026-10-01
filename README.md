@@ -63,36 +63,20 @@ byte is derived, from the running rate in packets per second (≥ 8000 pps → 9
 44.1 kHz, otherwise 48 kHz). See `spec/reac.ksy` in the
 [reac-protocol](https://github.com/FreeREAC/reac-protocol) repository for the field itself.
 
-## Build
+## Install
 
-A hand-kept Makefile, no build system to configure.
+Fedora packages are published, signed, at [freereac.github.io/rpm](https://freereac.github.io/rpm):
 
 ```
-make                                            # libreac.a
-make test                                       # libreac's own suite
-make transport REACPW_INCLUDE=<reac-pw>/src     # libreac-transport.a
+sudo dnf config-manager addrepo --from-repofile=https://freereac.github.io/rpm/freereac.repo
+sudo dnf install libreac-devel libreac-transport-devel
 ```
 
-`libreac-transport` builds standalone for everything except two headers
-(`reac_pacer.h`, `reac_role_swap.h`) that still `#include` two pure-declaration headers from
-`reac-pw`'s tree (`reac_rate_cfg.h`, `reac_role_cfg.h` — see the design spec above for why).
-`REACPW_INCLUDE` points the build at a `reac-pw` checkout's `src/` for those two; unset, every
-other object still builds and only those two fail, loudly, at compile time.
-
-## Packaging
-
-`packaging/build-rpm.sh` builds every `*.spec` under `packaging/` — today `libreac.spec` and
-`libreac-transport.spec` — from the one tarball `packaging/make-tarball.sh` produces, so both
-RPMs always ship the same source snapshot. `packaging/publish-repo.sh` assembles the public dnf
-tree at [freereac.github.io/rpm](https://freereac.github.io/rpm) — the same tree reac-pw's own
-equivalent workflow publishes into beside it; see `.github/workflows/release-rpm.yml` for how a
-tagged release (`gh workflow run release-rpm.yml -f tag=vX.Y.Z -f sign=true`) runs that dispatch.
-If the workflow cannot run, publish by hand: `packaging/publish-repo.sh --rpm-dir DIR --out
-<checkout of freereac.github.io> --key-id A14B3E1E1F69EBF4`, then commit and push `rpm/`.
+To build from source, see [BUILDING.md](BUILDING.md).
 
 ## Tools
 
-Under `tools/`, built with `make wire-tools` (the six analysis tools) or named individually:
+The analysis tools under `tools/` (built as [BUILDING.md](BUILDING.md) describes):
 
 - `corpus_check` — decode a capture corpus with this build and report what libreac made of it;
   `--self-test` / `--self-test-audio` prove the corruption-detection arm can itself go red.
