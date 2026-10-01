@@ -4,7 +4,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 `reac-pw-headers/reac_rate_cfg.h` and `reac_role_cfg.h` are a **snapshot copy** of the two
 reac-pw headers that `include/reac/transport/reac_pacer.h` and `reac_role_swap.h` still
-`#include` for their pure declarations (`docs/design/specs/2026-09-11-reac-transport-library.md`
+`#include` for their pure declarations (`2026-09-11-reac-transport-library`
 §2/§5 names this seam explicitly — it is not an oversight). They exist here only so
 `packaging/libreac-transport.spec`'s `%build` has something to point `REACPW_INCLUDE` at without
 requiring a reac-pw source checkout inside the libreac SRPM, which would be a real circular build

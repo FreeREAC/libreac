@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* Library reads no environment (docs/design/specs/
- * 2026-09-17-tunables-api-and-shared-refusal-codes.md §1). Walks src/ and
+/* Library reads no environment (2026-09-17-tunables-api-and-shared-refusal-codes
+ * §1). Walks src/ and
  * transport/src/ (relative to the repo root, where `make test` runs this from)
  * and refuses any `getenv(` outside the one sanctioned exception:
  * transport/src/reac_conf.c, which IS the daemon's layered-lookup implementation

@@ -4,8 +4,8 @@
 /* reac_code — ONE stable token vocabulary for every refusal, failure and notable
  * status line libreac (and a consumer such as reac-pw) prints.
  *
- * Moved here from reac-pw's src/reac_code.h (docs/design/specs/
- * 2026-09-17-tunables-api-and-shared-refusal-codes.md): "We need the error codes and
+ * Moved here from reac-pw's src/reac_code.h (2026-09-17-tunables-api-and-shared-refusal-codes): "We need the
+ * error codes and
  * not only messages" (operator, 2026-09-17). `reac_code_emit` puts the TOKEN first,
  * always, so prose and script/log-scraper matching can move independently.
  *

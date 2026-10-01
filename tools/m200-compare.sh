@@ -8,8 +8,8 @@
 # Rig shape this is written for (operator plan, 2026-09-17): a real Roland
 # M-200 masters VLANs 11/12/13 on the boxes; enp131s0 sits on the switch's
 # MIRROR port and reac-pw runs there in TAP role -- it sees the wire and
-# writes nothing to it (docs/design/specs/2026-09-16-segments-and-roles-are-
-# autodetected.md §3a/§A: reac-pw.conf.d/99-local.conf is a drop-in that
+# writes nothing to it (2026-09-16-segments-and-roles-are-autodetected
+# §3a/§A: reac-pw.conf.d/99-local.conf is a drop-in that
 # LATER-WINS over reac-pw.conf, matching that spec exactly).
 #
 # Four jobs, each a thin driver over EXISTING tools -- this script decodes

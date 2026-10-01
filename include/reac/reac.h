@@ -230,7 +230,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * `undefined symbol`. A removed symbol needs BOTH numbers below to move.
  *
  * 0.9.0: a SECOND LIBRARY, libreac-transport, lands beside this one
- * (docs/design/specs/2026-09-11-reac-transport-library.md) -- reac-pw's
+ * (2026-09-11-reac-transport-library) -- reac-pw's
  * sockets/pacer/RT-thread/VLAN code, depending on libreac unchanged. Not an
  * ABI break for libreac.so itself (no symbol here moves or is removed, so
  * LIBREAC_ABI stays put); the minor bump is the one middle-digit increment a
@@ -280,7 +280,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
- * 1.6.0: THE 2026-09-25 REVIEW'S FIXES (docs/audits/2026-09-25-libreac-review.md). A minor,
+ * 1.6.0: THE 2026-09-25 REVIEW'S FIXES (2026-09-25-libreac-review). A minor,
  *        not a patch, because reac_cfg.h's PUBLIC vocabulary moves: REAC_CFG_REFUSED_NONE is
  *        "none" (was ""), REAC_ROLE_PROP and REAC_CFG_ROLE_STATE_HUNTING are ADDED, and
  *        REAC_CFG_RATE_COUNT / REAC_CFG_RATE_LIST_INIT, which nothing read, are REMOVED. A
@@ -304,7 +304,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        reac_facts_timing.h (ADDED). No struct or symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
- *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
+ *        2026-09-22; reac-pw's 2026-09-16-segments-and-roles-are-autodetected,
  *        amendment of that date). reac_topo's tap was BPF-filtered to 0x8819, so a VLAN
  *        whose box is cold — a stagebox is a slave and says nothing until a master speaks,
  *        and the master needs the netdev first — was invisible and reachable only by a
@@ -319,7 +319,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        is heard UNTAGGED on the trunk's native VLAN and a verdict from one STP frame
  *        would unserve it.
  * 1.4.0: DECIDING WHAT A WIRE IS BELONGS HERE, NOT TO THE BINDING
- *        (docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md).
+ *        (2026-09-22-enrolment-decisions-belong-to-the-library).
  *        reac_knock.h (the masterless observation that licences driving a vacant wire)
  *        and reac_tapwait.h (how long a sighting the topology tap has not placed binds
  *        the hunt) arrive from reac-pw, where reac_hunt.h had been citing reac_knock.h
@@ -339,8 +339,8 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        sockets, which is why this is a patch and not the minor 1.3.0's new API was.
  * 1.3.1: the FCS residue leaves the parsers — ingest strips the capture path's +2 once, a
  *        residue-length frame is refused by reac_upstream/reac_disco; facts 46 -> 47.
- * 1.3.0: reac_tunables.h (docs/design/specs/
- * 2026-09-17-tunables-api-and-shared-refusal-codes.md) — new public surface, no
+ * 1.3.0: reac_tunables.h (2026-09-17-tunables-api-and-shared-refusal-codes) — new
+ * public surface, no
  * existing struct/symbol moves or changes size, so this is a minor, not an ABI
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */

@@ -579,7 +579,7 @@ const char *reac_master_drop_name(enum reac_master_drop_reason r);
 
 /* The master's default rate, when nothing says otherwise, is
  * reac_rate_best_drivable() (reac_rate_cfg.h) — superseded from the flat
- * 2026-08-23 "always 96k" ruling by 2026-08-26-reac-runtime-config.md §0:
+ * 2026-08-23 "always 96k" ruling by 2026-08-26-reac-runtime-config §0:
  * "the default must be the best one that we can drive." With no real
  * drivability probe yet, reac-pw always declares the whole closed list
  * drivable, so the observable default is still 96 kHz — but it is now an

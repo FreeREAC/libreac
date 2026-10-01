@@ -51,7 +51,7 @@
  * pacer (so its lifetime matches the segment's: a drop/reopen gets a fresh, unlocked lock).
  * The TABLE is main-thread-only: sightings cross threads on the pacer's existing lock-free
  * event ring, so there is no new cross-thread primitive here. See
- * docs/design/specs/2026-07-16-reac-discovery-via-reac-pw.md (openmixer) for the seam. */
+ * 2026-07-16-reac-discovery-via-reac-pw (openmixer) for the seam. */
 #ifndef REAC_DISCO_H
 #define REAC_DISCO_H
 

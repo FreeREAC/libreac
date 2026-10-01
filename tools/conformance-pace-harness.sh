@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 #
 # CAN THE HARNESS TELL TWO PACERS APART? The comparison this instrument is built
-# for (2026-09-13-reac-kernel-module-backend.md, lane 1) has one failure mode
+# for (2026-09-13-reac-kernel-module-backend, lane 1) has one failure mode
 # that would waste the whole comparative test day: a harness that prints a tidy
 # table in which both arms look identical because it cannot resolve the
 # difference. That is an absence claim from an unproven probe, and it would be

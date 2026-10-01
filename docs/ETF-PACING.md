@@ -39,7 +39,7 @@ soak (`reac_pacer.h`).
 
 `reac_repacer`, the OpenWrt de-jitter relay, is the prior art for the cure and measured it:
 switching the same mechanism on tightened a relay's egress cadence from **3.6 µs to 1.4 µs** of
-jitter (`reac-aes67-split-src/docs/design/specs/2026-06-11-etf-localin-clock-recovery.md`). Two of
+jitter (`2026-06-11-etf-localin-clock-recovery (reac-aes67)`). Two of
 its laws are carried here rather than rediscovered:
 
 - **The grid is accumulated, never re-based on `now`.** Substituting `deadline = now + period`
