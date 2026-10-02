@@ -36,7 +36,7 @@
  * THIS FILE IS THE DECLARATION, AND THE ONLY ONE. reac-pw's reac_rate_cfg.h and
  * reac_role_cfg.h (snapshot in packaging/vendor/reac-pw-headers/) include it and
  * name these macros; they spell none of the strings themselves. A key or code
- * typed a second time anywhere is a red test (tests/conformance-cfg-declared-once.sh).
+ * typed a second time anywhere is a red test (tests/conformance-declared-once.sh).
  */
 #ifndef REAC_CFG_H
 #define REAC_CFG_H

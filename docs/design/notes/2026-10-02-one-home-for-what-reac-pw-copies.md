@@ -90,7 +90,11 @@ vocabulary. It is extended rather than joined by a parallel gate, and renamed
 Each arm carries a planted good/bad pair, like the existing ones. With no arguments the gate
 scans libreac's own tree, which is what `make test` runs. Directories given as arguments are
 scanned as consumers, so the reac-pw lane can point the same gate at its `src/` and watch it
-go from red to green.
+go from red to green. Run against reac-pw's `src/` today, it names `reac_code.h`'s list and
+its 16 tokens, `reac_qdisc.c`'s dump, `main.c`'s tap read, and every cfg string its two
+headers type. ARM 2 is unchanged and compares values, so it also lists
+`reac_headamp_state.h`'s `"applied"`. That is the same word on a different prop, and the
+reac-pw lane decides between aliasing it and calling it a convention, as `"none"` already is.
 
 ## The version
 
