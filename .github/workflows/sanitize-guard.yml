@@ -13,3 +13,13 @@ jobs:
             exit 1
           fi
           echo "clean — no forbidden tokens"
+      - name: No tracked bytecode
+        run: |
+          set -o pipefail
+          tracked=$(git ls-files -- '*.pyc' '*.pyo' '*__pycache__*')
+          if [ -n "$tracked" ]; then
+            printf '%s\n' "$tracked"
+            echo "::error::compiled python bytecode is tracked (it embeds build-machine paths)"
+            exit 1
+          fi
+          echo "clean — no tracked bytecode"
