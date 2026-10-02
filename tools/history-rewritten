@@ -1,0 +1,6 @@
+# The public history was rewritten without the documents tools/history-drop-paths.txt lists
+# (tools/history-rewrite.sh; the old history is the backup tag). This file's presence turns on
+# tests/conformance-history-drops.sh ARM 2: no commit reachable from HEAD carries one again.
+backup-tag  backup/pre-rewrite-2026-10-01
+old-head    b9b9c5c35907ba82eca3cbbe3a6ddcaa6eed2757
+new-head    06958382e9c4e6a954f3c2d5cd9dd7a3f5f1b9d5
