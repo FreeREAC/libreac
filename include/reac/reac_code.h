@@ -9,11 +9,12 @@
  * not only messages" (operator, 2026-09-17). `reac_code_emit` puts the TOKEN first,
  * always, so prose and script/log-scraper matching can move independently.
  *
- * Header-only, so linking against this changes no ABI. A consumer built against an
- * older libreac that does not ship this file keeps its own local copy; once it links
- * a libreac new enough to provide this header, its copy becomes a thin
- * `#include <reac/reac_code.h>` (reac-pw's own tests probe for the header before
- * relying on it — see that repo's meson.build).
+ * Header-only, so linking against this changes no ABI. THIS IS THE ONE LIST: every
+ * token reac-pw prints is declared here too, so a consumer's copy becomes a thin
+ * `#include <reac/reac_code.h>`, and tests/conformance-declared-once.sh refuses a
+ * second REAC_CODE_LIST or a token typed anywhere else. A token is appended, never
+ * inserted: the enumerators' values are what a consumer built against an older header
+ * compiled in.
  *
  * X-MACRO so the enum, the token table and any enumeration (a conformance test that
  * lists every token) derive from ONE list and cannot drift apart. */
@@ -41,7 +42,25 @@
 	X(RC_E_QDISC_READ_FAILED, "E_QDISC_READ_FAILED") \
 	X(RC_E_ETF_REFUSED,     "E_ETF_REFUSED") \
 	X(RC_S_KNOB_IGNORED,    "S_KNOB_IGNORED") \
-	X(RC_S_HEADAMP_SUPPRESSED, "S_HEADAMP_SUPPRESSED")
+	X(RC_S_HEADAMP_SUPPRESSED, "S_HEADAMP_SUPPRESSED") \
+	/* refusals / failures — reac-pw's own, appended so every enumerator above keeps \
+	 * its value */ \
+	X(RC_E_LINK_BUDGET,     "E_LINK_BUDGET") \
+	/* A listener still held a node pair where it must not have, or an open that \
+	 * failed had already built one: the pair is destroyed at the code, so the ghost \
+	 * is a searchable event rather than a node nobody can account for. */ \
+	X(RC_E_ORPHAN_PAIR,     "E_ORPHAN_PAIR") \
+	/* A roster property REMOVAL cannot be delivered: PipeWire merges only the keys a \
+	 * client sends, so an absent key is never removed. Refused, never pretended. */ \
+	X(RC_E_ROSTER_REMOVE,   "E_ROSTER_REMOVE") \
+	/* There is no roster on the graph: the node could not be created or rebuilt. \
+	 * Not fatal, but a console reading the roster reads nothing and must be able to \
+	 * tell that from a daemon with no segments. */ \
+	X(RC_E_ROSTER_NODE,     "E_ROSTER_NODE") \
+	X(RC_E_UNKNOWN_KNOB,    "E_UNKNOWN_KNOB") \
+	/* status — reac-pw's own */ \
+	X(RC_S_BUDGET_YIELDED,  "S_BUDGET_YIELDED") \
+	X(RC_S_NO_OVERRIDES,    "S_NO_OVERRIDES")
 
 enum reac_code {
 	RC_NONE = 0,

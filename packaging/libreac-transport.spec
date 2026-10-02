@@ -88,9 +88,19 @@ PC
 
 %changelog
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
-- No symbol or struct change in this library. reac_role_swap.h's REAC_ROLE_STATE_HUNTING
-  and the vendored reac-pw cfg headers now alias libreac's reac_cfg.h instead of typing
-  the vocabulary a second time; the version moves with libreac 1.6.0.
+- No existing symbol or struct changes in this library. reac_role_swap.h's
+  REAC_ROLE_STATE_HUNTING and the vendored reac-pw cfg headers now alias libreac's
+  reac_cfg.h instead of typing the vocabulary a second time.
+- THE ONE HOME OF WHAT reac-pw RE-IMPLEMENTS (shared-code audit lane A,
+  2026-10-02-one-home-for-what-reac-pw-copies). ADDED:
+  reac_topo_tap_read() and struct reac_topo_frame, the tap read that also names the
+  sender (source MAC, the arrival ifindex, outgoing), which reac_topo_tap_next() now
+  wraps; reac_etf_qdisc_stats_read() and struct reac_etf_qdisc_stats, the etf counters
+  read over the same RTM_GETQDISC dump walker reac_etf_qdisc_state() runs on. A dump that
+  fails or ends before NLMSG_DONE is -errno, never a zero. Proven against a kernel in
+  user+net namespaces: the tap read names the far end's MAC and the parent's ifindex,
+  and unstamped frames into an etf root are all counted as drops, once, none launched.
+  The vendored reac_role_cfg.h aliases REAC_CFG_ROLE_STATE_TAP. LIBREAC_ABI stays 4.
 - DIRECTION, NOT WIDTH: reac_rx's downstream gate takes only BROADCAST 1492 B frames and
   its upstream gate locks only on a UNICAST return, so a 40-wide box's return and the
   desk's downstream (the same length) land in their own rings; reac_tap files a unicast

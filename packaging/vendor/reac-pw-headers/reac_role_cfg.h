@@ -72,6 +72,8 @@ struct spa_pod;
  * ever claiming "applied" for a change that has not finished. reac_role_swap_state
  * moves it on only when the NEW engine is performing its role. */
 #define REAC_ROLE_STATE_REESTABLISH_PENDING REAC_CFG_ROLE_STATE_PENDING
+/* A tap serves and asserts nothing, so it answers neither "applied" nor "role_hunting". */
+#define REAC_ROLE_STATE_TAP                 REAC_CFG_ROLE_STATE_TAP
 
 /* Why a `reac.cfg.role` assertion was refused. REFUSE_NONE doubles as the
  * published state once a refusal is superseded by an accepted role. There is

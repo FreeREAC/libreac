@@ -3,7 +3,7 @@
 
 /* The ETF qdisc doors. See reac/transport/reac_etf_qdisc.h for whose setting this is
  * and why a leftover qdisc is as bad as a missing one; this file is the two rtnetlink
- * messages and the one ack read. */
+ * messages, the one ack read, and the one RTM_GETQDISC dump both reads run over. */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -14,25 +14,31 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <linux/gen_stats.h>   /* TCA_STATS_BASIC/QUEUE, struct gnet_stats_* */
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <linux/pkt_sched.h>   /* TC_H_ROOT, struct tc_etf_qopt */
 
-/* ---- what is on the device ------------------------------------------------ */
+/* ---- the one dump --------------------------------------------------------- */
 
-/* One RTM_GETQDISC dump, filtered to one ifindex. Bounded in both directions: a
- * fixed number of reads and a poll timeout, so a silent netlink socket cannot hold
- * the caller. Control plane only — this runs at open, never on the slot path. */
-enum reac_etf_qdisc_state reac_etf_qdisc_state(int ifindex, char *kind, size_t cap)
+/* Called for every RTM_NEWQDISC of the dumped ifindex, with its attributes. */
+typedef void (*qdisc_each_fn)(const struct tcmsg *tcm, const struct rtattr *rta,
+                              int rlen, void *ctx);
+
+/* One RTM_GETQDISC dump, filtered to one ifindex, every qdisc handed to `each`. Bounded
+ * in both directions: a fixed number of reads and a poll timeout, so a silent netlink
+ * socket cannot hold the caller. Control plane only — never on the slot path.
+ *
+ * Returns 0 when the dump reached NLMSG_DONE, or -errno: the socket or the send failed,
+ * the kernel answered NLMSG_ERROR, or the reads ran out first (-ETIMEDOUT). `*readable`
+ * says whether any reply arrived at all, which is the line between UNREADABLE and an
+ * answer for reac_etf_qdisc_state. */
+static int qdisc_dump(int ifindex, qdisc_each_fn each, void *ctx, int *readable)
 {
-	if (kind && cap)
-		kind[0] = '\0';
-	if (ifindex <= 0)
-		return REAC_ETF_QDISC_UNREADABLE;
-
+	*readable = 0;
 	int fd = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_ROUTE);
 	if (fd < 0)
-		return REAC_ETF_QDISC_UNREADABLE;
+		return -errno;
 
 	struct {
 		struct nlmsghdr nh;
@@ -45,27 +51,41 @@ enum reac_etf_qdisc_state reac_etf_qdisc_state(int ifindex, char *kind, size_t c
 	req.nh.nlmsg_seq   = 1;
 	req.tcm.tcm_family = AF_UNSPEC;
 	if (send(fd, &req, req.nh.nlmsg_len, 0) < 0) {
+		int e = -errno;
 		close(fd);
-		return REAC_ETF_QDISC_UNREADABLE;
+		return e;
 	}
 
 	char buf[16384] __attribute__((aligned(8)));
-	int found_etf = 0, saw_any = 0, done = 0, readable = 0;
+	int rc = -ETIMEDOUT, done = 0;
 	for (int i = 0; i < 64 && !done; i++) {
 		struct pollfd p = { .fd = fd, .events = POLLIN, .revents = 0 };
 		if (poll(&p, 1, 200) <= 0)
 			break;
 		ssize_t n = recv(fd, buf, sizeof buf, 0);
-		if (n <= 0)
+		if (n < 0) {
+			rc = -errno;
 			break;
-		readable = 1;
+		}
+		if (n == 0) {
+			rc = -EIO;
+			break;
+		}
+		*readable = 1;
 		size_t len = (size_t)n, off = 0;
 		while (len - off >= sizeof(struct nlmsghdr)) {
 			const struct nlmsghdr *nh = (const struct nlmsghdr *)(buf + off);
 			size_t l = nh->nlmsg_len;
 			if (l < sizeof(struct nlmsghdr) || l > len - off)
 				break;
-			if (nh->nlmsg_type == NLMSG_DONE || nh->nlmsg_type == NLMSG_ERROR) {
+			if (nh->nlmsg_type == NLMSG_DONE) {
+				rc = 0;
+				done = 1;
+				break;
+			}
+			if (nh->nlmsg_type == NLMSG_ERROR) {
+				const struct nlmsgerr *err = NLMSG_DATA(nh);
+				rc = (l >= NLMSG_LENGTH(sizeof *err) && err->error) ? err->error : -EIO;
 				done = 1;
 				break;
 			}
@@ -73,45 +93,148 @@ enum reac_etf_qdisc_state reac_etf_qdisc_state(int ifindex, char *kind, size_t c
 			    l >= NLMSG_LENGTH(sizeof(struct tcmsg))) {
 				const struct tcmsg *tcm =
 					(const struct tcmsg *)((const char *)nh + NLMSG_HDRLEN);
-				if (tcm->tcm_ifindex == ifindex) {
-					saw_any = 1;
-					const struct rtattr *rta =
-						(const struct rtattr *)((const char *)tcm +
-						                        NLMSG_ALIGN(sizeof *tcm));
-					size_t rlen = l - NLMSG_LENGTH(sizeof *tcm);
-					for (; RTA_OK(rta, rlen); rta = RTA_NEXT(rta, rlen)) {
-						if (rta->rta_type != TCA_KIND)
-							continue;
-						const char *k = (const char *)RTA_DATA(rta);
-						size_t klen = RTA_PAYLOAD(rta);
-						if (klen && strnlen(k, klen) < klen) {
-							if (!strcmp(k, "etf"))
-								found_etf = 1;
-							/* Name the ROOT qdisc, which is what an
-							 * operator sees in `tc qdisc show`. */
-							if (kind && cap && !kind[0] &&
-							    tcm->tcm_parent == TC_H_ROOT) {
-								strncpy(kind, k, cap - 1);
-								kind[cap - 1] = '\0';
-							}
-						}
-					}
-				}
+				if (tcm->tcm_ifindex == ifindex)
+					each(tcm, (const struct rtattr *)((const char *)tcm +
+					                                  NLMSG_ALIGN(sizeof *tcm)),
+					     (int)(l - NLMSG_LENGTH(sizeof *tcm)), ctx);
 			}
 			off += NLMSG_ALIGN(l);
 		}
 	}
 	close(fd);
+	return rc;
+}
+
+/* The qdisc's TCA_KIND, or NULL when it carries none or an unterminated one. */
+/* Attribute lengths are int, as RTA_NEXT expects: it subtracts the ALIGNED length, and
+ * a last attribute whose padding runs past the buffer must end the walk at a negative
+ * remainder, not wrap an unsigned one into another pass. */
+static const char *qdisc_kind(const struct rtattr *rta, int rlen)
+{
+	for (; RTA_OK(rta, rlen); rta = RTA_NEXT(rta, rlen)) {
+		if (rta->rta_type != TCA_KIND)
+			continue;
+		const char *k = (const char *)RTA_DATA(rta);
+		size_t klen = RTA_PAYLOAD(rta);
+		return (klen && strnlen(k, klen) < klen) ? k : NULL;
+	}
+	return NULL;
+}
+
+/* ---- what is on the device ------------------------------------------------ */
+
+struct state_walk {
+	int    found_etf;
+	char  *kind;
+	size_t cap;
+};
+
+static void state_each(const struct tcmsg *tcm, const struct rtattr *rta, int rlen,
+                       void *ctx)
+{
+	struct state_walk *w = ctx;
+	const char *k = qdisc_kind(rta, rlen);
+	if (!k)
+		return;
+	if (!strcmp(k, "etf"))
+		w->found_etf = 1;
+	/* Name the ROOT qdisc, which is what an operator sees in `tc qdisc show`. */
+	if (w->kind && w->cap && !w->kind[0] && tcm->tcm_parent == TC_H_ROOT) {
+		strncpy(w->kind, k, w->cap - 1);
+		w->kind[w->cap - 1] = '\0';
+	}
+}
+
+enum reac_etf_qdisc_state reac_etf_qdisc_state(int ifindex, char *kind, size_t cap)
+{
+	if (kind && cap)
+		kind[0] = '\0';
+	if (ifindex <= 0)
+		return REAC_ETF_QDISC_UNREADABLE;
+
+	struct state_walk w = { .found_etf = 0, .kind = kind, .cap = cap };
+	int readable = 0;
+	(void)qdisc_dump(ifindex, state_each, &w, &readable);
 
 	if (!readable)
 		return REAC_ETF_QDISC_UNREADABLE;
-	if (found_etf)
+	if (w.found_etf)
 		return REAC_ETF_QDISC_PRESENT;
 	/* The dump was read and this device appeared in it with a qdisc that is not
 	 * etf. A device that appeared with NO qdisc at all is still ABSENT — that is
 	 * the `noqueue` case the prior art tripped over. */
-	(void)saw_any;
 	return REAC_ETF_QDISC_NONE;
+}
+
+/* ---- what the qdisc DID --------------------------------------------------- */
+
+static void stats_take2(const struct rtattr *st2, struct reac_etf_qdisc_stats *o)
+{
+	int len = (int)RTA_PAYLOAD(st2);
+	for (const struct rtattr *a = RTA_DATA(st2); RTA_OK(a, len); a = RTA_NEXT(a, len)) {
+		if (a->rta_type == TCA_STATS_BASIC &&
+		    RTA_PAYLOAD(a) >= sizeof(struct gnet_stats_basic)) {
+			struct gnet_stats_basic b;
+			memcpy(&b, RTA_DATA(a), sizeof b);
+			o->bytes   += b.bytes;
+			o->packets += b.packets;
+		} else if (a->rta_type == TCA_STATS_QUEUE &&
+		           RTA_PAYLOAD(a) >= sizeof(struct gnet_stats_queue)) {
+			struct gnet_stats_queue q;
+			memcpy(&q, RTA_DATA(a), sizeof q);
+			o->drops      += q.drops;
+			o->overlimits += q.overlimits;
+		}
+	}
+}
+
+/* The pre-STATS2 attribute, for a kernel that answers only this one. */
+static void stats_take1(const struct rtattr *st1, struct reac_etf_qdisc_stats *o)
+{
+	if (RTA_PAYLOAD(st1) < sizeof(struct tc_stats))
+		return;
+	struct tc_stats s;
+	memcpy(&s, RTA_DATA(st1), sizeof s);
+	o->bytes      += s.bytes;
+	o->packets    += s.packets;
+	o->drops      += s.drops;
+	o->overlimits += s.overlimits;
+}
+
+static void stats_each(const struct tcmsg *tcm, const struct rtattr *rta, int rlen,
+                       void *ctx)
+{
+	(void)tcm;
+	struct reac_etf_qdisc_stats *o = ctx;
+	const char *k = qdisc_kind(rta, rlen);
+	if (!k || strcmp(k, "etf") != 0)
+		return;
+	const struct rtattr *st2 = NULL, *st1 = NULL;
+	for (; RTA_OK(rta, rlen); rta = RTA_NEXT(rta, rlen)) {
+		if (rta->rta_type == TCA_STATS2)
+			st2 = rta;
+		else if (rta->rta_type == TCA_STATS)
+			st1 = rta;
+	}
+	o->qdiscs++;
+	if (st2)
+		stats_take2(st2, o);
+	else if (st1)
+		stats_take1(st1, o);
+}
+
+int reac_etf_qdisc_stats_read(int ifindex, struct reac_etf_qdisc_stats *out)
+{
+	if (!out || ifindex <= 0)
+		return -EINVAL;
+	struct reac_etf_qdisc_stats acc;
+	memset(&acc, 0, sizeof acc);
+	int readable = 0;
+	int rc = qdisc_dump(ifindex, stats_each, &acc, &readable);
+	if (rc != 0)
+		return rc;
+	*out = acc;
+	return 0;
 }
 
 

@@ -36,7 +36,7 @@
  * THIS FILE IS THE DECLARATION, AND THE ONLY ONE. reac-pw's reac_rate_cfg.h and
  * reac_role_cfg.h (snapshot in packaging/vendor/reac-pw-headers/) include it and
  * name these macros; they spell none of the strings themselves. A key or code
- * typed a second time anywhere is a red test (tests/conformance-cfg-declared-once.sh).
+ * typed a second time anywhere is a red test (tests/conformance-declared-once.sh).
  */
 #ifndef REAC_CFG_H
 #define REAC_CFG_H
@@ -141,5 +141,9 @@
 /* The swap landed on a slave that no master has enrolled yet: the role is right, the
  * job it names is not being done (reac_role_swap.h). */
 #define REAC_CFG_ROLE_STATE_HUNTING         "role_hunting"
+/* A TAP's answer: it serves what it hears and asserts nothing (REAC_ROLE_INTENT_TAP,
+ * <reac/transport/reac_tap.h>). It never reads "applied", because it performs no role on
+ * the wire, and never "role_hunting", because it courts no master. */
+#define REAC_CFG_ROLE_STATE_TAP             "role_tap"
 
 #endif /* REAC_CFG_H */
