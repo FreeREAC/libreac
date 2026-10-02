@@ -76,3 +76,6 @@ AGENTS.md
 # python bytecode embeds the build machine paths
 __pycache__/
 *.py[co]
+
+# the lane push hook's failure log, written in the worktree
+/.git-push-failures.log
