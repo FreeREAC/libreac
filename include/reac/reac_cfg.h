@@ -141,5 +141,9 @@
 /* The swap landed on a slave that no master has enrolled yet: the role is right, the
  * job it names is not being done (reac_role_swap.h). */
 #define REAC_CFG_ROLE_STATE_HUNTING         "role_hunting"
+/* A TAP's answer: it serves what it hears and asserts nothing (REAC_ROLE_INTENT_TAP,
+ * <reac/transport/reac_tap.h>). It never reads "applied", because it performs no role on
+ * the wire, and never "role_hunting", because it courts no master. */
+#define REAC_CFG_ROLE_STATE_TAP             "role_tap"
 
 #endif /* REAC_CFG_H */
