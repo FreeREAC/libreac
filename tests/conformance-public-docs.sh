@@ -18,6 +18,9 @@
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SELF=tests/conformance-public-docs.sh
+# The one file that may name those paths: the list of what the public history was rewritten
+# without. It records a removal, it cites nothing (tests/conformance-history-drops.sh).
+DROPS=tools/history-drop-paths.txt
 
 # Built from parts so this file does not name the paths it forbids.
 d=docs
@@ -28,7 +31,7 @@ BUILD_RE='(^|[`[:space:]$])(make|meson|cmake|ninja|rpmbuild|pnpm build)([[:space
 check() {
 	t=$1 bad=0
 	hits=$(cd "$t" && grep -rIlE --exclude-dir=.git --exclude-dir=build "$PATH_RE" . 2>/dev/null \
-		| sed 's#^\./##' | grep -vx "$SELF")
+		| sed 's#^\./##' | grep -vx -e "$SELF" -e "$DROPS")
 	if [ -n "$hits" ]; then
 		echo "  ARM 1: these files name an internal docs path; cite the bare slug instead:"
 		printf '    %s\n' $hits

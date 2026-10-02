@@ -1,0 +1,22 @@
+# The internal documents libreac's public history drops (ruled 2026-10-01: the public
+# FreeREAC histories are rewritten without their internal and firmware-RE files).
+# One repository path per line. Each one's home is freereac-ops/libreac/<path>;
+# tools/history-rewrite.sh confirm-ops checks every one is there before the rewrite is
+# pushed, and tests/conformance-history-drops.sh refuses any of them in the tree again.
+#
+# design specs, notes and the audit (moved to freereac-ops by the docs move lane)
+docs/design/specs/2026-09-11-reac-transport-library.md
+docs/design/specs/2026-09-12-bounded-ungranted-courtship.md
+docs/design/specs/2026-09-13-rate-carriers-and-the-enroll-group-map.md
+docs/design/specs/2026-09-13-reac-kernel-module-backend.md
+docs/design/specs/2026-09-14-capturing-a-linked-silent-box.md
+docs/design/specs/2026-09-17-tunables-api-and-shared-refusal-codes.md
+docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md
+docs/design/notes/2026-09-14-kmod-phase1.md
+docs/design/notes/2026-09-21-master-tx-doubling-refuted.md
+docs/design/notes/2026-10-02-one-home-for-what-reac-pw-copies.md
+docs/audits/2026-09-25-libreac-review.md
+# history only: deleted from the tree before the move, never moved by a lane
+docs/CONTROL-PLANE-0.8.md
+docs/REAC-CONTROL-PLANE.md
+docs/layering.md
