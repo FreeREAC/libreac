@@ -7,7 +7,7 @@
 # This is the one recipe for the rewrite, so it can be run again and give the same commits:
 #
 #   tools/history-rewrite.sh rewrite <source> <branch> <backup-tag> <out-dir>
-#       A fresh clone of <source>'s <branch> (and the tags in it) into <out-dir>, the listed
+#       A fresh clone of <source>'s <branch> and every tag into <out-dir>, the listed
 #       paths dropped from every commit with git filter-repo, then `verify`. Refuses unless
 #       <backup-tag> exists on <source> and names <branch>'s head. Pushes nothing; prints
 #       `REWRITE old=<head> new=<head> ...`. Exit 77 where git-filter-repo is not installed.
@@ -86,6 +86,11 @@ rewrite() {
 		return 77
 	fi
 	git clone -q --no-local --single-branch --branch "$branch" "$src" "$out" || return 1
+	# Every tag, one off the branch too: each publishes its own history. The backup tag
+	# stays the old history, so the clone never holds a rewritten copy to push over it.
+	git -C "$out" fetch -q --tags origin || return 1
+	git -C "$out" tag -d "$tag" >/dev/null || return 1
+	git -C "$out" repack -adq || return 1 # one pack again: what filter-repo checks a fresh clone by
 	list=$(mktemp)
 	drop_paths "$ROOT" > "$list"
 	(cd "$out" && git filter-repo --quiet --invert-paths --paths-from-file "$list") || { rm -f "$list"; return 1; }
@@ -96,8 +101,8 @@ rewrite() {
 	return 0
 }
 
-# A planted origin: src.c, then a listed path added (with a tag on that commit), then
-# deleted. g runs git in it with a throwaway identity and no signing.
+# A planted origin: src.c, then a listed path added (with a tag on that commit, and a tag
+# on a commit off the branch), then deleted. g runs git in it with a throwaway identity and no signing.
 g() { r=$1; shift; git -C "$r" -c user.name=t -c user.email=t@example.com -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
 plant() { # <dir>
 	git init -q -b main "$1"
@@ -109,6 +114,8 @@ plant() { # <dir>
 	echo 'int y;' >> "$1/src.c"
 	g "$1" add -A && g "$1" commit -qm "a note and some code"
 	g "$1" tag -a v1 -m v1
+	g "$1" checkout -q -b side && echo 'int s;' > "$1/side.c" && g "$1" add side.c && g "$1" commit -qm "off the branch"
+	g "$1" tag arch && g "$1" checkout -q main && g "$1" branch -q -D side
 	g "$1" rm -q docs/layering.md && g "$1" commit -qm "the note leaves"
 }
 
@@ -167,11 +174,13 @@ self_test_rewrite() {
 	[ "$(git -C "$T/a" show main:src.c)" = "$(git -C "$T/old" show main:src.c)" ] || bad="$bad code-lost"
 	[ "$(git -C "$T/a" rev-list --count main)" = 2 ] || bad="$bad commit-count"
 	git -C "$T/a" rev-parse -q --verify 'v1^{commit}' >/dev/null || bad="$bad tag-lost"
+	git -C "$T/a" rev-parse -q --verify 'arch^{commit}' >/dev/null || bad="$bad off-branch-tag-lost"
+	git -C "$T/a" rev-parse -q --verify 'backup/x' >/dev/null && bad="$bad backup-tag-rewritten"
 	[ "$(git -C "$T/a" rev-parse main)" != "$(git -C "$T/old" rev-parse main)" ] || bad="$bad not-rewritten"
 	rewrite "$T/old" main backup/x "$T/b" >/dev/null 2>&1
 	[ "$(git -C "$T/b" rev-parse main 2>/dev/null)" = "$(git -C "$T/a" rev-parse main)" ] || bad="$bad not-reproducible"
 	if [ -z "$bad" ]; then
-		echo "history-rewrite self-test-rewrite: PASS -- the planted path is gone from every commit and tag, the commit that only deleted it is pruned, the code and the tag stay, a second run gives the same head"
+		echo "history-rewrite self-test-rewrite: PASS -- the planted path is gone from every commit and tag, the commit that only deleted it is pruned, the code and both tags stay (one off the branch), the backup is not rewritten, a second run gives the same head"
 		return 0
 	fi
 	echo "history-rewrite self-test-rewrite: FAILED:$bad"
