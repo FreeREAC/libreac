@@ -70,6 +70,35 @@ enum reac_etf_qdisc_state {
  * per TX queue under an `mq` root. */
 enum reac_etf_qdisc_state reac_etf_qdisc_state(int ifindex, char *root_kind, size_t cap);
 
+/* ---- what the qdisc DID, not what it is ----------------------------------- *
+ *
+ * Under ETF the pacer thread only has to be early: it hands the kernel a launch time
+ * a lead ahead and the qdisc releases the frame at that instant. A frame whose launch
+ * time is already past when it reaches the qdisc is dropped and counted, so `drops`
+ * is the one number that says a frame did not leave. The thread's wake lateness is a
+ * different figure, and it does not move when the wire breaks.
+ *
+ * This is the same RTM_GETQDISC dump reac_etf_qdisc_state reads, answering a
+ * different question: the counters, every health window, for the daemon that owns
+ * the qdisc. Only `etf` qdiscs are summed. On a multiqueue NIC etf sits per TX queue
+ * under an `mq` root, so the sum is over all of them; an fq_codel sharing the device
+ * is somebody else's ledger. TCA_STATS2 is read, and TCA_STATS where a kernel answers
+ * only that, so neither shape reads as a silent zero. */
+struct reac_etf_qdisc_stats {
+	unsigned long long packets;     /* launched, summed over every etf qdisc */
+	unsigned long long bytes;
+	unsigned long long drops;       /* THE figure: frames sch_etf would not launch */
+	unsigned long long overlimits;
+	unsigned int       qdiscs;      /* how many etf qdiscs the sum covers (0 = none) */
+};
+
+/* Read `ifindex`'s etf qdisc counters into `out`. Returns 0 on a dump that reached its
+ * end, with `qdiscs` 0 when the device carries no etf, or -errno. UNREADABLE IS NOT
+ * ZERO: a dump that failed, or ended before NLMSG_DONE, leaves `out` untouched,
+ * because a partial sum would under-report the drops. -EINVAL for ifindex <= 0 or a
+ * NULL `out`. */
+int reac_etf_qdisc_stats_read(int ifindex, struct reac_etf_qdisc_stats *out);
+
 /* ---- the two doors -------------------------------------------------------- *
  *
  * Both return 0, or -errno — NEVER a strerror match. The errno IS the diagnosis and
