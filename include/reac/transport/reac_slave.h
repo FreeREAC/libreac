@@ -121,7 +121,7 @@ struct reac_slave_cfg {
 	 * for a lone segment, exactly as every other per-segment line is tagged. */
 	const char *tag;
 	/* THE MODEL ROW WE PRESENT, when the daemon is running the BOX role
-	 * (reac-pw docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §1). NULL —
+	 * (reac-pw 2026-09-17-the-daemon-can-be-a-box §1). NULL —
 	 * every caller before 1.2.0 — keeps the old behaviour exactly: the declaration
 	 * is keyed by `box_channels` through the captured matrix. A row handed in here
 	 * is what the enrolment DECLARES: its port table, its firmware, its REAC

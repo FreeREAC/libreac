@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* THE PLAIN-LE DIAGNOSTIC STAYS INSIDE THE FRAME. Guard for libreac review 2026-09-25, M6
- * (docs/audits/2026-09-25-libreac-review.md); red on ee205b6, green since the fix.
+ * (2026-09-25-libreac-review); red on ee205b6, green since the fix.
  *
  * reac_decode_plain_le() takes a caller's `struct reac_mode` and reads
  * (s*nch + ch)*3 past offset 50 with no check that the geometry fits the

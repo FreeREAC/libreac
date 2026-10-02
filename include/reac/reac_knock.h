@@ -44,7 +44,7 @@
  * reaches this module.
  *
  * THE CANCELLATION IS NOT A LATCH, AND THAT COST NINE MINUTES OF A DESK (2026-09-21
- * 22:17:45, docs/design/notes/2026-09-21-one-stray-frame-pinned-a-wire.md). A frame
+ * 22:17:45, 2026-09-21-one-stray-frame-pinned-a-wire). A frame
  * belonging to a box on ANOTHER interface was misattributed to `enp128s20f0u6`'s sniffer
  * in the instant it opened. `REAC_KNOCK_CANCELLED` was terminal, so that one frame ended
  * the observation for the life of the process: the wire then carried 0 RX packets for nine

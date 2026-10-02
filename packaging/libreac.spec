@@ -109,7 +109,7 @@ make test
 %changelog
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
 - ONE HOME FOR WHAT reac-pw COPIES (shared-code audit lane A,
-  docs/design/notes/2026-10-02-one-home-for-what-reac-pw-copies.md). reac_code.h's
+  2026-10-02-one-home-for-what-reac-pw-copies). reac_code.h's
   REAC_CODE_LIST gains reac-pw's seven tokens (E_LINK_BUDGET, E_ORPHAN_PAIR,
   E_ROSTER_REMOVE, E_ROSTER_NODE, E_UNKNOWN_KNOB, S_BUDGET_YIELDED, S_NO_OVERRIDES),
   appended so no enumerator moves. reac_cfg.h gains REAC_CFG_ROLE_STATE_TAP "role_tap",
@@ -119,7 +119,7 @@ make test
   read, and names a consumer tree's copies when pointed at one. tests/abi-layout.inc
   records every public struct again (68). LIBREAC_ABI stays 4.
 - THE 2026-09-25 REVIEW'S MEDIUM FINDINGS, each fixed against a proof that was red and now
-  runs in `make test` (docs/audits/2026-09-25-libreac-review.md): reac_detect_rate_fd
+  runs in `make test` (2026-09-25-libreac-review): reac_detect_rate_fd
   measures one stream by its own counter (a 48 kHz session heard both ways read 96 kHz); a
   newly selected clock reference is LOCKING until measured; reac_ctrl_identity_reply
   requires both checksums; reac_boxreg_declare cannot overflow its bound;
@@ -149,7 +149,7 @@ make test
 * Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.5.0-1
 - A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TOPOLOGY TAP HEARS THEM (operator ruling
   2026-09-22, "we must autodetect VLANs when plugged in a switch trunk"; reac-pw's
-  docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md, amendment of that
+  2026-09-16-segments-and-roles-are-autodetected, amendment of that
   date). The tap's BPF passed 0x8819 and nothing else, so a VLAN whose box is COLD was
   invisible: a stagebox is a slave and says nothing until a master speaks, and the master
   cannot speak until the segment's netdev exists. The filter now also admits whatever the
@@ -173,7 +173,7 @@ make test
 
 * Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.4.0-1
 - DECIDING WHAT A WIRE IS BELONGS TO THE LIBRARY, NOT TO THE PIPEWIRE BINDING (operator
-  ruling 2026-09-22; docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md).
+  ruling 2026-09-22; 2026-09-22-enrolment-decisions-belong-to-the-library).
   reac-pw 1.0.22 had put two wire state machines in the daemon: the masterless observation
   that licences driving a vacant wire, and the bounded wait for the topology tap to place a
   sighting. Both are inputs to reac_hunt, which has been in libreac since 0.8.0 -- and
@@ -346,7 +346,7 @@ make test
   8-input group map, as a Roland desk does. Same ABI.
 * Sat Sep 12 2026 Pau Aliagas <linuxnow@gmail.com> - 1.0.1-1
 - An ungranted slave courtship is bounded: 4 s of cold-connect, then 10 s off the wire, then
-  again (spec 2026-09-12-bounded-ungranted-courtship.md); wire duty 100 % -> 37 %. This does
+  again (spec 2026-09-12-bounded-ungranted-courtship); wire duty 100 % -> 37 %. This does
   NOT let a stagebox re-enrol beside a present reac-pw slave: measured 2026-09-12 with an
   M-200, the desk grants whichever slave courts while its box is away, and a granted slave of
   the box's geometry keeps the desk's session alive. The recorder rule stands: a desk's boxes
@@ -363,7 +363,7 @@ make test
   threads, VLAN/topology scan and segment lock, moved unchanged, depending on
   this package. libreac.so itself gains and loses no symbol, so its own ABI is
   untouched; the minor moves because a new build product lands beside it. See
-  docs/design/specs/2026-09-11-reac-transport-library.md.
+  2026-09-11-reac-transport-library.
 
 * Wed Sep 09 2026 Pau Aliagas <linuxnow@gmail.com> - 0.8.0-1
 - THE CONTROL PLANE LIVES HERE NOW. Operator ruling: a daemon is sockets and PipeWire, it

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* A CORRUPT IDENTITY REPLY IS NOT EVIDENCE. Guard for libreac review 2026-09-25, M3
- * (docs/audits/2026-09-25-libreac-review.md); red on ee205b6, green since the fix.
+ * (2026-09-25-libreac-review); red on ee205b6, green since the fix.
  *
  * reac_ctrl_identity_reply() returns 1 for a DT1 identity reply whose OUTER
  * block checksum (sum-to-0 over [18:50]) and INNER record checksum
