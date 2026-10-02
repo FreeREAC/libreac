@@ -8,6 +8,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        # the whole history: tests/conformance-history-drops.sh checks no commit carries
+        # a dropped document, which a shallow clone cannot see
+        with:
+          fetch-depth: 0
       - name: Build + unit tests
         run: make test
       # The transport suite, against the vendored reac-pw headers. Its namespace/veth test

@@ -291,6 +291,12 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) tests/conformance-public-docs.sh
 	$(RUN_TEST) tools/ops-slugs.sh --self-test
 	$(RUN_TEST) tools/ops-slugs.sh
+	# THE DROPPED DOCUMENTS STAY DROPPED: the internal documents the public history was
+	# rewritten without never come back, in the tree or (once rewritten) in the history.
+	# The rewrite's own arm needs git-filter-repo and says SKIP where it is not installed.
+	$(RUN_TEST) tests/conformance-history-drops.sh
+	$(RUN_TEST) tools/history-rewrite.sh --self-test
+	$(RUN_TEST) tools/history-rewrite.sh --self-test-rewrite
 	@$(MAKE) --no-print-directory facts-drift-check
 	@echo "make test: PASS — every arm above ran to the end; make stops at the first red one;" \
 	  "skipped (exit 77, nothing tested): $$(if [ -s $(SKIP_LOG) ]; then tr '\n' ' ' < $(SKIP_LOG); else echo none; fi)"
