@@ -187,7 +187,7 @@ static int fake_setopt_refuses(int fd, int level, int optname,
 }
 
 /* The OTHER way SO_TXTIME fails, and it is not the same problem: the option is
- * there and this process may not set it. MEASURED on r1, uid 0 in a container
+ * there and this process may not set it. MEASURED on a remote build node, uid 0 in a container
  * without CAP_NET_ADMIN. */
 static int fake_setopt_eperm(int fd, int level, int optname,
                              const void *val, socklen_t len)
