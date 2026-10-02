@@ -257,7 +257,9 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# THE CFG VOCABULARY IS DECLARED ONCE (libreac review 2026-09-25, M7).
 	# include/reac/reac_cfg.h is it; reac-pw's headers (vendored snapshot) include it
 	# and alias its names. The shape arm refuses a key typed twice or a macro nobody
-	# reads; test_cfg pins the values the shape cannot see.
+	# reads; test_cfg pins the values the shape cannot see. The same gate refuses a
+	# second REAC_CODE_LIST, a code token typed outside it, and a second RTM_GETQDISC
+	# dump or topology tap read; pointed at a consumer's tree it names that tree's copies.
 	# THE AUDIO FABRIC IS 40 (reac_slots.h's MUTATION-CHECKED note, #69): a 16-wide box
 	# at audio slot 32 must be refused. Widening REAC_AUDIO_FABRIC_SLOTS to 48 reds this.
 	$(CC) $(CFLAGS) $(INC) tests/test_boxreg.c libreac.a -lm -o test_boxreg
@@ -279,7 +281,7 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# unique, and reac-pw's tokens are declared here, so its copy becomes an include.
 	$(CC) $(CFLAGS) $(INC) tests/test_code.c -o test_code
 	$(RUN_TEST) ./test_code
-	$(RUN_TEST) tests/conformance-cfg-declared-once.sh
+	$(RUN_TEST) tests/conformance-declared-once.sh
 	$(CC) $(CFLAGS) $(INC) -Ipackaging/vendor/reac-pw-headers tests/test_cfg.c libreac.a -lm -o test_cfg
 	$(RUN_TEST) ./test_cfg
 	@$(MAKE) --no-print-directory facts-drift-check

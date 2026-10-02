@@ -4,8 +4,8 @@
 /* reac_code — the ONE token list every refusal, failure and notable status line
  * in libreac and its consumers carries (<reac/reac_code.h>).
  *
- * The list is an X-macro so the enum and the token table cannot drift apart. This
- * pins what the X-macro alone does not:
+ * tests/conformance-declared-once.sh refuses a second REAC_CODE_LIST and a token
+ * typed anywhere else. This pins what that shape check cannot see:
  *   1. every token is its enumerator's name without "RC_", so the enum and the
  *      printed token cannot be renamed apart;
  *   2. no two enumerators share a token (a grep for one would match two events);
