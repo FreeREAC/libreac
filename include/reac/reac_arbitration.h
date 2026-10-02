@@ -8,7 +8,7 @@
  * role `master`, a model that never resolved, and a reac-pw that probed forever, because the
  * segment's master topology existed only as scattered evidence nobody added up.
  *
- * This is increment 2 of `docs/design/specs/2026-08-20-reac-master-arbitration.md`: compute the
+ * This is increment 2 of `2026-08-20-reac-master-arbitration`: compute the
  * segment aggregate from the sightings the discovery table already holds plus our own FSM
  * state, and publish it. **PASSIVE — it decides nothing.** Joining a foreign master (§2) and
  * promoting the clock with none (§3) are later increments; this one exists so both can be built

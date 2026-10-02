@@ -1,7 +1,6 @@
 # Launch-time pacing: `SO_TXTIME` + the ETF qdisc
 
-**This is the default.** Operator ruling, 2026-09-14: *"we must go with qdisc and etf"*.
-`REACPW_PACER=thread` opts out.
+**This is the default.** `REACPW_PACER=thread` opts out.
 
 The pacer has two backends. They share one loop, one FSM, one FILLER, one depth guard and one
 set of counters; what differs is **who decides the instant a frame leaves the machine**.
@@ -34,12 +33,12 @@ no-op wearing a default's clothes.
 A REAC slave recovers its word clock from the master's frame inter-arrival interval, so the
 cadence *is* the clock. On the thread backend every scheduling tail between the wake and the
 syscall lands on the wire. This pacer's own instrumentation measures that tail: **3.6 late slots/s
-and 900 ppm of transmit deficit** on the live rig, worst single slot debt 2000 µs over a 30-minute
+and 900 ppm of transmit deficit** on a live segment, worst single slot debt 2000 µs over a 30-minute
 soak (`reac_pacer.h`).
 
 `reac_repacer`, the OpenWrt de-jitter relay, is the prior art for the cure and measured it:
 switching the same mechanism on tightened a relay's egress cadence from **3.6 µs to 1.4 µs** of
-jitter (`reac-aes67-split-src/docs/design/specs/2026-06-11-etf-localin-clock-recovery.md`). Two of
+jitter. Two of
 its laws are carried here rather than rediscovered:
 
 - **The grid is accumulated, never re-based on `now`.** Substituting `deadline = now + period`
@@ -87,8 +86,8 @@ with `reac.pace.backend-refusal` naming the reason.
 | `REAC_ETF_REFUSE_NO_TAI_CLOCK` | `adjtimex` itself failed | — |
 | `REAC_ETF_REFUSE_BAD_LEAD` | `REACPW_PACER_LEAD_US` outside [50, 50000] | — |
 
-**`SO_TXTIME` is capability-gated, and that is a separate code on purpose.** Measured 2026-09-14 on
-A remote build node (kernel 7.1.9, uid 0 inside a container holding `NET_RAW` but not `NET_ADMIN`): `EPERM` on both an
+**`SO_TXTIME` is capability-gated, and that is a separate code on purpose.** Measured on kernel
+7.1.9, uid 0 inside a container holding `NET_RAW` but not `NET_ADMIN`: `EPERM` on both an
 AF_PACKET and a UDP socket. It is the *option* that needs `CAP_NET_ADMIN`, not the qdisc — so the
 refusal is `REAC_ETF_REFUSE_TXTIME_EPERM`, never "this kernel has no SO_TXTIME", because the two have
 different fixes and folding them together sends an operator after a kernel upgrade to cure a
@@ -98,8 +97,7 @@ probe or a daemon run by hand from a shell has neither and will be refused with 
 
 **The qdisc check is the one that matters most.** `reac_repacer` ran with `--etf` for months on a
 port whose root qdisc was `noqueue`: `SO_TXTIME` was set, `SCM_TXTIME` was stamped on every frame,
-and the kernel ignored all of it. It was found by an operator's ear, not by the daemon
-(`REAC-REPACE-MASTER-CLOCK-LIMIT.md`, finding 1). The probe here is an `RTM_GETQDISC` netlink dump
+and the kernel ignored all of it. It was found by ear, not by the daemon. The probe here is an `RTM_GETQDISC` netlink dump
 filtered to one ifindex — no `tc` subprocess — and it distinguishes **unreadable** from **absent**:
 an unreadable dump warns and arms anyway, because a probe that fails closed would refuse correctly
 configured rigs.
@@ -119,9 +117,9 @@ to the stamp: the thread sleeps to `launch − lead`, submits, and the kernel ow
 
     the thread's worst wake tail   2000 µs   MEASURED, this pacer's 30-minute soak
                                              (p50 250, p90 500, p95 750, worst 2000)
-    the qdisc's own `delta`         300 µs   proven on the repacer's rig ports
-                                             (80 µs was ear-validated on one and read
-                                              "slightly beepy" on another)
+    the qdisc's own `delta`         300 µs   proven on the repacer's ports
+                                             (80 µs held on one port and was audibly
+                                              marginal on another)
                                    -------
     REACPW_PACER_LEAD_US default   2500 µs
 
@@ -142,8 +140,7 @@ On every start, for the device it binds:
 | `thread` | remove a **leftover** `etf` root, if one is there; leave anything else alone |
 
 and on a clean exit it removes exactly what it installed, verified by a netlink read-back
-before the delete is issued. The two hazards this closes were both met on 2026-09-14 while
-running the fair comparison:
+before the delete is issued. The two hazards this closes:
 
 - **The qdisc and the backend are one setting.** With `skip_sock_check`, the etf qdisc drops
   every frame that carries no launch time. A daemon running the thread backend under a
@@ -162,53 +159,39 @@ the thread backend saying `EPERM`.
 
 ## The `tc` commands — the debugging path
 
-Nothing below is part of running the desk. It is how to look at, or stand in for, what the
-daemon did.
+Nothing below is part of normal operation. It is how to look at, or stand in for, what the
+daemon did. `<dev>` is the device the daemon binds (a VLAN sub-interface on a trunk, or the
+physical NIC on a direct link).
 
-### The desk as it is today (software ETF)
+### A NIC with no ETF offload (software ETF)
 
-Read off the rig, 2026-09-14:
+    tc qdisc show dev <dev>              # a VLAN sub-interface is `noqueue` by default
+    ethtool -T <nic>                     # `software-transmit` only, `PTP Hardware Clock: none`
 
-    enp131s0        root qdisc fq_codel     Realtek RTL8125 2.5GbE, driver r8169
-    enp131s0.11     root qdisc noqueue
-    enp131s0.12     root qdisc noqueue
-    enp131s0.13     root qdisc noqueue
+Most onboard NICs (Realtek `r8169`, USB adapters) report only software timestamping and have no
+ETF offload. There `offload` is refused and everything below is **software ETF**: the kernel's
+hrtimer releases the packet, which removes the *thread's* wake jitter but not the driver's. A
+hardware-launch arm needs a different NIC — see the next section. A `noqueue` device is
+precisely the silent-no-op condition above: the ETF backend refuses on it, by code, until a
+qdisc is attached.
 
-Two things follow, and both bound what this desk can prove:
+Per device (`delta` is the 300 µs proven on the repacer's ports):
 
-- **No hardware offload here.** `ethtool -T enp131s0` reports `software-transmit` /
-  `software-receive` only and `PTP Hardware Clock: none`. `r8169` has no ETF offload. So `offload`
-  will be refused and everything below is **software ETF**: the kernel's hrtimer releases the
-  packet, which removes the *thread's* wake jitter but not the driver's. A hardware-launch arm needs
-  a different NIC — see the next section.
-- **The VLAN devices are `noqueue`**, which is precisely the silent-no-op condition above. The ETF
-  backend refuses on them today, by code, until a qdisc is attached.
-
-Per VLAN sub-interface (`delta` is the 300 µs proven on the repacer's ports):
-
-    sudo tc qdisc replace dev enp131s0.11 root etf clockid CLOCK_TAI delta 300000 skip_sock_check
-    sudo tc qdisc replace dev enp131s0.12 root etf clockid CLOCK_TAI delta 300000 skip_sock_check
-    sudo tc qdisc replace dev enp131s0.13 root etf clockid CLOCK_TAI delta 300000 skip_sock_check
-
-    tc qdisc show dev enp131s0.11        # must print `qdisc etf`, not `noqueue`
+    sudo tc qdisc replace dev <dev> root etf clockid CLOCK_TAI delta 300000 skip_sock_check
+    tc qdisc show dev <dev>              # must print `qdisc etf`, not `noqueue`
 
 To undo, restoring the device to what it was:
 
-    sudo tc qdisc del dev enp131s0.11 root     # back to noqueue
+    sudo tc qdisc del dev <dev> root     # back to noqueue
 
 **Why `skip_sock_check`, and what it costs.** Without it `sch_etf` drops every packet from a socket
 that did not set `SO_TXTIME` — and the pacer's socket is not the only thing that transmits on a
 segment. With it, unstamped packets are not refused *on the socket check*; a packet carrying no
 launch time at all can still be dropped once the queue is non-empty, because its `tstamp` of 0 reads
-as already expired. **This is not proven on the desk.** It is the first thing the comparative run
-has to check, and it is checked by a ratio the box itself produces — the S-4000's upstream frame
+as already expired. **This is not yet proven on hardware.** It is the first thing the comparative
+run has to check, and it is checked by a ratio the box itself produces — the S-4000's upstream frame
 rate and its ESTABLISHED state — never by the absence of an error message. `iproute2` 6.17.0 accepts
 `skip_sock_check` even though its usage line does not list it.
-
-**A note on the device names.** The 2026-09-12 ruling names VLAN sub-interfaces `reacA`, `reacB`,
-`reacC` (`<nic>.<vid>` overflows `IFNAMSIZ` on some NIC names). The desk is **not** on those names
-today — it carries `enp131s0.11/.12/.13` — so the commands above are written for the devices as they
-actually are. Substitute the minted names wherever the rig has moved to them.
 
 ### A hardware-capable NIC (hardware launch)
 
@@ -237,27 +220,25 @@ offload refused with `Error: Specified device failed to setup ETF hardware offlo
 It never restarts the daemon and never switches the backend — on a live console that is the
 operator's action. It pauses and asks for each arm to be put in place.
 
-To put the desk on the ETF arm for its window:
+To put a machine on the ETF arm for its window:
 
     sudo modprobe sch_etf
-    sudo tc qdisc replace dev enp131s0.11 root etf clockid CLOCK_TAI delta 300000 skip_sock_check
-    tc qdisc show dev enp131s0.11                      # confirm `etf`, not `noqueue`
+    sudo tc qdisc replace dev <dev> root etf clockid CLOCK_TAI delta 300000 skip_sock_check
+    tc qdisc show dev <dev>                            # confirm `etf`, not `noqueue`
     REACPW_PACER=etf REACPW_PACER_LEAD_US=2500 <the daemon's usual start>
 
 and to put it back on the thread arm:
 
     REACPW_PACER=thread <the daemon's usual start>
-    sudo tc qdisc del dev enp131s0.11 root
+    sudo tc qdisc del dev <dev> root
 
 The journal names the backend and the layer that chose it on every open, so which arm is running is
 read off the daemon rather than remembered.
 
-### Measured on the TX device, 2026-09-14 evening
+### Measured on the transmitting device
 
-The first table (mirror capture) read thread ≈ etf; a capture on the *transmitting* device does
-not. Same build for both arms (libreac 1.1.2-2.etf, reac-pw 1.0.6-2.etf), one S-4000S-3208 per
-link, 60 s at 8000 fps, `pace_hist` at 1 µs; full rows and the reading in
-`reac-captures/pace-compare-2026-09-14/direct-link-table.txt`.
+A capture on the *transmitting* device (a mirror port hides most of the difference). Same build
+for both arms, one S-4000S-3208 per link, 60 s at 8000 fps, `pace_hist` at 1 µs:
 
 | arm | interval sd µs | p99 µs | p99.9 µs | late ≥ 1.5× /s | late ≥ 4× /s | catch-up /s |
 |---|---|---|---|---|---|---|
@@ -269,53 +250,24 @@ link, 60 s at 8000 fps, `pace_hist` at 1 µs; full rows and the reading in
 Both NICs are software-only (no PHC), so the etf rows measure the kernel's hrtimer release, not a
 hardware launch. The daemon's own CPU did not rise (1275 vs 1612 process jiffies on the PCI pair).
 
-## Next lane: hardware launch on an Intel i226 (igc)
+## Hardware launch: not implemented
 
-Everything measured above is **software ETF** — the kernel's hrtimer releases the packet, which
-removes the pacer thread's wake jitter and not the driver's. An i225/i226 (`igc`) has ETF
-hardware offload on its TX queues and a PTP hardware clock, so the launch instant moves into
-the NIC. This is the brief for putting the desk on one.
-
-**1. What changes.** The etf qdisc moves off the VLAN device and onto a **hardware TX queue of
-the physical NIC**, under an `mqprio` parent, with `offload on` — a VLAN sub-interface has no TX
-queue of its own to offload onto, so `offload` does not exist there and the present software
-path is the only thing a VLAN device can do. The NIC's **PHC must be disciplined to
-`CLOCK_TAI`** by a `phc2sys` instance that **reac-pw's packaging owns** — a unit shipped by the
-RPM, guarded and reported like every other precondition, never a command someone remembers to
-run. The qdisc's `delta` and the pacer's `REACPW_PACER_LEAD_US` are both **re-measured** for the
-hardware path: their present values are derived from a thread's wake tail and a software qdisc,
-and neither term means the same thing once the NIC owns the instant.
-
-**2. What the daemon does.** It detects the two capabilities rather than being told them:
-`ETHTOOL_GET_TS_INFO` reporting `phc_index >= 0`, and `igc` launchtime on the queue. When both
-hold **and phc2sys reports locked**, it installs the offloaded qdisc; otherwise it installs the
-software etf it installs today. Either way the choice reaches the health/props line beside
-`reac.pace.backend`, and a refusal **names the errno and the fix** — never a silent downgrade,
-which is the same law the software path already follows.
-
-**3. Acceptance.** `tools/pace-compare.sh` on the i226, captured **on the TX device**, 60 s at
-8000 fps, one box per link — the same instrument and the same window as the software rows in
-this document, so the two tables are comparable line for line. Expected: interval standard
-deviation **well under 1 µs**, and **independent of desk load**, which is the property the
-software path cannot have because the release still rides a CPU.
-
-**4. What it does not touch.** The **receive** direction: nothing here measures or changes it.
-And the boxes **do not speak PTP** — the PHC exists to stamp launch times, not to discipline
-anything on the wire, so no box gains or loses a clock reference from this.
+Everything measured above is **software ETF**. On an i225/i226 (`igc`) the etf qdisc would sit on
+a hardware TX queue of the physical NIC under an `mqprio` parent with `offload`, with the NIC's
+PHC disciplined to `CLOCK_TAI`; a VLAN sub-interface has no TX queue of its own to offload onto.
+The daemon does not install that form today, and the `delta` and lead above are derived for the
+software path only.
 
 ## What this does not prove
 
-- **The daemon-installed qdisc has not run on the rig.** The pacing arms in the table above
-  were measured with the qdisc put there by hand. The daemon installing it for itself is
-  proven on a veth in a private namespace (`tests/etf-qdisc-owned.sh` in reac-pw) and by the
-  byte-exact builder test, not yet on the desk.
-- **Software ETF only, on this desk.** The RTL8125 has no PTP hardware clock and no ETF offload, so
-  a hardware-launch arm is not measurable here at all. Any figure this desk produces is about the
-  kernel's hrtimer release, not about a NIC's.
+- **The daemon-installed qdisc is proven on a veth in a private namespace**
+  (`tests/etf-qdisc-owned.sh` in reac-pw) and by the byte-exact builder test; the pacing arms in
+  the table above were measured with the qdisc put there by hand.
+- **Software ETF only.** The NICs measured have no PTP hardware clock and no ETF offload, so every
+  figure here is about the kernel's hrtimer release, not about a NIC's.
 - **`skip_sock_check`'s effect on the segment's other transmitters is unverified**, as above.
-- **No veth arm has run.** `tools/etf-veth-probe.sh` submits a burst with launch times and requires
-  it to ARRIVE as a grid, with an unstamped burst as its control. It has not executed anywhere: the
-  remote build container has no iproute2 and no `CAP_NET_ADMIN`, and the desk was not touched. What that node
-  did establish is narrower and is stated as such — that `SO_TXTIME` is capability-gated.
+- **No veth arm of `tools/etf-veth-probe.sh` has run.** It submits a burst with launch times and
+  requires it to ARRIVE as a grid, with an unstamped burst as its control; it needs iproute2 and
+  `CAP_NET_ADMIN`.
 - The 2500 µs lead's two terms are each measured, but **the sum has never been swept**; the
   comparative run is where a shorter lead gets tried.

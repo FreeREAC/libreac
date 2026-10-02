@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* The model table is DATA, and this test is the licence for saying so
- * (docs/design/specs/2026-09-17-the-daemon-can-be-a-box.md §2, reac-pw's tree).
+ * (2026-09-17-the-daemon-can-be-a-box §2, reac-pw's tree).
  *
  * A row used to BE its captured bytes. So a model nobody has captured — an
  * S-0816, an S-2416, or the operator's 40-channel experiment — could not be a

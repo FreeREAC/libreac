@@ -3,7 +3,7 @@
  *
  * reac_vlan — the netdevs behind the topology detector: `<parent>.<vid>` adopted if it is
  * there, created over rtnetlink if it is not, and removed at the end only if WE made it.
- * (openmixer's 2026-08-23-reac-trunk-vlan-daemon.md §4c, §4d.)
+ * (openmixer's 2026-08-23-reac-trunk-vlan-daemon §4c, §4d.)
  *
  * ONE STORE, ONE WRITER, APPLIED TO HOST NETWORK STATE: the daemon owns exactly the netdevs
  * it minted and nothing else. That dissolves the choice between "the daemon configures the

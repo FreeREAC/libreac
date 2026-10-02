@@ -5,7 +5,7 @@
 # pace-compare.sh -- the SAME metric, on the SAME rig, for every pacer backend.
 #
 # The question this exists to answer is the one that decides whether the kernel
-# module is worth building at all (2026-09-13-reac-kernel-module-backend.md, lane
+# module is worth building at all (2026-09-13-reac-kernel-module-backend, lane
 # 1): does an hrtimer cadence measure better than the SCHED_FIFO thread? The
 # operator's 2026-09-14 ruling widened it -- before anyone loads a module, the
 # STANDARD KERNEL PATH has to be on the same table: SO_TXTIME + the ETF qdisc,

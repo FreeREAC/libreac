@@ -6,7 +6,7 @@
  * Two rulings meet on this wire and this test holds both of them apart.
  *
  * THE FIRST IS SETTLED AND IS ONLY VERIFIED HERE. reac-pw's
- * docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md §1, third bullet:
+ * 2026-09-16-segments-and-roles-are-autodetected §1, third bullet:
  * "a tagged REAC frame heard on a trunk for a VLAN id with NO sub-interface is REPORTED by
  * its id, and the sub-interface is created". The library's half of that is reac_topo — the
  * ETH_P_ALL tap, PACKET_AUXDATA, reac_topo_classify, and the ENSURE event the binding
@@ -363,7 +363,7 @@ static int measure(void)
 		        "  onto vid %d and the tap named no VID. §1's third bullet ('a tagged\n"
 		        "  REAC frame ... is REPORTED by its id') does not hold in this library:\n"
 		        "  either PACKET_AUXDATA is not being read or the classifier lost the\n"
-		        "  tag. (2026-09-16-segments-and-roles-are-autodetected.md §1.)\n",
+		        "  tag. (2026-09-16-segments-and-roles-are-autodetected §1.)\n",
 		        sent_a, VID_REAC);
 		rc = 1;
 	} else if (va == NULL || ensures(VID_REAC) == 0) {

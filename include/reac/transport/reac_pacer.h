@@ -272,7 +272,7 @@ struct reac_pacer_cfg {
 	 * RATE-DEPENDENT and exists for sweeps. Set from REACPW_CATCHUP_MAX_SLOTS;
 	 * see docs/ENV-KNOBS.md. */
 	int catchup_max_slots;
-	/* Drivability (2026-08-26-reac-runtime-config.md §0): which of the closed
+	/* Drivability (2026-08-26-reac-runtime-config §0): which of the closed
 	 * three rates (reac_rate_cfg.h) this segment can actually be driven at. 0
 	 * (a zero-initialised cfg) means REAC_RATE_ALL_BITS — the honest default
 	 * for a daemon with no real probe: declare the whole closed list drivable
@@ -495,7 +495,7 @@ struct reac_pacer {
 	 *                read by the sink node's property poll. The pacer thread must never
 	 *                touch it.
 	 * See reac_disco.h; the seam it feeds is documented in openmixer's
-	 * docs/design/specs/2026-07-16-reac-discovery-via-reac-pw.md.
+	 * 2026-07-16-reac-discovery-via-reac-pw.
 	 *
 	 * disco_peer_lock — PACER-THREAD-ONLY, like disco_gate. One reac_pacer is one segment
 	 * (embedded in the segment's sink node), so its lifetime matches the segment's: a
@@ -523,7 +523,7 @@ struct reac_pacer {
 	_Atomic uint64_t ha_cmd_drops;              /* commands dropped (ring full) */
 	_Atomic uint64_t ha_cmd_applied;            /* commands drained + applied (diag) */
 
-	/* ---- live rate re-establish (2026-08-26-reac-runtime-config.md) --------- *
+	/* ---- live rate re-establish (2026-08-26-reac-runtime-config) --------- *
 	 * A controller asserts `reac.cfg.rate` on the sink node's Props, same
 	 * channel as head-amp. Deciding whether to accept it is PURE
 	 * (reac_rate_cfg_decide) and happens on the caller's thread (the PipeWire

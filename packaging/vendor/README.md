@@ -4,7 +4,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 `reac-pw-headers/reac_rate_cfg.h` and `reac_role_cfg.h` are a **snapshot copy** of the two
 reac-pw headers that `include/reac/transport/reac_pacer.h` and `reac_role_swap.h` still
-`#include` for their pure declarations (`docs/design/specs/2026-09-11-reac-transport-library.md`
+`#include` for their pure declarations (`2026-09-11-reac-transport-library`
 §2/§5 names this seam explicitly — it is not an oversight). They exist here only so
 `packaging/libreac-transport.spec`'s `%build` has something to point `REACPW_INCLUDE` at without
 requiring a reac-pw source checkout inside the libreac SRPM, which would be a real circular build
@@ -38,4 +38,4 @@ snapshot's aliases are what reac-pw's headers become. The one difference ran the
 reac-pw declares the tap's role answer, `REAC_ROLE_STATE_TAP "role_tap"`, and this snapshot
 had dropped it. The tap is libreac's own intent (`REAC_ROLE_INTENT_TAP`), so the answer is now
 declared in `reac_cfg.h` as `REAC_CFG_ROLE_STATE_TAP` and aliased here like the rest
-(docs/design/notes/2026-10-02-one-home-for-what-reac-pw-copies.md).
+(2026-10-02-one-home-for-what-reac-pw-copies).

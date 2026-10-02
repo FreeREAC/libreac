@@ -3,7 +3,7 @@
  *
  * reac_ifscan — WHICH interfaces to listen on, and which of them are SEGMENTS. The host's
  * netdev table, watched over rtnetlink, folded into one decision per interface
- * (openmixer's docs/design/specs/2026-08-23-reac-trunk-vlan-daemon.md §7-§9, amendment
+ * (openmixer's 2026-08-23-reac-trunk-vlan-daemon §7-§9, amendment
  * 2026-09-02: every linked WIRED interface is listened on; nothing is declared per NIC).
  *
  * LINK IS THE GATE TO LISTEN; HEARING IS THE GATE TO SERVE. An Ethernet interface that carries

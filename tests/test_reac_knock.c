@@ -70,8 +70,8 @@ int main(void)
 
 	/* ---- C2. AND THEN IT RE-OPENS, because the observation is about the wire NOW.
 	 *
-	 * THE DEFECT, measured on the desk 2026-09-21 22:17:45 (docs/design/notes/
-	 * 2026-09-21-one-stray-frame-pinned-a-wire.md): a frame belonging to a box on
+	 * THE DEFECT, measured on the desk 2026-09-21 22:17:45 (2026-09-21-one-stray-frame-pinned-a-wire): a
+	 * frame belonging to a box on
 	 * ANOTHER interface was misattributed to `enp128s20f0u6`'s sniffer in the moment it
 	 * opened. That one frame cancelled this licence for good; the wire then carried 0 RX
 	 * packets for nine minutes and the cold S-0808 on the far end of it was never

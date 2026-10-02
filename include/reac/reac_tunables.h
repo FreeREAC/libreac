@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* reac_tunables — the daemon SETS what this library used to read from the environment
- * itself (docs/design/specs/2026-09-17-tunables-api-and-shared-refusal-codes.md).
+ * itself (2026-09-17-tunables-api-and-shared-refusal-codes).
  *
  * Every field here is a PROCESS-WIDE knob (reac_envflag.h's own description, unchanged):
  * read once, before the transport starts, never per-segment. That is why this is three
