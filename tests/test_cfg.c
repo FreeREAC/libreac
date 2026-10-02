@@ -4,7 +4,7 @@
 /* reac_cfg — the ONE declaration of the reac.cfg.* / reac.rate.* / reac.role
  * vocabulary, and the consumer headers that name it (libreac review 2026-09-25, M7).
  *
- * tests/conformance-cfg-declared-once.sh proves the SHAPE (read, never restated).
+ * tests/conformance-declared-once.sh proves the SHAPE (read, never restated).
  * This proves the VALUES line up where a shape test cannot see them:
  *   1. the role flag's encoding is enum reac_role's, not a second 0/1;
  *   2. the closed rate list is the REAC_MODE_* descriptors' rates;

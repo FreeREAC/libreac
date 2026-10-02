@@ -11,8 +11,10 @@
  *
  * Header-only, so linking against this changes no ABI. THIS IS THE ONE LIST: every
  * token reac-pw prints is declared here too, so a consumer's copy becomes a thin
- * `#include <reac/reac_code.h>`. A token is appended, never inserted: the
- * enumerators' values are what a consumer built against an older header compiled in.
+ * `#include <reac/reac_code.h>`, and tests/conformance-declared-once.sh refuses a
+ * second REAC_CODE_LIST or a token typed anywhere else. A token is appended, never
+ * inserted: the enumerators' values are what a consumer built against an older header
+ * compiled in.
  *
  * X-MACRO so the enum, the token table and any enumeration (a conformance test that
  * lists every token) derive from ONE list and cannot drift apart. */
