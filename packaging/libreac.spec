@@ -108,6 +108,16 @@ make test
 
 %changelog
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
+- ONE HOME FOR WHAT reac-pw COPIES (shared-code audit lane A,
+  2026-10-02-one-home-for-what-reac-pw-copies). reac_code.h's
+  REAC_CODE_LIST gains reac-pw's seven tokens (E_LINK_BUDGET, E_ORPHAN_PAIR,
+  E_ROSTER_REMOVE, E_ROSTER_NODE, E_UNKNOWN_KNOB, S_BUDGET_YIELDED, S_NO_OVERRIDES),
+  appended so no enumerator moves. reac_cfg.h gains REAC_CFG_ROLE_STATE_TAP "role_tap",
+  the tap's role answer reac-pw publishes and the one declaration lacked.
+  tests/conformance-declared-once.sh (was conformance-cfg-declared-once.sh) refuses a
+  second code list, a token typed elsewhere, a second RTM_GETQDISC dump or topology tap
+  read, and names a consumer tree's copies when pointed at one. tests/abi-layout.inc
+  records every public struct again (68). LIBREAC_ABI stays 4.
 - THE 2026-09-25 REVIEW'S MEDIUM FINDINGS, each fixed against a proof that was red and now
   runs in `make test` (2026-09-25-libreac-review): reac_detect_rate_fd
   measures one stream by its own counter (a 48 kHz session heard both ways read 96 kHz); a

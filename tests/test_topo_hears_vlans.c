@@ -203,7 +203,17 @@ struct heard {
 	unsigned long on_vid;      /* frames carrying the VID this arm is about    */
 	unsigned long reac_on_vid; /* of those, classified REAC_TOPO_TAGGED        */
 	unsigned long other_on_vid;/* of those, classified REAC_TOPO_TAGGED_OTHER  */
+	unsigned long sender_ok;   /* REAC frames whose sender the read named right  */
+	unsigned long sender_bad;  /* REAC frames with the wrong MAC, port or direction */
 };
+
+/* WHO SENT IT, AS THE KERNEL SAYS. Every arm's frames leave the far end with the source
+ * MAC build_frame writes (02:00:00:00:00:<count>), and arrive inbound on the parent, so
+ * reac_topo_tap_read must report exactly that: the parent's ifindex, not outgoing, and
+ * that MAC. A read that dropped the sender, or named the wrong port, is the regression
+ * a binding's own ifindex test exists to catch. */
+static unsigned parent_ifindex;
+static const uint8_t SENDER_MAC[6] = { 0x02, 0x00, 0x00, 0x00, 0x00, 5 };
 
 /* ENSURE events, per VID, ACROSS ALL ARMS — and the arms need that, because the table and
  * its event queue are shared and a VLAN netdev is not silent just because this test has
@@ -237,12 +247,21 @@ static void drain(struct reac_topo_tap *tap, struct reac_topo *t, uint16_t vid_o
 		if (poll(&p, 1, (int)(ms - elapsed)) <= 0)
 			continue;
 		for (;;) {
-			enum reac_topo_kind kind = REAC_TOPO_NOT_REAC;
-			uint16_t vid = 0;
-			int r = reac_topo_tap_next(tap, &kind, &vid);
+			struct reac_topo_frame f;
+			int r = reac_topo_tap_read(tap, &f);
 			if (r <= 0)
 				break;
+			enum reac_topo_kind kind = f.kind;
+			uint16_t vid = f.vid;
 			h->frames++;
+			if (kind == REAC_TOPO_UNTAGGED ||
+			    (kind == REAC_TOPO_TAGGED && vid == vid_of_interest)) {
+				if (f.ifindex == parent_ifindex && !f.outgoing &&
+				    memcmp(f.src, SENDER_MAC, 6) == 0)
+					h->sender_ok++;
+				else
+					h->sender_bad++;
+			}
 			uint64_t ns = (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
 			if (kind == REAC_TOPO_UNTAGGED)
 				h->untagged++;
@@ -273,6 +292,7 @@ static int measure(void)
 	snprintf(reac_if, sizeof reac_if, "%s.%d", IF_FAR, VID_REAC);
 
 	reac_topo_init(&topo);
+	parent_ifindex = if_nametoindex(PARENT);
 	if (reac_topo_watch(&topo, PARENT) != 0)
 		return nothing_tested("reac_topo_watch refused the parent");
 	if (reac_topo_tap_open(&tap, PARENT) != 0) {
@@ -284,7 +304,7 @@ static int measure(void)
 
 	/* ---- ARM C, FIRST AND ON A VIRGIN TABLE: the switch's own voice on a cold VLAN.
 	 * Nothing REAC has been heard anywhere yet, which is the cold-rig state exactly. */
-	struct heard c = { 0, 0, 0, 0, 0 };
+	struct heard c = { 0, 0, 0, 0, 0, 0, 0 };
 	int sent_c = blast(cold_if, LLDP_ETHERTYPE, 5);
 	if (sent_c <= 0) {
 		reac_topo_tap_close(&tap);
@@ -299,7 +319,7 @@ static int measure(void)
 
 	/* ---- ARM B: the tap can detect presence. Untagged REAC straight onto the parent's
 	 * far end, which is what an access port — and the desk's NATIVE VLAN — looks like. */
-	struct heard b = { 0, 0, 0, 0, 0 };
+	struct heard b = { 0, 0, 0, 0, 0, 0, 0 };
 	int sent_b = blast(IF_FAR, REAC_ETHERTYPE, 5);
 	if (sent_b <= 0) {
 		reac_topo_tap_close(&tap);
@@ -311,7 +331,7 @@ static int measure(void)
 	       "(control: the tap hears)\n", sent_b, b.untagged, trunk_after_b);
 
 	/* ---- ARM A: §1 itself. Tagged REAC on a VID with no sub-interface on this side. */
-	struct heard a = { 0, 0, 0, 0, 0 };
+	struct heard a = { 0, 0, 0, 0, 0, 0, 0 };
 	int sent_a = blast(reac_if, REAC_ETHERTYPE, 5);
 	if (sent_a <= 0) {
 		reac_topo_tap_close(&tap);
@@ -392,6 +412,17 @@ static int measure(void)
 		        "  which VLANs this wire carries is told less than it heard.\n");
 		rc = 1;
 	}
+	printf("sender: REAC frames read with the far end's MAC, the parent's ifindex %u and\n"
+	       "        inbound: A %lu ok / %lu wrong, B %lu ok / %lu wrong\n",
+	       parent_ifindex, a.sender_ok, a.sender_bad, b.sender_ok, b.sender_bad);
+	if (a.sender_ok == 0 || b.sender_ok == 0 || a.sender_bad != 0 || b.sender_bad != 0) {
+		fprintf(stderr, "test_topo_hears_vlans: FAIL — reac_topo_tap_read did not name\n"
+		        "  the sender of every REAC frame: the source MAC, the ifindex the frame\n"
+		        "  arrived on (%s's) and its direction are what a binding checks before it\n"
+		        "  believes a VID, and a read that loses them sends it back to recvmsg.\n",
+		        PARENT);
+		rc = 1;
+	}
 	if (vd != NULL) {
 		fprintf(stderr, "test_topo_hears_vlans: FAIL — vid %d was never carried by\n"
 		        "  anything and the table heard it anyway.\n", VID_NEVER);
@@ -400,7 +431,8 @@ static int measure(void)
 	if (rc == 0)
 		printf("OK: the tap names a tagged REAC VID (§1) and a tagged non-REAC one (the\n"
 		       "    cold VLAN), it hears an untagged parent, only REAC makes a trunk,\n"
-		       "    and a VID nobody carried stays unheard\n");
+		       "    a VID nobody carried stays unheard, and every REAC frame read names\n"
+		       "    its sender: MAC, arrival ifindex, inbound\n");
 	return rc;
 }
 

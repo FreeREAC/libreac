@@ -257,9 +257,28 @@ int reac_topo_tap_open(struct reac_topo_tap *t, const char *parent);
 /* The pollable descriptor for the caller's event loop (spec §7); -1 when not open. */
 int reac_topo_tap_fd(const struct reac_topo_tap *t);
 
-/* Read ONE frame from the tap and classify it. Returns 1 with `*kind`/`*vid` filled, 0 when
- * the socket is dry (EAGAIN), -1 on error. The VID comes from PACKET_AUXDATA when the kernel
- * supplies it, from the buffer when the driver left the tag in it. */
+/* One frame off the tap: what it is, and who the kernel says sent it. */
+struct reac_topo_frame {
+	enum reac_topo_kind kind;
+	uint16_t vid;
+	uint8_t  src[6];       /* the source MAC, zero for a frame too short to carry one */
+	unsigned ifindex;      /* sll_ifindex: the interface the frame really came in on */
+	int      outgoing;     /* sll_pkttype == PACKET_OUTGOING: this host's own transmission */
+};
+
+/* Read ONE frame from the tap and classify it. Returns 1 with `*f` filled, 0 when the
+ * socket is dry (EAGAIN), -1 on error. The VID comes from PACKET_AUXDATA when the kernel
+ * supplies it, from the buffer when the driver left the tag in it.
+ *
+ * THE SENDER IS PART OF THE ANSWER. A packet socket created with a non-zero protocol is
+ * live on every interface until its bind lands, so a frame from another interface can sit
+ * in the queue (the tap no longer opens that way, since 1.2.2). The frame's own
+ * `sll_ifindex` is the only honest answer to where it came from, and a binding compares it
+ * with the parent it tapped before it believes a VID; the source MAC names who sent it in
+ * the line that reports it. */
+int reac_topo_tap_read(struct reac_topo_tap *t, struct reac_topo_frame *f);
+
+/* reac_topo_tap_read, for a caller that wants only the kind and the VID. */
 int reac_topo_tap_next(struct reac_topo_tap *t, enum reac_topo_kind *kind, uint16_t *vid);
 
 void reac_topo_tap_close(struct reac_topo_tap *t);

@@ -4,13 +4,14 @@
 /* reac_cfg — the ONE declaration of the reac.cfg.* / reac.rate.* / reac.role
  * vocabulary, and the consumer headers that name it (libreac review 2026-09-25, M7).
  *
- * tests/conformance-cfg-declared-once.sh proves the SHAPE (read, never restated).
+ * tests/conformance-declared-once.sh proves the SHAPE (read, never restated).
  * This proves the VALUES line up where a shape test cannot see them:
  *   1. the role flag's encoding is enum reac_role's, not a second 0/1;
  *   2. the closed rate list is the REAC_MODE_* descriptors' rates;
  *   3. reac-pw's names (vendored snapshot) resolve to reac_cfg.h's values, and
  *      its refusal tables are indexed right — the idle answer is the same "none"
- *      on both sides, which is the drift this file exists to stop;
+ *      on both sides, which is the drift this file exists to stop, and every role
+ *      answer reac-pw publishes, the tap's "role_tap" included, is declared here;
  *   4. the refusal sentinel is the one libreac's own arbitration publishes. */
 #include <reac/reac.h>
 #include <reac/reac_cfg.h>
@@ -52,6 +53,9 @@ int main(void)
 	CHK(strcmp(REAC_CFG_PROP_ROLE, "reac.cfg.role") == 0);
 	CHK(strcmp(REAC_PROP_ROLE, "reac.role") == 0);
 	CHK(strcmp(REAC_ROLE_STATE_REESTABLISH_PENDING, "role_reestablish_pending") == 0);
+	/* the tap's own role answer: reac-pw publishes it, so the one declaration names it */
+	CHK(strcmp(REAC_CFG_ROLE_STATE_TAP, "role_tap") == 0);
+	CHK(strcmp(REAC_ROLE_STATE_TAP, REAC_CFG_ROLE_STATE_TAP) == 0);
 
 	static const char *const rate_codes[] = REAC_RATE_REFUSE_CODES_INIT;
 	static const char *const role_codes[] = REAC_ROLE_REFUSE_CODES_INIT;

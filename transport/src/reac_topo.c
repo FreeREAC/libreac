@@ -481,13 +481,17 @@ int reac_topo_tap_fd(const struct reac_topo_tap *t)
 	return reac_handle_fd(t->handle);
 }
 
-int reac_topo_tap_next(struct reac_topo_tap *t, enum reac_topo_kind *kind, uint16_t *vid)
+int reac_topo_tap_read(struct reac_topo_tap *t, struct reac_topo_frame *f)
 {
 	uint8_t frame[2048];
 	uint8_t control[CMSG_SPACE(sizeof(struct tpacket_auxdata))];
+	struct sockaddr_ll from;
 	struct iovec iov = { .iov_base = frame, .iov_len = sizeof frame };
 	struct msghdr msg;
+	memset(&from, 0, sizeof from);
 	memset(&msg, 0, sizeof msg);
+	msg.msg_name = &from;
+	msg.msg_namelen = sizeof from;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = control;
@@ -512,10 +516,26 @@ int reac_topo_tap_next(struct reac_topo_tap *t, enum reac_topo_kind *kind, uint1
 			tci = aux.tp_vlan_tci;
 		}
 	}
-	enum reac_topo_kind k = reac_topo_classify(frame, (size_t)n, tci_valid, tci, vid);
-	if (kind)
-		*kind = k;
+	memset(f, 0, sizeof *f);
+	f->ifindex = (unsigned)from.sll_ifindex;
+	f->outgoing = (from.sll_pkttype == PACKET_OUTGOING);
+	if ((size_t)n >= 12)
+		memcpy(f->src, frame + 6, 6);
+	f->kind = reac_topo_classify(frame, (size_t)n, tci_valid, tci, &f->vid);
 	return 1;
+}
+
+int reac_topo_tap_next(struct reac_topo_tap *t, enum reac_topo_kind *kind, uint16_t *vid)
+{
+	struct reac_topo_frame f;
+	int r = reac_topo_tap_read(t, &f);
+	if (r == 1) {
+		if (kind)
+			*kind = f.kind;
+		if (vid)
+			*vid = f.vid;
+	}
+	return r;
 }
 
 void reac_topo_tap_close(struct reac_topo_tap *t)
