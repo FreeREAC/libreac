@@ -25,7 +25,17 @@ string and refusal code they used to type out is an alias of libreac's declarati
 `reac_rate_refuse_code()` / `reac_role_refuse_code()` as the enum-indexed
 `REAC_RATE_REFUSE_CODES_INIT` / `REAC_ROLE_REFUSE_CODES_INIT` tables. The two copies had
 drifted — `""` here, `"none"` in reac-pw for the idle refusal — and
-`tests/conformance-cfg-declared-once.sh` now refuses a string typed a second time.
+`tests/conformance-declared-once.sh` now refuses a string typed a second time.
 **reac-pw's own `src/reac_rate_cfg.h` / `reac_role_cfg.h` must take the same edit**, and
 its `*_refuse_code()` must return from the tables instead of its own literals; until it
 does, this snapshot is ahead of its source.
+
+## Which copy is right where they differ
+
+Every string reac-pw's headers type equals `<reac/reac_cfg.h>`'s value, the idle `"none"`
+included, so for every key libreac declares, libreac's declaration is the right copy and the
+snapshot's aliases are what reac-pw's headers become. The one difference ran the other way:
+reac-pw declares the tap's role answer, `REAC_ROLE_STATE_TAP "role_tap"`, and this snapshot
+had dropped it. The tap is libreac's own intent (`REAC_ROLE_INTENT_TAP`), so the answer is now
+declared in `reac_cfg.h` as `REAC_CFG_ROLE_STATE_TAP` and aliased here like the rest
+(docs/design/notes/2026-10-02-one-home-for-what-reac-pw-copies.md).

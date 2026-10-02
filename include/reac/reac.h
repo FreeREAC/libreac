@@ -303,6 +303,14 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        hunt's vacancy window reads REAC_ANNOUNCE_PERIOD_MS from the generated
  *        reac_facts_timing.h (ADDED). No struct or symbol moves or changes size, so
  *        LIBREAC_ABI stays 4 (61 structs / 578 offsets, unmoved).
+ *        ONE HOME FOR WHAT reac-pw COPIES (shared-code audit lane A): reac_code.h's
+ *        list gains reac-pw's seven tokens, APPENDED; reac_cfg.h's
+ *        REAC_CFG_ROLE_STATE_TAP "role_tap" is ADDED; libreac-transport ADDS
+ *        reac_topo_tap_read() + struct reac_topo_frame (the tap read that names the
+ *        sender) and reac_etf_qdisc_stats_read() + struct reac_etf_qdisc_stats (the etf
+ *        counters, over the one RTM_GETQDISC dump walker). Nothing moves: LIBREAC_ABI
+ *        stays 4, and tests/abi-layout.inc now records all 68 public structs (607
+ *        offsets), five of which had been added since it was last generated.
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
  *        amendment of that date). reac_topo's tap was BPF-filtered to 0x8819, so a VLAN
