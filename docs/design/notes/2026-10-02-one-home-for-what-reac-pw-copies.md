@@ -102,4 +102,8 @@ reac-pw lane decides between aliasing it and calling it a convention, as `"none"
 is not tagged (the last tag is v1.5.0), so these additions join 1.6.0's notes there and in
 both spec changelogs instead of moving the number. Every addition is a new symbol, struct or
 macro, and no existing struct or symbol moves, so LIBREAC_ABI stays 4. The two new structs
-enter `tests/abi-layout.inc` through `tools/gen-abi-layout.py`.
+enter `tests/abi-layout.inc` through `tools/gen-abi-layout.py`. The regeneration also
+recorded five structs added since the table was last generated (`reac_knock`,
+`reac_tapwait_in` and the three tunables records), and `reac_box_model.port_layout`. It
+found them because `tests/test_abi_layout.c` now includes every public header, as its own
+comment already claimed it did.
