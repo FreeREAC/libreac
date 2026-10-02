@@ -15,8 +15,8 @@
  * 2026-09-12, a courting slave of ours kept the desk's own S-1608 from enrolling for
  * 180 s, and a GRANTED slave of ours blocked it outright while it rebooted — four
  * trials. A role that never transmits is a different role, not a quieter one
- * (openmixer docs/design/specs/2026-08-20-reac-master-arbitration.md, eighth amendment;
- * 2026-09-13-reac-plug-and-play.md §0/§4).
+ * (openmixer 2026-08-20-reac-master-arbitration, eighth amendment;
+ * 2026-09-13-reac-plug-and-play §0/§4).
  *
  * WHAT IT SERVES. Per segment it hears: the master's 40-channel downstream broadcast,
  * and ONE upstream stream per box source MAC at that box's own width. Each stream gets

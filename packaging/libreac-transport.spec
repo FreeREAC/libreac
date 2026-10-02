@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac-transport — sockets, pacer, RT threads, VLAN/topology, ring, segment lock.
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
-# docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
+# 2026-09-11-reac-transport-library for what moved and why.
 Name:           libreac-transport
 Version:        1.6.0
 %global abi 5
@@ -92,7 +92,7 @@ PC
   REAC_ROLE_STATE_HUNTING and the vendored reac-pw cfg headers now alias libreac's
   reac_cfg.h instead of typing the vocabulary a second time.
 - THE ONE HOME OF WHAT reac-pw RE-IMPLEMENTS (shared-code audit lane A,
-  docs/design/notes/2026-10-02-one-home-for-what-reac-pw-copies.md). ADDED:
+  2026-10-02-one-home-for-what-reac-pw-copies). ADDED:
   reac_topo_tap_read() and struct reac_topo_frame, the tap read that also names the
   sender (source MAC, the arrival ifindex, outgoing), which reac_topo_tap_next() now
   wraps; reac_etf_qdisc_stats_read() and struct reac_etf_qdisc_stats, the etf counters
@@ -125,7 +125,7 @@ PC
   version string), which gains reac_knock.h and reac_tapwait.h from reac-pw. Those two
   are hunt inputs and the hunt is libreac's, so the transport tier gains no symbol and
   libreac-transport.so.5 is unchanged -- see
-  docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md §2 for why the
+  2026-09-22-enrolment-decisions-belong-to-the-library §2 for why the
   tap-wait sits beside the hunt it guards rather than beside the tap it waits for.
 
 * Mon Sep 21 2026 Pau Aliagas <linuxnow@gmail.com> - 1.3.2-1
@@ -262,4 +262,4 @@ PC
   reac_linkmon, reac_segment_ident, reac_seglock, reac_role_swap, reac_ring, reac_rt,
   reac_pace_watch, reac_ifname, reac_conf, reac_mac and reac_carrier (renamed from reac-pw's
   local reac_link, distinct from libreac's own protocol-level reac_link) move here unchanged
-  from reac-pw. See docs/design/specs/2026-09-11-reac-transport-library.md.
+  from reac-pw. See 2026-09-11-reac-transport-library.

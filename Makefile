@@ -180,14 +180,14 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) ./test_identity
 	# WHEN A WIRE NOBODY CONFIGURED MAY BE DRIVEN, and how long a sighting the
 	# topology tap has not placed holds the hunt off it. Both are the hunt's own
-	# inputs (docs/design/specs/2026-09-22-enrolment-decisions-belong-to-the-library.md)
+	# inputs (2026-09-22-enrolment-decisions-belong-to-the-library)
 	# and both used to live in reac-pw, where a libreac change could not see them
 	# go red. Pure: a clock and a verdict, no socket, no frame.
 	$(CC) $(CFLAGS) $(INC) tests/test_reac_knock.c libreac.a -lm -o test_reac_knock
 	$(RUN_TEST) ./test_reac_knock
 	$(CC) $(CFLAGS) $(INC) tests/test_reac_tapwait.c libreac.a -lm -o test_reac_tapwait
 	$(RUN_TEST) ./test_reac_tapwait
-	# Library reads no environment (2026-09-17-tunables-api-and-shared-refusal-codes.md).
+	# Library reads no environment (2026-09-17-tunables-api-and-shared-refusal-codes).
 	$(CC) $(CFLAGS) $(INC) tests/test_no_getenv_conformance.c -o test_no_getenv_conformance
 	$(RUN_TEST) ./test_no_getenv_conformance
 	# THE TABLE IS DATA. Every block synthesised from a row's declared facts, with
@@ -264,7 +264,7 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# at audio slot 32 must be refused. Widening REAC_AUDIO_FABRIC_SLOTS to 48 reds this.
 	$(CC) $(CFLAGS) $(INC) tests/test_boxreg.c libreac.a -lm -o test_boxreg
 	$(RUN_TEST) ./test_boxreg
-	# THE 2026-09-25 REVIEW'S GUARDS (docs/audits/2026-09-25-libreac-review.md), each red
+	# THE 2026-09-25 REVIEW'S GUARDS (2026-09-25-libreac-review), each red
 	# on ee205b6 and each with a control arm that exits 2 (NOT A RESULT) if its own
 	# harness is broken. Rate detection measures one stream (M1); a new clock reference
 	# is acquired before it is locked (M2); an identity reply must close both checksums
@@ -284,6 +284,13 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) tests/conformance-declared-once.sh
 	$(CC) $(CFLAGS) $(INC) -Ipackaging/vendor/reac-pw-headers tests/test_cfg.c libreac.a -lm -o test_cfg
 	$(RUN_TEST) ./test_cfg
+	# THE PUBLIC TREE CARRIES AUTHORED DOCS, NOT INTERNALS. Specs, notes and audits live in
+	# freereac-ops and are cited by bare slug: the public half refuses a docs path, a docs
+	# tree or a build command in the README; the ops half resolves every slug in the
+	# sibling checkout, and says OPS-ABSENT (SKIP) where there is none.
+	$(RUN_TEST) tests/conformance-public-docs.sh
+	$(RUN_TEST) tools/ops-slugs.sh --self-test
+	$(RUN_TEST) tools/ops-slugs.sh
 	@$(MAKE) --no-print-directory facts-drift-check
 	@echo "make test: PASS — every arm above ran to the end; make stops at the first red one;" \
 	  "skipped (exit 77, nothing tested): $$(if [ -s $(SKIP_LOG) ]; then tr '\n' ' ' < $(SKIP_LOG); else echo none; fi)"
@@ -301,7 +308,7 @@ conformance:
 	$(RUN_TEST) tools/conformance-headamp-base.sh
 	$(RUN_TEST) tools/conformance-packet-socket.sh
 	# THE HARNESS IS AN INSTRUMENT, AND AN INSTRUMENT IS GATED LIKE ONE. The
-	# pacer comparison (2026-09-13-reac-kernel-module-backend.md, lane 1) is
+	# pacer comparison (2026-09-13-reac-kernel-module-backend, lane 1) is
 	# decided by a table; a table whose two columns cannot be made to differ
 	# would read as "no difference" on the day. This drives pace_hist and the
 	# table renderer with a clean grid and with the userspace pacer's own
@@ -369,7 +376,7 @@ topo_bind_probe: tools/topo_bind_probe.c transport/src/reac_topo.c transport/src
 
 # --- libreac-transport: sockets, pacer, RT threads, VLAN/topology, ring, segment lock ---
 # The pieces of reac-pw that never touch PipeWire
-# (docs/design/specs/2026-09-11-reac-transport-library.md). A second, PARALLEL object
+# (2026-09-11-reac-transport-library). A second, PARALLEL object
 # family -- never folded into the OBJS glob above, or every transport file becomes part
 # of libreac's own soname and the whole point of a second library is lost.
 #

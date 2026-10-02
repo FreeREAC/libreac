@@ -3,7 +3,7 @@
 
 /* reac_segment_ident — WHAT A SEGMENT IS, in whichever role it is running, so a
  * console addresses the SEGMENT and never a node kind
- * (docs/design/specs/2026-08-20-reac-master-arbitration.md §1 and §8, in the
+ * (2026-08-20-reac-master-arbitration §1 and §8, in the
  * openmixer tree; docs/SLAVE-EMULATION-SCOPE.md W1).
  *
  * THE DEFECT THIS CLOSES. A segment's identity was only ever recoverable by
@@ -13,7 +13,7 @@
  * alone), so the same segment is addressable as a mixer and unaddressable as a
  * recorder. The console could therefore drive a segment TO recorder and never
  * back. Recovering a fact by parsing a name is the defect the port contract
- * already names (2026-08-21-reac-adapter-pace-and-port-contract.md: constructing
+ * already names (2026-08-21-reac-adapter-pace-and-port-contract: constructing
  * a name to address a node is fine, parsing one to recover a fact is not); here
  * it also happens to be role-dependent, which is what made it fatal rather than
  * merely untidy. REAC_PROP_SEGMENT declares the identity instead.

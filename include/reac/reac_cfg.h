@@ -3,7 +3,7 @@
 
 /* reac_cfg — the `reac.cfg.*` / `reac.rate.*` PipeWire property vocabulary: how
  * a console reconfigures a RUNNING reac-pw over the graph instead of a config
- * file or a restart (docs/design/specs/2026-08-26-reac-runtime-config.md).
+ * file or a restart (2026-08-26-reac-runtime-config).
  *
  * ONE DECLARATION, BOTH SIDES (spec §2). reac-pw's `param_changed` reads these
  * keys off a segment's `reac-playback[.<inst>]` node and answers on them;

@@ -3,7 +3,7 @@
 
 /* reac_role_swap — what a segment ANSWERS while a `reac.cfg.role` change is
  * being carried out, and once it has been
- * (docs/design/specs/2026-08-20-reac-master-arbitration.md §8, in the openmixer
+ * (2026-08-20-reac-master-arbitration §8, in the openmixer
  * tree). reac_role_cfg decides an assertion; this module answers for it
  * afterwards.
  *
