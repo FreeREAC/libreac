@@ -17,6 +17,7 @@ test_upstream
 test_encode
 test_decode
 test_ports
+test_grant_width
 *.o
 *.a
 test_facts

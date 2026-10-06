@@ -51,14 +51,19 @@ struct reac_headamp_tx;   /* reac_headamp_tx.h — the per-channel head-amp stat
  * Where a box's AUDIO lands is reac_boxreg's decision, in REAC_AUDIO_FABRIC_SLOTS
  * (see reac_slots.h and #69; the two must not be merged by a future #129 edit). */
 
-/* The widest box we can enroll (S-4000S = 32 inputs). */
-#define REAC_GRANT_MAX_WIDTH 32
+/* The widest box a master grants: the whole 40-channel REAC frame. This is the
+ * REAC law, not a new limit (operator ruling 2026-10-06): a REAC frame carries 40
+ * channels and a box declares its inputs and outputs in multiples of four, in any
+ * combination, so a box may declare all 40 as inputs. The old 32 was the widest
+ * stock box (S-4000S-3208), and a 40-in / 0-out box declaring itself was refused
+ * here and never granted. */
+#define REAC_GRANT_MAX_WIDTH 40
 
 /* The sweep's frame count for a width-w box: 2 fixed head frames + 6 group-B
  * records + w*3 group-A records. w=8 -> 32, w=16 -> 56, w=32 -> 104 — matching the
  * three real M-200/M-5000 goldens frame-for-frame. */
 #define REAC_GRANT_SWEEP_LEN(w) (8 + (w) * 3)
-#define REAC_GRANT_SWEEP_MAX    REAC_GRANT_SWEEP_LEN(REAC_GRANT_MAX_WIDTH)   /* 104 */
+#define REAC_GRANT_SWEEP_MAX    REAC_GRANT_SWEEP_LEN(REAC_GRANT_MAX_WIDTH)   /* 128 */
 
 /* A slot allocation: the box's `width` inputs occupy head-amp slots
  * [base, base+width). Both fields are the MASTER's decision — this is a routing
