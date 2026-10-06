@@ -249,6 +249,11 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.5.1: A BOX IS GRANTED AT ANY WIDTH IT CAN DECLARE. REAC_GRANT_MAX_WIDTH is 40, the
+ *        REAC frame's channel count (operator ruling 2026-10-06), not 32; a 40 in / 0 out
+ *        box was refused and never granted. struct reac_master's grant_burst grows from
+ *        104 to 128 rows, which moves struct reac_master and struct reac_pacer: LIBREAC_ABI
+ *        4 -> 5, libreac-transport's soname 5 -> 6, tests/abi-layout.inc regenerated.
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's docs/design/specs/2026-09-16-segments-and-roles-are-autodetected.md,
  *        amendment of that date). reac_topo's tap was BPF-filtered to 0x8819, so a VLAN
@@ -292,7 +297,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
 #define LIBREAC_VERSION_MINOR 5
-#define LIBREAC_VERSION_PATCH 0
+#define LIBREAC_VERSION_PATCH 1
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
@@ -304,7 +309,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
  * number; packaging/make-tarball.sh refuses a tarball whose spec disagrees. */
-#define LIBREAC_ABI 4
+#define LIBREAC_ABI 5
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)
