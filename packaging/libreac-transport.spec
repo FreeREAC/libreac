@@ -3,8 +3,8 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # docs/design/specs/2026-09-11-reac-transport-library.md for what moved and why.
 Name:           libreac-transport
-Version:        1.5.0
-%global abi 5
+Version:        1.5.1
+%global abi 6
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
 
@@ -87,6 +87,13 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Tue Oct 06 2026 Pau Aliagas <linuxnow@gmail.com> - 1.5.1-1
+- A BOX IS GRANTED AT ANY WIDTH IT CAN DECLARE (operator ruling 2026-10-06: a REAC frame
+  carries 40 channels; a box declares inputs and outputs in multiples of four, in any
+  combination). REAC_GRANT_MAX_WIDTH 32 -> 40: the REAC law, not a new limit. A 40 in /
+  0 out box was refused by the grant and looped CONFIG -> GRANTING -> PROBING.
+  grant_burst grows to 128 rows: LIBREAC_ABI 4 -> 5, libreac-transport abi 5 -> 6.
+
 * Tue Sep 22 2026 Pau Aliagas <linuxnow@gmail.com> - 1.5.0-1
 - THE CHANGE IS IN THIS LIBRARY: reac_topo's tap hears every 802.1Q tag on a trunk, not
   only the ones on REAC frames, so a VLAN whose box is cold is discovered instead of
