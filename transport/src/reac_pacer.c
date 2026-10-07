@@ -563,6 +563,7 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 		blk[1] = sight.has_decl;
 		blk[2] = sight.decl_in;
 		blk[3] = sight.decl_out;
+		blk[4] = sight.announced_slots;
 		pev_push(p, REAC_PEV_SIGHTING, (uint8_t)sight.role, 0, sight.mac, blk);
 	}
 
@@ -957,6 +958,7 @@ int reac_pacer_log_drain(struct reac_pacer *p, FILE *out)
 			s.has_decl = e.blk[1];
 			s.decl_in = e.blk[2];
 			s.decl_out = e.blk[3];
+			s.announced_slots = e.blk[4];
 			/* The geometry the classifier read, carried over the ring: it is what
 			 * separates a desk's 40-channel downstream from a stagebox strapped to
 			 * master, and the table merges the WIDEST it has seen from a peer. */

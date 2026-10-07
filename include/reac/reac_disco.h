@@ -93,6 +93,10 @@ struct reac_disco_sighting {
 	/* The box family its identity page named (enum reac_box_family), 0 when unknown.
 	 * A passive frame never carries it; the master fills it in for its own peer. */
 	uint8_t family;
+	/* The `total_slots` a master announce (cfea, block[15]) carried, 0 when this frame
+	 * is not one (1.7.0). A desk writes 0x28 there; a box on M writes its own input
+	 * width (reac.ksy `cfea_payload.announces_box`). */
+	uint8_t announced_slots;
 	/* The peer's DATA-FRAME WIDTH in channels, from the frame length alone; 0 when the frame
 	 * carried no legal `52 + n*36` geometry. The role field says what the peer CLAIMS; this
 	 * says what it IS, and a stagebox strapped to master mode claims master while emitting a
@@ -168,6 +172,7 @@ struct reac_disco_entry {
 	uint8_t mac[6];
 	enum reac_disco_role role;
 	uint8_t has_decl, decl_in, decl_out, family;   /* as in the sighting */
+	uint8_t announced_slots;   /* the latest cfea total_slots heard, 0 = none yet */
 	/* The widest geometry heard from this peer; 0 while none was legal. Kept as a MAX rather
 	 * than last-wins: a control frame carries no audio geometry, so a peer's data frames are
 	 * what answer, and one stray short frame must not erase them. */

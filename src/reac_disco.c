@@ -141,6 +141,15 @@ static int classify_core(struct reac_disco_peer_lock *lock, const uint8_t *frame
 	memset(out, 0, sizeof *out);
 	memcpy(out->mac, p.src, 6);
 	out->role = role_of(&p);
+	/* What a master announce says about its sender: the slot total at block[15]
+	 * (reac.ksy cfea_payload.total_slots). */
+	if (len >= REAC_CTRL_BLOCK_OFF + REAC_CTRL_BLOCK_LEN && frame[16] == 0xcf &&
+	    frame[17] == 0xea) {
+		const uint8_t *cb = frame + REAC_CTRL_BLOCK_OFF;
+		if (cb[4] == 0x01 && cb[5] == 0x03 && cb[6] == 0x0d && cb[7] == 0x01 &&
+		    cb[8] == 0x04)
+			out->announced_slots = cb[15];
+	}
 	/* What the peer declared, when this is its config announce. */
 	{
 		struct reac_box_ports ports;
@@ -286,6 +295,10 @@ int reac_disco_table_observe(struct reac_disco_table *t,
 			e->decl_out = s->decl_out;
 			changed = 1;
 		}
+		if (s->announced_slots && e->announced_slots != s->announced_slots) {
+			e->announced_slots = s->announced_slots;
+			changed = 1;
+		}
 		if (s->family && e->family != s->family) {
 			e->family = s->family;
 			changed = 1;
@@ -328,6 +341,7 @@ int reac_disco_table_observe(struct reac_disco_table *t,
 	e->decl_in = s->decl_in;
 	e->decl_out = s->decl_out;
 	e->family = s->family;
+	e->announced_slots = s->announced_slots;
 	e->channels = s->channels;
 	e->owned = owned ? 1 : 0;
 	e->first_seen_ns = now_ns;

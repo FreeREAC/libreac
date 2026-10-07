@@ -124,6 +124,10 @@ make test
 - A box that joins after the console first asked for its identity is asked
   again, so its firmware and hardware block are no longer left empty.
 - Carries forward 1.5.1's fix: a box may declare any width up to 40 channels.
+- A stagebox in master mode is recognised as a box from what it announces (its own
+  channel count) or the width it broadcasts; a 40-channel master that has not
+  announced itself yet is waited on instead of being taken for a desk. A 40-input
+  box in master mode still reads as a desk until one has been captured.
 - Developers: reac_box_facts.h is new; the catalogue functions are renamed
   (reac_box_catalogue*), reac_box_master_model is gone, and discovery reports
   declared widths. LIBREAC_ABI 6.

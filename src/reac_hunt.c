@@ -84,6 +84,7 @@ int reac_hunt_observe(struct reac_hunt *h, const uint8_t *frame, size_t len,
 			out->decl_in = e->decl_in;
 			out->decl_out = e->decl_out;
 			out->family = e->family;
+			out->announced_slots = e->announced_slots;
 			out->channels = e->channels;
 			break;
 		}
@@ -218,8 +219,13 @@ static enum reac_hunt_verdict decide(const struct reac_hunt *h, uint64_t now_ns)
 	 *
 	 * Immediate, either way: a master on the wire is not a maybe, and there is nothing
 	 * a longer wait could add. */
-	if (h->arb.state == REAC_SEGMENT_FOREIGN)
+	if (h->arb.state == REAC_SEGMENT_FOREIGN) {
+		/* A 40-slot master that has not announced itself is a desk or a 40-input box
+		 * on M: undecided, so the hunt waits for its cfea rather than guess (1.7.0). */
+		if (h->arb.rival == REAC_RIVAL_PENDING)
+			return REAC_HUNT_HUNTING;
 		return h->arb.rival == REAC_RIVAL_UNKNOWN ? REAC_HUNT_REFUSED : REAC_HUNT_SLAVE;
+	}
 
 	/* No master evidence. Before calling the wire vacant, refuse to race a broadcast
 	 * stream whose owner has not proven its role yet — for at most its declared window. */

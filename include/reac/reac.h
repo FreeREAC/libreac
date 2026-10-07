@@ -296,7 +296,10 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        the master re-polls the page once a second after the box has joined until the
  *        firmware and hw block are in (REAC_M_EMIT_IDENTITY_POLL, APPENDED;
  *        reac_master_identity_answered, ADDED) — an S-0808 polled before its JOIN never
- *        answered. struct reac_master and struct reac_pacer grow: LIBREAC_ABI 5 -> 6,
+ *        answered. A desk is told from a box on M by its cfea total_slots and its broadcast
+ *        width (reac_rival_kind_of; REAC_RIVAL_PENDING, APPENDED, while a 1492 B master has
+ *        not announced itself), never by its record kinds; the discovery structs carry
+ *        announced_slots. struct reac_master and struct reac_pacer grow: LIBREAC_ABI 5 -> 6,
  *        libreac-transport's soname 6 -> 7.
  * 1.6.0: THE 2026-09-25 REVIEW'S FIXES (2026-09-25-libreac-review). A minor,
  *        not a patch, because reac_cfg.h's PUBLIC vocabulary moves: REAC_CFG_REFUSED_NONE is

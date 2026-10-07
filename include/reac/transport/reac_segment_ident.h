@@ -108,7 +108,7 @@ struct reac_segment_answer {
 	char master_mac[24];     /* REAC_PROP_MASTER_MAC:      aa:bb:… or "none"        */
 	char pace_source[16];    /* REAC_PROP_PACE_SOURCE:     foreign-master | free-run */
 	char conflict[2];        /* REAC_PROP_MASTER_CONFLICT: always "0" — see below   */
-	char rival_kind[8];      /* REAC_PROP_RIVAL_KIND:      desk | box | unknown | none */
+	char rival_kind[8];      /* REAC_PROP_RIVAL_KIND:      desk | box | unknown | pending | none */
 	char refusal[24];        /* REAC_PROP_REFUSAL:         none | rival-master-*    */
 	char rate[8];            /* REAC_PROP_RATE:            the wire pace, decimal Hz */
 };
