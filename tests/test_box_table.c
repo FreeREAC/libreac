@@ -53,7 +53,7 @@ static int same_bytes(const char *what, const char *token,
 int main(void)
 {
 	size_t n = 0;
-	const struct reac_box_model *t = reac_box_model_table(&n);
+	const struct reac_box_model *t = reac_box_catalogue(&n);
 	CHK(t && n >= 3);
 
 	int derived_seen = 0, captured_seen = 0;
@@ -170,18 +170,18 @@ int main(void)
 
 	/* ---- ARM 4: the rows nobody has seen, by name ---- */
 	const struct reac_box_model *m;
-	CHK((m = reac_box_model_by_token("s0816")) && m->in_ch == 8 && m->out_ch == 16);
-	CHK((m = reac_box_model_by_token("s2416")) && m->in_ch == 24 && m->out_ch == 16);
-	CHK((m = reac_box_model_by_token("s4000d")) && m->in_ch == 0 && m->out_ch == 32);
-	CHK((m = reac_box_model_by_token("s4000m")) && m->in_ch == 32 && m->out_ch == 0);
+	CHK((m = reac_box_catalogue_by_token("s0816")) && m->in_ch == 8 && m->out_ch == 16);
+	CHK((m = reac_box_catalogue_by_token("s2416")) && m->in_ch == 24 && m->out_ch == 16);
+	CHK((m = reac_box_catalogue_by_token("s4000d")) && m->in_ch == 0 && m->out_ch == 32);
+	CHK((m = reac_box_catalogue_by_token("s4000m")) && m->in_ch == 32 && m->out_ch == 0);
 	/* THE 0832 SPLIT IS NO LONGER A GUESS — and the S-4000H token it briefly had
 	 * is gone with it: the M-200 displays this chassis as an S-4000S, which is
 	 * what a box sending no name record must be called. */
-	CHK(reac_box_model_by_token("s4000h") == NULL);
+	CHK(reac_box_catalogue_by_token("s4000h") == NULL);
 	/* The S-4000S split the corpus HAS, and the one it does not. */
-	CHK((m = reac_box_model_by_token("s4000s")) && m->in_ch == 32 && m->out_ch == 8);
+	CHK((m = reac_box_catalogue_by_token("s4000s")) && m->in_ch == 32 && m->out_ch == 8);
 	CHK(m->origin == REAC_BOX_CAPTURED);
-	CHK((m = reac_box_model_by_token("s4000s-0832")) && m->in_ch == 8 && m->out_ch == 32);
+	CHK((m = reac_box_catalogue_by_token("s4000s-0832")) && m->in_ch == 8 && m->out_ch == 32);
 	CHK(m->origin == REAC_BOX_CAPTURED);
 	CHK(m->identity_shape == REAC_BOX_IDENTITY_ROLAND);   /* the same chassis */
 	CHK(m->port_layout == REAC_BOX_PORTS_SPLIT_OUT_FIRST);
@@ -191,15 +191,15 @@ int main(void)
 	/* THE OPERATOR'S EXPERIMENT: the protocol's full 40-channel width, either
 	 * way round, with no Roland model behind it. 40 and not 48 — the port table
 	 * spans 48 channels but the downstream frame carries 40 slots. */
-	CHK((m = reac_box_model_by_token("fr4000")) && m->in_ch == 40 && m->out_ch == 0);
+	CHK((m = reac_box_catalogue_by_token("fr4000")) && m->in_ch == 40 && m->out_ch == 0);
 	CHK(m->origin == REAC_BOX_DERIVED && m->identity_shape == REAC_BOX_IDENTITY_FREEREAC);
-	CHK((m = reac_box_model_by_token("fr0040")) && m->in_ch == 0 && m->out_ch == 40);
-	CHK((m = reac_box_model_by_token("fr2020")) && m->in_ch == 20 && m->out_ch == 20);
+	CHK((m = reac_box_catalogue_by_token("fr0040")) && m->in_ch == 0 && m->out_ch == 40);
+	CHK((m = reac_box_catalogue_by_token("fr2020")) && m->in_ch == 20 && m->out_ch == 20);
 	/* EVERY ROW is a box: each direction zero or an even 2..40 (reac_box_width_ok) —
 	 * 40 included, a box may fill the fabric (operator ruling 2026-09-25). */
 	{
 		size_t n;
-		const struct reac_box_model *t = reac_box_model_table(&n);
+		const struct reac_box_model *t = reac_box_catalogue(&n);
 		for (size_t i = 0; i < n; i++) {
 			CHK(t[i].in_ch == 0 || reac_box_width_ok(t[i].in_ch));
 			CHK(t[i].out_ch == 0 || reac_box_width_ok(t[i].out_ch));
@@ -210,14 +210,14 @@ int main(void)
 	/* A WIDTH STILL NAMES ONLY A CAPTURED ROW. Derived rows are addressed by
 	 * token alone — otherwise an experiment row would start answering for a real
 	 * box's width on a wire, which is the defect a fixed matrix exists to stop. */
-	CHK((m = reac_box_model_by_channels(16)) && m->origin == REAC_BOX_CAPTURED);
+	CHK((m = reac_box_catalogue_by_width(16)) && m->origin == REAC_BOX_CAPTURED);
 	CHK(strcmp(m->token, "s1608") == 0);
-	CHK((m = reac_box_model_by_channels(8)) && strcmp(m->token, "s0808") == 0);
+	CHK((m = reac_box_catalogue_by_width(8)) && strcmp(m->token, "s0808") == 0);
 	CHK(m->origin == REAC_BOX_CAPTURED);   /* NOT the 8-input S-4000H */
-	CHK((m = reac_box_model_by_channels(32)) && strcmp(m->token, "s4000s") == 0);
+	CHK((m = reac_box_catalogue_by_width(32)) && strcmp(m->token, "s4000s") == 0);
 	/* A width with no captured row falls back to the S-1608 — the documented
 	 * default, asserted by name (an origin check here could never fail). */
-	CHK((m = reac_box_model_by_channels(40)) && strcmp(m->token, "s1608") == 0);
+	CHK((m = reac_box_catalogue_by_width(40)) && strcmp(m->token, "s1608") == 0);
 
 	/* ---- THE ROW REACHES THE WIRE. A width can only name a CAPTURED row, so
 	 * this is the door a derived model declares itself through: build the
@@ -227,21 +227,21 @@ int main(void)
 		static const uint8_t MASTER[6] = { 0x00, 0x40, 0xab, 0x01, 0x02, 0x03 };
 		static const uint8_t SRC[6]    = { 0x00, 0x40, 0xab, 0x0f, 0x0e, 0x0d };
 		uint8_t frame[2048], want[32];
-		const struct reac_box_model *fr = reac_box_model_by_token("fr4000");
+		const struct reac_box_model *fr = reac_box_catalogue_by_token("fr4000");
 		CHK(fr && reac_box_model_upstream_width(fr) == 40);
 		size_t len = reac_ctrl_build_as(frame, fr, REAC_BOX_BLOCK_CONFIG,
 		                                MASTER, SRC, 1, NULL, 0);
 		CHK(len == reac_ctrl_box_frame_len(40));
 		CHK(reac_box_model_block(fr, REAC_BOX_BLOCK_CONFIG, want) == 1);
 		CHK(memcmp(frame + 18, want, 32) == 0);
-		CHK(reac_ctrl_identify_box(frame, len) == fr);
+		CHK(reac_box_catalogue_match(frame, len) == fr);
 		/* The identity the mixer will read back is OURS, not a Roland box's. */
 		CHK(reac_ctrl_build_as(frame, fr, REAC_BOX_BLOCK_IDENT_FIRST,
 		                       MASTER, SRC, 2, NULL, 0) > 0);
 		CHK(memcmp(frame + 18 + 21, "FR-4000", 7) == 0);
 		/* An output-only row still speaks: the declaration says zero inputs and
 		 * the frame carries the minimum pair (an assumption, named in the spec). */
-		const struct reac_box_model *d = reac_box_model_by_token("fr0040");
+		const struct reac_box_model *d = reac_box_catalogue_by_token("fr0040");
 		CHK(d && d->in_ch == 0 && reac_box_model_upstream_width(d) == 2);
 		CHK(reac_ctrl_build_as(frame, d, REAC_BOX_BLOCK_CONFIG,
 		                       MASTER, SRC, 3, NULL, 0) == reac_ctrl_box_frame_len(2));
@@ -249,7 +249,7 @@ int main(void)
 		CHK(memcmp(frame + 18, want, 32) == 0);
 		/* And a CAPTURED row built through this door is the same bytes the
 		 * width-keyed builder has always emitted — one declaration, two doors. */
-		const struct reac_box_model *s16 = reac_box_model_by_token("s1608");
+		const struct reac_box_model *s16 = reac_box_catalogue_by_token("s1608");
 		uint8_t legacy[2048];
 		size_t l1 = reac_ctrl_build_as(frame, s16, REAC_BOX_BLOCK_CONFIG,
 		                               MASTER, SRC, 4, NULL, 0);
@@ -260,7 +260,7 @@ int main(void)
 	/* Bad arguments refuse; they never write a half block. */
 	uint8_t blk[32];
 	CHK(reac_box_model_block(NULL, REAC_BOX_BLOCK_CONFIG, blk) < 0);
-	CHK(reac_box_model_block(reac_box_model_by_token("s1608"),
+	CHK(reac_box_model_block(reac_box_catalogue_by_token("s1608"),
 	                         REAC_BOX_BLOCK_CONFIG, NULL) < 0);
 
 	printf("OK: reac_box_model — the table is DATA: the synthesiser reproduces "

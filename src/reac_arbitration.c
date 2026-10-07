@@ -155,7 +155,7 @@ enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e)
 {
 	if (!e)
 		return REAC_RIVAL_NONE;
-	if (e->model != NULL || e->role == REAC_DISCO_ROLE_BOX)
+	if (e->has_decl || e->role == REAC_DISCO_ROLE_BOX)
 		return REAC_RIVAL_BOX;        /* it said what it is, or spoke as only a box does */
 	if (e->channels == 0)
 		return REAC_RIVAL_UNKNOWN;    /* no stream heard yet: refused, §4 */
@@ -203,7 +203,7 @@ enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t
 {
 	if (!e)
 		return REAC_RIVAL_NONE;
-	if (e->model != NULL || e->role == REAC_DISCO_ROLE_BOX || e->role == REAC_DISCO_ROLE_MASTER)
+	if (e->has_decl || e->role == REAC_DISCO_ROLE_BOX || e->role == REAC_DISCO_ROLE_MASTER)
 		return reac_rival_kind_of(e);   /* its own frames already said what it is */
 	if (e->channels == 0)
 		return REAC_RIVAL_UNKNOWN;      /* nothing heard to hold on */

@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 	uint8_t model_blk[32];
 	int stream_ch = BOX_CHANNELS;
 	if (argc > 3 && argv[3][0]) {
-		model = reac_box_model_by_token(argv[3]);
+		model = reac_box_catalogue_by_token(argv[3]);
 		if (!model) {
 			fprintf(stderr, "fake_box: no table row named '%s'\n", argv[3]);
 			return 2;

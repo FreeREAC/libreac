@@ -349,14 +349,20 @@ struct reac_ctrl_parsed {
 enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
                                     struct reac_ctrl_parsed *out);
 
-/* ---- FIXED box-model matrix ----
- * A REAC stagebox is identified on the wire by three orthogonal fields (see
- * docs/REAC-BOX-STATE-DIAGRAM.md): the config-announce SELECTOR byte (model
- * family), an optional ASCII NAME frame (exact model within the 0x84 family),
- * and the channel DESCRIPTOR + width (52 + 36*in_ch bytes). We ship a fixed
- * table of byte-verified real models so a model always matches its channels —
- * there is no "S-1608 with 8 channels". Pick a row by token or by in-channel
- * count; both resolve to the same entry. */
+/* ---- THE MODEL CATALOGUE (operator ruling 2026-10-07) ----
+ * What each REAC box model puts on the wire, written down for TWO uses only:
+ *
+ *   EMULATION  the bytes a box-role daemon sends to declare the model it
+ *              emulates (reac_box_model_block, reac_ctrl_build_as);
+ *   OFFLINE    planning a show (rider, patch) for boxes that are not connected.
+ *
+ * A CONNECTED box is never sized, named or filled in from here. Its widths come
+ * from its config announce (reac_ports_parse), its family from its identity page
+ * (reac_box_family_of) and its name from both (reac_box_name, reac_box_facts.h).
+ * reac_box_catalogue_match only says which entry a declaration is byte-equal to,
+ * so a binding can log a CATALOGUE DEFECT when that entry disagrees with what the
+ * box said (reac_box_catalogue_defect). Rows marked UNVERIFIED come from a spec
+ * sheet: nobody here has captured one. */
 struct reac_box_model {
 	const char *token;      /* CLI token: "s1608", "s0808"              */
 	const char *display;    /* human label for --help / logs            */
@@ -510,13 +516,16 @@ size_t reac_ctrl_build_as(uint8_t *out, const struct reac_box_model *m,
                           const uint8_t src[6], uint16_t counter,
                           float *const *planar, int ns);
 
-const struct reac_box_model *reac_box_model_by_token(const char *token);
-const struct reac_box_model *reac_box_model_by_channels(int in_ch);
-const struct reac_box_model *reac_box_model_table(size_t *count);
+/* Catalogue lookups, for EMULATION and OFFLINE planning only. `_by_width` keeps
+ * the width-keyed emulation builders working and falls back to the S-1608 entry
+ * for a width no entry has, which is why it must never name a box on a wire. */
+const struct reac_box_model *reac_box_catalogue_by_token(const char *token);
+const struct reac_box_model *reac_box_catalogue_by_width(int in_ch);
+const struct reac_box_model *reac_box_catalogue(size_t *count);
 
-/* The box a cold-connect/config frame belongs to, or NULL when no row matches.
- * Never guesses: an unknown width is unknown, not the nearest model. */
-const struct reac_box_model *reac_ctrl_identify_box(const uint8_t *frame, size_t len);
+/* The catalogue entry a config announce is byte-equal to, or NULL. Not a source
+ * of facts about the box: use it only to compare (reac_box_catalogue_defect). */
+const struct reac_box_model *reac_box_catalogue_match(const uint8_t *frame, size_t len);
 
 /* The wire length of a box->master frame at a given input width. */
 size_t reac_ctrl_box_frame_len(int n_ch);
@@ -543,13 +552,6 @@ size_t reac_ctrl_build_flood_filler(uint8_t *out, const uint8_t bcast[6],
                                     int n_ch, float *const *planar, int ns);
 
 
-
-/* MASTER-side box RECOGNITION (the mirror of the slave emitter): given a raw
- * received frame, if it is a box config-announce (cdea 01 03 0010) whose
- * descriptor block matches a fixed-matrix row, return that model; else NULL.
- * "The matrix is law as a stagebox; as a mixer we read the frame and use the
- * matrix as the default" — a NULL means no known model, and the caller falls
- * back to the descriptor/width carried in the frame. PURE (no socket). */
 
 /* The RETIRED --box pin's one and only remaining job: say ONCE that what somebody
  * typed disagrees with what the wire declared. `*pin` is the raw pin value
@@ -592,9 +594,35 @@ size_t reac_ctrl_build_identity_last(uint8_t *out, const uint8_t master[6],
  * checksum that does not close — a corrupt reply is not evidence), and <0 on a NULL
  * argument. It handles ONLY single-record replies — the firmware (0x0000) and
  * the hardware block (0x0600), which fit one control block. The model NAME
- * arrives as TWO link-4 fragments (REAC_CTRL_RECORD_FRAGMENT) and is not
- * reassembled here; a consumer that wants the name text reads it from the
- * config-announce width/model instead. */
+ * arrives as TWO link-4 fragments; reac_ctrl_identity_fragment reassembles it. */
+/* THE IDENTITY POLL, on its own (1.7.0). Writes the i-th (0..REAC_GRANT_GROUPB_LEN-1)
+ * of the six RQ1s a console sends for the identity page — 0x0000 (4), 0x0600 (8),
+ * 0x1000 (17), 0x1011 (9), 0x1100 (17), 0x1111 (9) — as the 34-byte [16:50] window,
+ * byte-identical to the grant sweep's group B. A master sends them again once the
+ * box has JOINED, because a box polled before its JOIN does not answer: an S-0808 on
+ * reac-pw (reacA-s0808-reacpw-coldboot.pcap, 2026-10-07) was polled 0.8 s before
+ * its JOIN and never sent its firmware. Returns 0, or -1 on a bad index. */
+int reac_ctrl_identity_poll_block(int i, uint8_t out[34]);
+
+/* THE NAME RECORD, REASSEMBLED (1.7.0). The identity page's 0x1000 reply is 17 bytes
+ * and arrives as two link-4 fragments, op 0x0401 (FIRST) then 0x0402 (LAST) from the
+ * same box (reac.ksy `record_fragment`; the S-0808 sends it, S-0808 corpus). Feed
+ * every frame; a FIRST is kept, and the LAST from the same source closes it. When
+ * the joined SysEx is a valid DT1 on tag 0x0500 — Roland header, both block
+ * checksums, the inner checksum across both fragments, f7 — sets *addr_lo and points
+ * *payload / *payload_len into `f` (valid until the next call) and returns 1, for
+ * reac_identity_ingest. Returns 0 for any other frame or a record that does not
+ * close, <0 on a NULL argument. Zero-initialise `f` before the first call. */
+struct reac_identity_frag {
+	uint8_t src[6];
+	uint8_t have_first;
+	uint8_t len;
+	uint8_t buf[64];
+};
+int reac_ctrl_identity_fragment(struct reac_identity_frag *f, const uint8_t *frame,
+                                size_t len, uint16_t *addr_lo,
+                                const uint8_t **payload, size_t *payload_len);
+
 int reac_ctrl_identity_reply(const uint8_t *frame, size_t len, uint16_t *addr_lo,
                              const uint8_t **payload, size_t *payload_len);
 /* The box cold-connect (cdea 04 03): the 32-byte control block over LIVE audio

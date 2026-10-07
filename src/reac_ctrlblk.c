@@ -404,7 +404,7 @@ size_t reac_ctrl_box_frame_len(int n_ch)
  * (selector byte = displayed model family; sum mod 256 == 0 with its trailing
  * check byte), plus, for the 0x84 family, the identity record that names the
  * exact model. All blocks byte-matched to matrix-m200/m5000-s1608 / -s0808. */
-static const struct reac_box_model BOX_MODELS[] = {
+static const struct reac_box_model BOX_CATALOGUE[] = {
 	{ .token = "s1608", .display = "S-1608 (16 in / 8 out)", .in_ch = 16, .out_ch = 8,
 	  .selector = 0x82, .headamp_strap = 0x02, .origin = REAC_BOX_CAPTURED,
 	  .identity_shape = REAC_BOX_IDENTITY_ROLAND,
@@ -518,8 +518,10 @@ static const struct reac_box_model BOX_MODELS[] = {
 		0x00, 0x01, 0x00, 0x02, 0x70, 0xf7, 0x00, 0xf4 },
 	},
 
-	/* ---- DERIVED ROWS — models nobody in this project has ever put on a wire
-	 * (2026-09-17). They carry NO captured bytes, because there are none: a row
+	/* ---- DERIVED ROWS, UNVERIFIED — models nobody in this project has ever put
+	 * on a wire (2026-09-17). The S-0816, S-2416, S-4000D and S-4000M are real
+	 * Roland models taken from their spec sheets; none has been captured here.
+	 * The FreeREAC rows are ours. They carry NO captured bytes, because there are none: a row
 	 * is its declared facts and every block it emits is synthesised from them by
 	 * reac_box_synth.c, whose licence is that the same generator reproduces the
 	 * three rows above byte for byte (tests/test_box_table.c arm 1).
@@ -602,6 +604,7 @@ static const struct reac_box_model BOX_MODELS[] = {
 	/* The operator named these two as the models we have never seen. Their
 	 * identity is OURS: a FreeREAC name, this daemon's own firmware number, and
 	 * REAC major 9, which no Roland box has ever sent. */
+	/* UNVERIFIED: a real Roland S-0816 (spec sheet, no capture). */
 	{ .token = "s0816", .display = "S-0816 (8 in / 16 out)", .in_ch = 8, .out_ch = 16,
 	  .selector = 0x84, .headamp_strap = 0x00, .origin = REAC_BOX_DERIVED,
 	  .identity_shape = REAC_BOX_IDENTITY_FREEREAC,
@@ -650,18 +653,18 @@ static const struct reac_box_model BOX_MODELS[] = {
 	  .fw_milli = 1014, .reac_major = 9, .reac_minor = 0, .reac_patch = 14 },
 };
 
-const struct reac_box_model *reac_box_model_table(size_t *count)
+const struct reac_box_model *reac_box_catalogue(size_t *count)
 {
-	if (count) *count = sizeof(BOX_MODELS) / sizeof(BOX_MODELS[0]);
-	return BOX_MODELS;
+	if (count) *count = sizeof(BOX_CATALOGUE) / sizeof(BOX_CATALOGUE[0]);
+	return BOX_CATALOGUE;
 }
 
-const struct reac_box_model *reac_box_model_by_token(const char *token)
+const struct reac_box_model *reac_box_catalogue_by_token(const char *token)
 {
-	size_t n = sizeof(BOX_MODELS) / sizeof(BOX_MODELS[0]);
+	size_t n = sizeof(BOX_CATALOGUE) / sizeof(BOX_CATALOGUE[0]);
 	for (size_t i = 0; i < n; i++)
-		if (token && strcmp(BOX_MODELS[i].token, token) == 0)
-			return &BOX_MODELS[i];
+		if (token && strcmp(BOX_CATALOGUE[i].token, token) == 0)
+			return &BOX_CATALOGUE[i];
 	return NULL;
 }
 
@@ -672,17 +675,17 @@ const struct reac_box_model *reac_box_model_by_token(const char *token)
  * model nobody has seen can be ASKED FOR by token; letting a width reach one
  * would make an experiment row answer for a real box on a real wire, which is
  * the guess this fixed matrix exists to refuse. */
-const struct reac_box_model *reac_box_model_by_channels(int in_ch)
+const struct reac_box_model *reac_box_catalogue_by_width(int in_ch)
 {
-	size_t n = sizeof(BOX_MODELS) / sizeof(BOX_MODELS[0]);
+	size_t n = sizeof(BOX_CATALOGUE) / sizeof(BOX_CATALOGUE[0]);
 	for (size_t i = 0; i < n; i++)
-		if (BOX_MODELS[i].in_ch == in_ch &&
-		    BOX_MODELS[i].origin == REAC_BOX_CAPTURED)
-			return &BOX_MODELS[i];
-	return &BOX_MODELS[0];   /* default: S-1608 */
+		if (BOX_CATALOGUE[i].in_ch == in_ch &&
+		    BOX_CATALOGUE[i].origin == REAC_BOX_CAPTURED)
+			return &BOX_CATALOGUE[i];
+	return &BOX_CATALOGUE[0];   /* default: S-1608 */
 }
 
-const struct reac_box_model *reac_ctrl_identify_box(const uint8_t *frame, size_t len)
+const struct reac_box_model *reac_box_catalogue_match(const uint8_t *frame, size_t len)
 {
 	/* Recognize the connected box's MODEL from its config-announce
 	 * (link 1, opcode 0x82 / 0x84 / 0x80) by matching the 32-byte descriptor
@@ -703,7 +706,7 @@ const struct reac_box_model *reac_ctrl_identify_box(const uint8_t *frame, size_t
 	 * synthesis is byte-identical to the captured bytes for every captured row
 	 * (tests/test_box_table.c arm 1), so this recognises the three real boxes
 	 * exactly as before AND names an S-0816 the first time one is heard. */
-	size_t n; const struct reac_box_model *t = reac_box_model_table(&n);
+	size_t n; const struct reac_box_model *t = reac_box_catalogue(&n);
 	for (size_t i = 0; i < n; i++) {
 		uint8_t blk[32];
 		if (reac_box_model_block(&t[i], REAC_BOX_BLOCK_CONFIG, blk) != 1)
@@ -911,11 +914,11 @@ static size_t ctrl_emit_as(uint8_t *out, const struct ctrl_frame *f,
 		return 0;   /* a width-keyed row too: 41 must not quietly become an S-1608 */
 
 	/* THE ROW IS THE CALLER'S WHEN THE CALLER HAS ONE. A width can only ever
-	 * name a captured model (reac_box_model_by_channels answers for those
+	 * name a captured model (reac_box_catalogue_by_width answers for those
 	 * alone), so a box-role daemon declaring a derived row passes it here; every
 	 * existing caller passes NULL and keeps the width-keyed behaviour exactly. */
 	const struct reac_box_model *m = model ? model
-	                                       : reac_box_model_by_channels(n_ch);
+	                                       : reac_box_catalogue_by_width(n_ch);
 	if (!ctrl_gate_ok(m, (enum ctrl_gate)f->gate))
 		return 0;
 
@@ -1341,6 +1344,63 @@ static const uint8_t GRANT_GROUPB[REAC_GRANT_GROUPB_LEN][34] = {
 	{ 0xcd, 0xea, 0x04, 0x03, 0x00, 0x13, 0x00, 0x02, 0x00, 0xfe, 0x0e, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x11, 0x05, 0x00, 0x11, 0x00, 0x11, 0x59, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03 },
 	{ 0xcd, 0xea, 0x04, 0x03, 0x00, 0x13, 0x00, 0x02, 0x00, 0xfe, 0x0e, 0xf0, 0x41, 0x0a, 0x00, 0x00, 0x12, 0x11, 0x05, 0x00, 0x11, 0x11, 0x09, 0x50, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03 },
 };
+
+int reac_ctrl_identity_poll_block(int i, uint8_t out[34])
+{
+	if (!out || i < 0 || i >= REAC_GRANT_GROUPB_LEN)
+		return -1;
+	memcpy(out, GRANT_GROUPB[i], 34);
+	return 0;
+}
+
+int reac_ctrl_identity_fragment(struct reac_identity_frag *f, const uint8_t *frame,
+                                size_t len, uint16_t *addr_lo,
+                                const uint8_t **payload, size_t *payload_len)
+{
+	if (!f || !frame || !addr_lo || !payload || !payload_len)
+		return -1;
+	if (len < REAC_CTRL_BLOCK_OFF + REAC_CTRL_BLOCK_LEN)
+		return 0;
+	const uint8_t *blk = frame + REAC_CTRL_BLOCK_OFF;
+	if (frame[16] != 0xcd || frame[17] != 0xea || blk[0] != 0x04 ||
+	    (blk[1] != 0x01 && blk[1] != 0x02))
+		return 0;
+	if (blk[4] != 0x00 || blk[5] != 0x02 || blk[6] != 0x00 || blk[7] != 0xfe)
+		return 0;
+	unsigned n = blk[8];
+	if (n == 0 || 9 + n > REAC_CTRL_BLOCK_LEN - 1)
+		return 0;
+	if (reac_ctrl_checksum_verify(frame) != 0)
+		return 0;
+	if (blk[1] == 0x01) {                      /* FIRST: keep it */
+		memcpy(f->src, frame + 6, 6);
+		memcpy(f->buf, blk + 9, n);
+		f->len = (uint8_t)n;
+		f->have_first = 1;
+		return 0;
+	}
+	/* LAST: close the record the same box opened. */
+	if (!f->have_first || memcmp(f->src, frame + 6, 6) != 0 ||
+	    (size_t)f->len + n > sizeof f->buf) {
+		f->have_first = 0;
+		return 0;
+	}
+	memcpy(f->buf + f->len, blk + 9, n);
+	unsigned total = f->len + n;
+	f->have_first = 0;
+	const uint8_t *r = f->buf;
+	/* f0 41 dev 00 00 12 | 12 | 05 00 | addr(2) | payload | cksum | f7 */
+	if (total < 14 || r[0] != 0xf0 || r[1] != 0x41 || r[3] != 0x00 || r[4] != 0x00 ||
+	    r[5] != REAC_DT1_MODEL_LO || r[6] != REAC_DT1_CMD_DT1 ||
+	    r[7] != 0x05 || r[8] != 0x00 || r[total - 1] != 0xf7)
+		return 0;
+	if (reac_ctrl_record_cksum_verify(&r[7], (size_t)total - 8) != 0)
+		return 0;
+	*addr_lo = (uint16_t)((r[9] << 8) | r[10]);
+	*payload = &r[11];
+	*payload_len = (size_t)total - 13;
+	return 1;
+}
 
 /* Emit ONE group-A record via the proven head-amp builder. We build into a scratch
  * frame and lift its [16:50] rather than re-deriving the record bytes: that keeps

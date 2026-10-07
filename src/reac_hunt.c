@@ -71,7 +71,7 @@ int reac_hunt_observe(struct reac_hunt *h, const uint8_t *frame, size_t len,
 	 * reports the same box as `box (8 ch)` off its declaration and
 	 * `unknown (32 ch)` off its flood — which is exactly what the operator read
 	 * on VLAN 13 on 2026-09-17 and could not resolve. The table is where facts
-	 * CORROBORATE: a role only ever sharpens, a model is byte-exact or absent,
+	 * CORROBORATE: a role only ever sharpens, a declaration is what the box sent or absent,
 	 * and the width is the widest geometry the peer has shown. */
 	if (out) {
 		*out = s;
@@ -80,7 +80,10 @@ int reac_hunt_observe(struct reac_hunt *h, const uint8_t *frame, size_t len,
 			if (memcmp(e->mac, s.mac, 6) != 0)
 				continue;
 			out->role = e->role;
-			out->model = e->model;
+			out->has_decl = e->has_decl;
+			out->decl_in = e->decl_in;
+			out->decl_out = e->decl_out;
+			out->family = e->family;
 			out->channels = e->channels;
 			break;
 		}

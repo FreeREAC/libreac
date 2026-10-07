@@ -1007,10 +1007,18 @@ void reac_master_regrant(struct reac_master *m)
 	enter_granting(m, m->box_mac, NULL);
 }
 
+void reac_master_identity_answered(struct reac_master *m, int complete)
+{
+	if (m)
+		m->identity_complete = complete ? 1 : 0;
+}
+
 static void enter_established(struct reac_master *m)
 {
 	m->state = REAC_M_ESTABLISHED;
 	m->session_seq++;        /* a new session: see the field's contract */
+	m->identity_polls = 0;
+	m->identity_poll_left = 0;
 	/* Same continuous control cadence as PROBING (PROBE + the four 1/s
 	 * streams), phase-offset so they never contend for a slot. */
 	reset_control_cadence(m);
@@ -1258,6 +1266,21 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 				m->scene_step = 0;
 				return REAC_M_EMIT_SCENE_HEAD;
 			}
+		}
+		/* THE IDENTITY RE-POLL: six RQ1s, one every grant_stride slots, armed once a
+		 * second (half a second after the cfea) while the box has not answered. */
+		if (m->identity_poll_left > 0) {
+			if (++m->identity_poll_slot >= m->grant_stride) {
+				m->identity_poll_slot = 0;
+				*idx = REAC_GRANT_GROUPB_LEN - m->identity_poll_left;
+				m->identity_poll_left--;
+				return REAC_M_EMIT_IDENTITY_POLL;
+			}
+		} else if (!m->identity_complete && m->identity_polls < REAC_M_IDENTITY_POLLS &&
+		           m->announce_tick == m->fps / 2) {
+			m->identity_polls++;
+			m->identity_poll_left = REAC_GRANT_GROUPB_LEN;
+			m->identity_poll_slot = 0;
 		}
 		/* NOTE: the locked cadence otherwise emits NOTHING else — no SUB01/SUB02
 		 * (the "0 sub01/sub02 established" invariant a real M-200 holds; the
@@ -1538,6 +1561,13 @@ int reac_master_stamp(const struct reac_master *m, uint8_t *frame,
 			return -1;
 		apply_block(frame, m->grant_burst[tmpl_idx]);
 		return 0;
+	case REAC_M_EMIT_IDENTITY_POLL: {
+		uint8_t blk[34];
+		if (reac_ctrl_identity_poll_block(tmpl_idx, blk) != 0)
+			return -1;
+		apply_block(frame, blk);
+		return 0;
+	}
 	case REAC_M_EMIT_ENROLL:
 		apply_block(frame, m->enroll_blk);  /* cdea 01 03 000d, per-mixer console byte */
 		return 0;

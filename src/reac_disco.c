@@ -4,6 +4,9 @@
 /* Passive REAC sighting classifier + table. See reac_disco.h for the why. */
 #include <reac/reac_disco.h>
 #include <reac/reac.h>   /* reac_frame_channels */
+#include <reac/reac_box_facts.h>
+#include <reac/reac_ctrlblk.h>
+#include <reac/reac_ports.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -138,9 +141,18 @@ static int classify_core(struct reac_disco_peer_lock *lock, const uint8_t *frame
 	memset(out, 0, sizeof *out);
 	memcpy(out->mac, p.src, 6);
 	out->role = role_of(&p);
-	/* Byte-exact config-block match or NULL. Never reac_box_model_by_channels: its
-	 * S-1608 default (reac_ctrl.c:394) would name a box that was never identified. */
-	out->model = reac_ctrl_identify_box(frame, len);
+	/* What the peer declared, when this is its config announce. */
+	{
+		struct reac_box_ports ports;
+		if (len >= REAC_CTRL_BLOCK_OFF + REAC_CTRL_BLOCK_LEN &&
+		    reac_ports_parse(frame + REAC_CTRL_BLOCK_OFF, &ports) == 0 &&
+		    ports.in_ch >= 0 && ports.in_ch <= REAC_MAX_CHANNELS &&
+		    ports.out_ch >= 0 && ports.out_ch <= REAC_MAX_CHANNELS) {
+			out->has_decl = 1;
+			out->decl_in = (uint8_t)ports.in_ch;
+			out->decl_out = (uint8_t)ports.out_ch;
+		}
+	}
 	/* The geometry, straight off the length: what the peer IS, beside what it claims.
 	 * `len` IS THE FRAME'S LENGTH — this classifier no longer strips a capture path's
 	 * +2 on its caller's behalf. The doors that take wire bytes do that
@@ -170,29 +182,6 @@ int reac_disco_classify_on_segment(struct reac_disco_peer_lock *lock, const uint
 	return classify_core(lock, frame, len, our_mac, out);
 }
 
-int reac_disco_model_index(const struct reac_box_model *m)
-{
-	if (!m)
-		return -1;
-	size_t count = 0;
-	const struct reac_box_model *base = reac_box_model_table(&count);
-	for (size_t i = 0; i < count; i++)
-		if (&base[i] == m)
-			return (int)i;
-	return -1;
-}
-
-const struct reac_box_model *reac_disco_model_by_index(int idx)
-{
-	if (idx < 0)
-		return NULL;
-	size_t count = 0;
-	const struct reac_box_model *base = reac_box_model_table(&count);
-	if ((size_t)idx >= count)
-		return NULL;
-	return &base[idx];
-}
-
 void reac_disco_gate_init(struct reac_disco_gate *g)
 {
 	memset(g, 0, sizeof *g);
@@ -201,7 +190,7 @@ void reac_disco_gate_init(struct reac_disco_gate *g)
 int reac_disco_gate_should_push(struct reac_disco_gate *g,
                                 const struct reac_disco_sighting *s, uint64_t now_ns)
 {
-	const int model_idx = reac_disco_model_index(s->model);
+	const int decl_key = s->has_decl ? (s->decl_in << 8 | s->decl_out) : -1;
 
 	for (int i = 0; i < g->n; i++) {
 		struct reac_disco_gate_entry *e = &g->e[i];
@@ -212,11 +201,11 @@ int reac_disco_gate_should_push(struct reac_disco_gate *g,
 		 * to a second later. Facts only sharpen (unknown -> known), so an ambiguous
 		 * frame arriving after a definite one is not an edge. */
 		if ((s->role != REAC_DISCO_ROLE_UNKNOWN && s->role != e->role) ||
-		    (model_idx >= 0 && model_idx != e->model_idx)) {
+		    (decl_key >= 0 && decl_key != e->decl_key)) {
 			if (s->role != REAC_DISCO_ROLE_UNKNOWN)
 				e->role = s->role;
-			if (model_idx >= 0)
-				e->model_idx = model_idx;
+			if (decl_key >= 0)
+				e->decl_key = decl_key;
 			e->last_push_ns = now_ns;
 			return 1;
 		}
@@ -237,7 +226,7 @@ int reac_disco_gate_should_push(struct reac_disco_gate *g,
 	struct reac_disco_gate_entry *e = &g->e[g->n++];
 	memcpy(e->mac, s->mac, 6);
 	e->role = s->role;
-	e->model_idx = model_idx;
+	e->decl_key = decl_key;
 	e->last_push_ns = now_ns;
 	return 1;   /* a MAC never seen before is always worth a slot */
 }
@@ -290,8 +279,15 @@ int reac_disco_table_observe(struct reac_disco_table *t,
 			e->role = s->role;
 			changed = 1;
 		}
-		if (s->model && e->model != s->model) {
-			e->model = s->model;
+		if (s->has_decl && (!e->has_decl || e->decl_in != s->decl_in ||
+		                    e->decl_out != s->decl_out)) {
+			e->has_decl = 1;
+			e->decl_in = s->decl_in;
+			e->decl_out = s->decl_out;
+			changed = 1;
+		}
+		if (s->family && e->family != s->family) {
+			e->family = s->family;
 			changed = 1;
 		}
 		/* WIDEST WINS, ON ITS OWN. Control frames carry no audio geometry, so a peer's
@@ -328,7 +324,10 @@ int reac_disco_table_observe(struct reac_disco_table *t,
 	memset(e, 0, sizeof *e);
 	memcpy(e->mac, s->mac, 6);
 	e->role = s->role;
-	e->model = s->model;
+	e->has_decl = s->has_decl;
+	e->decl_in = s->decl_in;
+	e->decl_out = s->decl_out;
+	e->family = s->family;
 	e->channels = s->channels;
 	e->owned = owned ? 1 : 0;
 	e->first_seen_ns = now_ns;
@@ -380,11 +379,20 @@ int reac_disco_table_json(const struct reac_disco_table *t, uint64_t now_ns,
 		PUT("%s{\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\"", i ? "," : "",
 		    e->mac[0], e->mac[1], e->mac[2], e->mac[3], e->mac[4], e->mac[5]);
 		PUT(",\"role\":\"%s\"", reac_disco_role_name(e->role));
-		PUT(",\"model\":\"%s\"", e->model ? e->model->token : "unknown");
-		if (e->model)
-			PUT(",\"width\":\"%dx%d\"", e->model->in_ch, e->model->out_ch);
-		else
-			PUT(",\"width\":\"0x0\"");   /* unidentified: no width is claimed */
+		/* The model is the family and the DECLARED widths (reac_box_name); a peer
+		 * that has not declared is "unknown" and claims no width. */
+		char nm[REAC_BOX_NAME_MAX], tok[REAC_BOX_NAME_TOKEN_MAX],
+		     disp[REAC_BOX_NAME_DISPLAY_MAX];
+		if (e->has_decl &&
+		    reac_box_name((enum reac_box_family)e->family, NULL, e->decl_in,
+		                  e->decl_out, nm, sizeof nm, tok, sizeof tok,
+		                  disp, sizeof disp) == 0) {
+			PUT(",\"model\":\"%s\"", tok);
+			PUT(",\"width\":\"%dx%d\"", e->decl_in, e->decl_out);
+		} else {
+			PUT(",\"model\":\"unknown\"");
+			PUT(",\"width\":\"0x0\"");
+		}
 		PUT(",\"owned\":%s", e->owned ? "true" : "false");
 		PUT(",\"age_ms\":%llu}", (unsigned long long)(age_ns / 1000000ULL));
 	}

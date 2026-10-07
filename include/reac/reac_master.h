@@ -108,6 +108,7 @@ enum reac_master_emit {
 	REAC_M_EMIT_ENROLL,     /* cdea 01 03 000d — the pre-grant enroll/arm frame */
 	REAC_M_EMIT_CHANMAP,    /* cdea 01 03 0019 generated channel-map (1 of N)   */
 	REAC_M_EMIT_ANNOUNCE,   /* cfea master announce (generated: OUR MAC + I/O)  */
+	REAC_M_EMIT_IDENTITY_POLL, /* cdea 04 03 — one identity-page RQ1 (1.7.0)  */
 };
 
 /* RX events the pacer feeds in (classified by reac_ctrl_classify_box_frame). */
@@ -461,7 +462,24 @@ struct reac_master {
 	/* Per-instance ENROLL (cdea 01 03 000d): the pace-code byte [8] =
 	 * cfg.console_field (0 = 48 kHz, 1 = 96 kHz, 2 = 44.1 kHz). */
 	uint8_t  enroll_blk[34];
+
+	/* THE IDENTITY RE-POLL (1.7.0). The grant sweep's six identity RQ1s can reach a
+	 * box before it has JOINED, and such a box does not answer them (S-0808 on
+	 * reac-pw, 2026-10-07). While established and the binding has not reported the
+	 * firmware and hw block (reac_master_identity_answered), the master sends the six
+	 * again once a second, at most REAC_M_IDENTITY_POLLS times a session. */
+	int      identity_complete;
+	int      identity_polls;
+	int      identity_poll_left;
+	int      identity_poll_slot;
 };
+
+#define REAC_M_IDENTITY_POLLS 10
+
+/* Tell the master whether the box has answered its identity page (the firmware and
+ * the hw block). Non-zero stops the re-poll; zero (a new box, a dropped one) lets it
+ * run again. Pacer thread only, like every other reac_master call. */
+void reac_master_identity_answered(struct reac_master *m, int complete);
 
 /* Initialize for a given source MAC, console config + frame rate (3675/4000/
  * 8000 fps). `src` is OUR master L2 MAC (Roland OUI); it is stamped into the

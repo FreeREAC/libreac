@@ -72,3 +72,4 @@ test_hold
 # python bytecode embeds the build machine paths
 __pycache__/
 *.py[co]
+test_box_facts

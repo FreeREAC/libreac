@@ -79,7 +79,7 @@ static size_t desk_announce(uint8_t *f)
 static int box_is_a_box(const char *token, int want_width)
 {
 	const int before = fails;
-	const struct reac_box_model *m = reac_box_model_by_token(token);
+	const struct reac_box_model *m = reac_box_catalogue_by_token(token);
 	CHK(m != NULL);
 	if (!m)
 		return 0;
@@ -96,7 +96,8 @@ static int box_is_a_box(const char *token, int want_width)
 	CHK(reac_upstream_channels(l2) == w);
 
 	const struct reac_disco_entry *e = entry(&t, mac);
-	CHK(e && e->role == REAC_DISCO_ROLE_BOX && e->model == m);
+	CHK(e && e->role == REAC_DISCO_ROLE_BOX && e->has_decl &&
+	    e->decl_in == m->in_ch && e->decl_out == m->out_ch);
 	CHK(e && e->channels == (unsigned)w);
 	CHK(reac_rival_kind_of(e) == REAC_RIVAL_BOX);
 
@@ -123,7 +124,7 @@ int main(void)
 		CHK(see(&t, frame, l, 1000) == 0);
 		CHK(see(&t, frame, desk_announce(frame), 2000) == 0);
 		const struct reac_disco_entry *e = entry(&t, DESK);
-		CHK(e && e->role == REAC_DISCO_ROLE_MASTER && e->model == NULL);
+		CHK(e && e->role == REAC_DISCO_ROLE_MASTER && !e->has_decl);
 		CHK(e && e->channels == REAC_MAX_CHANNELS);
 		CHK(reac_rival_kind_of(e) == REAC_RIVAL_DESK);
 
@@ -136,7 +137,7 @@ int main(void)
 
 	/* ---- BOX ON M: it declared a box model, then announced master ---- */
 	{
-		const struct reac_box_model *m = reac_box_model_by_token("s2416");
+		const struct reac_box_model *m = reac_box_catalogue_by_token("s2416");
 		static const uint8_t BOXM[6] = { 0x00, 0x40, 0xab, 0x24, 0x16, 0x01 };
 		struct reac_disco_table t;
 		reac_disco_table_init(&t);
@@ -147,7 +148,7 @@ int main(void)
 		memcpy(frame + 6, BOXM, 6);
 		CHK(see(&t, frame, ld, 2000) == 0);
 		const struct reac_disco_entry *e = entry(&t, BOXM);
-		CHK(e && e->model == m);
+		CHK(e && e->has_decl && e->decl_in == m->in_ch && e->decl_out == m->out_ch);
 		CHK(reac_rival_kind_of(e) == REAC_RIVAL_BOX);
 		CHK(strcmp(reac_rival_refusal(reac_rival_kind_of(e)), "rival-master-box") == 0);
 	}
