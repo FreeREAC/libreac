@@ -55,32 +55,6 @@ void reac_box_mac_publish(uint64_t mac48, reac_prop_set_fn set, void *ctx)
 	set(ctx, REAC_PROP_BOX_MAC, out);
 }
 
-const struct reac_box_model *reac_box_master_model(unsigned width)
-{
-	size_t n = 0;
-	const struct reac_box_model *t = reac_box_model_table(&n);
-	if (!t)
-		return NULL;
-	/* A WIDTH HEARD ON THE WIRE NAMES ONLY A CAPTURED ROW (1.2.0). The table now
-	 * carries rows for models nobody has captured — including a 40-input experiment
-	 * — and naming a peer from one would be a guess dressed as a recognition: the
-	 * exact defect this function was written to refuse (its `_by_channels` sibling
-	 * falls back to the S-1608 and this one answers nothing at all). What we may
-	 * DECLARE as is a different question, and it is asked by token. */
-	/* AND IF TWO CAPTURED ROWS EVER SHARE A WIDTH, THIS MUST ANSWER NEITHER.
-	 * They do not today — the S-4000S-0832 is 8 inputs like the S-0808, but this
-	 * path is the SLAVE half, where the peer is a stagebox strapped to master
-	 * mode and declares nothing, and no 0832 has ever been heard as one. The
-	 * rule is law (the 2026-09-17 spec) and deliberately not a branch here: the
-	 * pair that would exercise it does not exist, and a branch no test can reach
-	 * is decoration. The capture that creates the pair writes the branch. */
-	for (size_t i = 0; i < n; i++)
-		if (t[i].in_ch > 0 && (unsigned)t[i].in_ch == width &&
-		    t[i].origin == REAC_BOX_CAPTURED)
-			return &t[i];
-	return NULL;
-}
-
 void reac_box_master_identity_publish(unsigned width, uint64_t mac48, int locked,
                                       reac_prop_set_fn set, void *ctx)
 {
@@ -88,11 +62,9 @@ void reac_box_master_identity_publish(unsigned width, uint64_t mac48, int locked
 		return;
 	set(ctx, REAC_PROP_LINK_STATE,
 	    reac_link_state_name(locked ? REAC_LINK_ESTABLISHED : REAC_LINK_PROBING));
-	const struct reac_box_model *bm = reac_box_master_model(width);
-	if (bm) {
-		char w[16];
-		snprintf(w, sizeof w, "%dx%d", bm->in_ch, bm->out_ch);
-		set(ctx, REAC_PROP_BOX_MODEL, bm->token);
+	if (width > 0) {
+		char w[12];
+		snprintf(w, sizeof w, "%u", width);
 		set(ctx, REAC_PROP_BOX_WIDTH, w);
 	}
 	reac_box_mac_publish(mac48, set, ctx);

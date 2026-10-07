@@ -87,7 +87,7 @@ int main(void)
 	CHK(reac_upstream_channels(clen) == 8);
 
 	/* ---- ARM 2: the declaration NAMES the box ---- */
-	const struct reac_box_model *bm = reac_ctrl_identify_box(frame, clen);
+	const struct reac_box_model *bm = reac_box_catalogue_match(frame, clen);
 	CHK(bm != NULL);
 	CHK(strcmp(bm->token, "s4000s-0832") == 0);
 	CHK(bm->in_ch == 8 && bm->out_ch == 32);
@@ -99,7 +99,7 @@ int main(void)
 	 * two straps, and the reason the M-200 displays this box as an S-4000S.
 	 * Captured from the power-cycle, not copied: m200-s4000h-coldboot.pcap. */
 	{
-		const struct reac_box_model *s32 = reac_box_model_by_token("s4000s");
+		const struct reac_box_model *s32 = reac_box_catalogue_by_token("s4000s");
 		uint8_t a[32], b[32];
 		CHK(s32 && reac_box_model_block(bm, REAC_BOX_BLOCK_CC0016, a) == 1);
 		CHK(reac_box_model_block(s32, REAC_BOX_BLOCK_CC0016, b) == 1);
@@ -110,14 +110,9 @@ int main(void)
 		CHK(bm->fw_milli == 2500);
 		CHK(bm->reac_major == 2 && bm->reac_minor == 1 && bm->reac_patch == 2);
 	}
-	/* AND A WIDTH STILL DOES NOT NAME THIS BOX. The slave path has nothing but a
-	 * width to go on (a stagebox on M declares nothing), and 8 inputs is what the
-	 * S-0808 is: that row keeps the number, this one is named by its declaration
-	 * or not at all. Asserted BOTH ways so the row cannot quietly take it. */
-	const struct reac_box_model *by_width = reac_box_master_model(8);
-	CHK(by_width != NULL && strcmp(by_width->token, "s0808") == 0);
-	CHK(by_width != bm);
-	CHK(reac_box_model_by_channels(8) != bm);
+	/* A WIDTH NEVER NAMES THIS BOX: the emulation lookup by width answers the
+	 * S-0808 entry for 8, never this one. */
+	CHK(reac_box_catalogue_by_width(8) != bm);
 
 	/* ---- ARM 3: one MAC, one verdict ---- */
 	struct reac_hunt h;
@@ -135,7 +130,7 @@ int main(void)
 		 * 32-channel broadcast flood that read `unknown` — answers BOX. */
 		if (i > 1) {
 			CHK(s.role == REAC_DISCO_ROLE_BOX);
-			CHK(s.model == bm);
+			CHK(s.has_decl && s.decl_in == 8 && s.decl_out == 32);
 			roles_box++;
 		}
 		if (s.role == REAC_DISCO_ROLE_BOX && i <= 1)
@@ -145,7 +140,8 @@ int main(void)
 	CHK(roles_box >= (int)BOX_0832_N - 1);
 	CHK(h.table.n == 1);                  /* ONE peer, not two verdicts */
 	CHK(h.table.e[0].role == REAC_DISCO_ROLE_BOX);
-	CHK(h.table.e[0].model == bm);
+	CHK(h.table.e[0].has_decl && h.table.e[0].decl_in == 8 &&
+	    h.table.e[0].decl_out == 32);
 	CHK(h.table.e[0].channels == 32);     /* widest heard, beside 8 declared */
 
 	/* ---- ARM 4: the grant reaches ESTABLISHED and SUSTAINS ---- */

@@ -3,8 +3,8 @@
 # Built from the same libreac-<version>.tar.gz as packaging/libreac.spec; see
 # 2026-09-11-reac-transport-library for what moved and why.
 Name:           libreac-transport
-Version:        1.6.0
-%global abi 6
+Version:        1.7.0
+%global abi 7
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
 
@@ -87,6 +87,13 @@ PC
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Wed Oct 07 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.0-1
+- A stagebox's firmware and hardware block are read even when the box joins late:
+  the master asks for its identity again, once a second, until it answers.
+- The S-0808's name, sent in two pieces, is put back together and read.
+- Discovery and the network tap report the widths a box declared instead of a
+  guess from the model table. Soname 7.
+
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
 - 1.5.1's grant width, carried forward: grant_burst grows to 128 rows, so struct
   reac_master and struct reac_pacer move and the soname goes 5 -> 6, as on 1.5.1.

@@ -76,6 +76,10 @@ enum reac_rival_kind {
 	/** No legal geometry heard yet. Refused too — §4's catch-all conservatism: a frame kind
 	 *  nobody has captured must not flip the segment's topology. */
 	REAC_RIVAL_UNKNOWN,
+	/** A 40-slot broadcast master that has not announced itself yet (no cfea heard): a
+	 *  desk or a 40-input box on M. Neither joined nor refused — wait and retry (1.7.0,
+	 *  ruling 2026-10-07). Named "pending". */
+	REAC_RIVAL_PENDING,
 };
 
 /** The segment aggregate, as the props carry it. */

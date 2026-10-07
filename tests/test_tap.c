@@ -252,12 +252,12 @@ static void dump(const char *what, const struct reac_tap_survey *s)
 	for (unsigned i = 0; i < s->n; i++) {
 		const struct reac_tap_stream *t = &s->stream[i];
 		printf("  %s stream %u: %s %02x:%02x:%02x:%02x:%02x:%02x %u ch "
-		       "frames=%llu dups=%llu gaps=%llu model=%d\n", what, i,
+		       "frames=%llu dups=%llu gaps=%llu announced=%d\n", what, i,
 		       t->kind == REAC_TAP_STREAM_MASTER ? "master" : "box   ",
 		       t->src[0], t->src[1], t->src[2], t->src[3], t->src[4], t->src[5],
 		       t->channels, (unsigned long long)t->frames,
 		       (unsigned long long)t->dups, (unsigned long long)t->gaps,
-		       t->model_index);
+		       t->announced);
 	}
 }
 

@@ -235,13 +235,13 @@ def test_every_known_box_resolves_to_a_display_name():
         assert token and display, (token, display)
         assert in_ch > 0 and out_ch > 0, (token, in_ch, out_ch)
         # The width round-trips: the matrix is keyed on what the box declares.
-        assert libreac.box_model_by_channels(in_ch)[0] == token
+        assert libreac.box_catalogue_by_width(in_ch)[0] == token
 
 
 def test_matrix_names_EVERY_width_an_s1608_which_is_a_DEFECT():
     """CHARACTERIZATION TEST — this pins a bug, not a contract.
 
-    `reac_box_model_by_channels()` never answers "I do not know": widths 1, 7, 9,
+    `reac_box_catalogue_by_width()` never answers "I do not know": widths 1, 7, 9,
     24, 40 and 64 all come back as an S-1608. It is a fallback wearing a lookup's
     clothes.
 
@@ -256,10 +256,10 @@ def test_matrix_names_EVERY_width_an_s1608_which_is_a_DEFECT():
     WHEN LIBREAC IS FIXED to return NULL for an unmatched width, THIS TEST WILL
     FAIL. That is the intent: replace it with the negative control it should have
     been —
-        assert libreac.box_model_by_channels(7) is None
+        assert libreac.box_catalogue_by_width(7) is None
     """
     for width in (1, 7, 9, 24, 40, 64):
-        got = libreac.box_model_by_channels(width)
+        got = libreac.box_catalogue_by_width(width)
         assert got is not None and got[0] == "s1608", (width, got)
 
 

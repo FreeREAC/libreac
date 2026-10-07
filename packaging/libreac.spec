@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # libreac — Roland REAC RX core, Fedora shared library.
 Name:           libreac
-Version:        1.6.0
+Version:        1.7.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -9,7 +9,7 @@ Version:        1.6.0
 # LIBREAC_ABI in include/reac/reac.h -- packaging/make-tarball.sh refuses to
 # build a tarball when this copy and the header disagree, which is the only
 # moment the copy can be caught.
-%global abi 5
+%global abi 6
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -21,6 +21,11 @@ BuildRequires:  gcc
 BuildRequires:  make
 
 %description
+libreac speaks Roland REAC, the protocol between Roland digital consoles and their
+stageboxes, so a Linux machine can sit on a REAC network as an equal: hear a
+stagebox, enrol it, and read what it is straight from its own frames — its inputs
+and outputs, its model, its firmware.
+
 libreac is the REAC protocol library: it recognises a REAC frame (EtherType 0x8819),
 reads its sequence counter, detects the sample rate, and decodes and encodes the
 24-bit braided audio region in both directions — the 40-channel master broadcast
@@ -107,6 +112,26 @@ make test
 %{_libdir}/pkgconfig/libreac.pc
 
 %changelog
+* Wed Oct 07 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.0-1
+- A connected stagebox is now described only by what it says on the wire: its
+  inputs and outputs from its declaration, its family from its identity page, and
+  its name from both (S-1608, S-4000S-3208, S-4000S-1624, S-4000S-4000 ...). A box
+  whose family has never been captured is named by its widths (REAC-0816).
+- The built-in model table is now a model catalogue, used only to emulate a box
+  and to plan a show offline. It never sizes or names a connected box; when the
+  two disagree the box wins and the difference can be reported.
+- The S-0808's name, which arrives split across two frames, is now read.
+- A box that joins after the console first asked for its identity is asked
+  again, so its firmware and hardware block are no longer left empty.
+- Carries forward 1.5.1's fix: a box may declare any width up to 40 channels.
+- A stagebox in master mode is recognised as a box from what it announces (its own
+  channel count) or the width it broadcasts; a 40-channel master that has not
+  announced itself yet is waited on instead of being taken for a desk. A 40-input
+  box in master mode still reads as a desk until one has been captured.
+- Developers: reac_box_facts.h is new; the catalogue functions are renamed
+  (reac_box_catalogue*), reac_box_master_model is gone, and discovery reports
+  declared widths. LIBREAC_ABI 6.
+
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
 - 1.5.1's GRANT WIDTH, carried forward from release/1.5: REAC_GRANT_MAX_WIDTH is 40
   (operator ruling 2026-10-06), grant_burst grows to 128 rows, LIBREAC_ABI 4 -> 5.

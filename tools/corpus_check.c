@@ -130,7 +130,7 @@ static void feed(struct tally *t, uint8_t *f, size_t len, int truncated, int cor
 		if (p.param == REAC_HEADAMP_SENS && p.value > REAC_HEADAMP_SENS_MAX)
 			t->ha_sens_over++;
 	}
-	if (reac_ctrl_identify_box(f, len))
+	if (reac_box_catalogue_match(f, len))
 		t->ident_box++;
 
 	struct reac_box_ports bp;

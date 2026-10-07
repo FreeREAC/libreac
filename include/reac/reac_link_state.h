@@ -40,11 +40,14 @@
 
 /* PipeWire node property keys the badge consumer reads. reac.link-state is
  * the must-have; reac.box-model / reac.box-width are best-effort (populated
- * once the master's box recognizer matches a fixed-matrix model; "none" /
- * "0x0" until then — see reac_ctrl.h's reac_box_model). */
+ * once the box has declared itself and its name is derived from its frames
+ * (reac_box_facts.h); "none" / "0x0" until then). */
 #define REAC_PROP_LINK_STATE "reac.link-state"
 #define REAC_PROP_BOX_MODEL  "reac.box-model"
 #define REAC_PROP_BOX_WIDTH  "reac.box-width"
+/* The box's model NAME as reac_box_name derives it from its frames ("S-1608",
+ * "S-4000S-1624", "REAC-0816"); reac.box-model carries the same as a token (1.7.0). */
+#define REAC_PROP_BOX_NAME   "reac.box-name"
 
 /* The box's OWN identity, decoded from the identity-page replies (DT1 tag 0x0500)
  * the grant sweep polls — beside reac.box-model, which comes from the geometry.
@@ -242,46 +245,13 @@ typedef void (*reac_prop_set_fn)(void *ctx, const char *key, const char *value);
  * chassis that has left the wire. `set` NULL is a no-op. */
 void reac_box_mac_publish(uint64_t mac48, reac_prop_set_fn set, void *ctx);
 
-/* THE MODEL A BOX-MASTER'S BROADCAST WIDTH NAMES, or NULL (DESIGN.md 0.5.2).
- *
- * A served box names itself: its cold-connect config-announce carries the 32-byte
- * descriptor reac_ctrl_identify_box matches against the fixed matrix. A box with its
- * REAC Mode switch on M sends no such frame at all — what it broadcasts is its own
- * upstream geometry, 52 + n*36 bytes — so the only thing that can name it is the WIDTH,
- * and only where the matrix answers exactly.
- *
- * EXACT `in_ch` MATCH, NEVER libreac's reac_box_model_by_channels: that one falls back to
- * the S-1608 row for a width no model has (reac_ctrlblk.c), which would put a model name
- * on a chassis nobody identified — the same default reac_disco.c's classifier already
- * refuses for the same reason. A width no row matches returns NULL, and NULL publishes
- * nothing: absence is a fact a consumer reads as one.
- *
- * A ROW WITH NO IDENTITY PAGE DOES NOT ANSWER A WIDTH (2026-09-17). The S-4000H-0832 is
- * 8 inputs wide like the S-0808 — but the two are told apart by their DECLARATIONS, on a
- * real wire, no identity page — so admitting it would make every 8-wide box master
- * ambiguous and cost a recognition that works. What names that chassis is its
- * DECLARATION, byte for byte, on the master path where it sends one; here, where the
- * peer is a stagebox on M and sends none, only the fully captured rows may answer. */
-const struct reac_box_model *reac_box_master_model(unsigned width);
-
-/* THE WHOLE IDENTITY OF A JOINED BOX MASTER, composed and STAMPED in one act — the same
- * reasoning reac_box_mac_publish above documents: the composition and the write are what a
- * consumer reads, so they are one testable function and there is no second spelling of the
- * keys anywhere.
- *
- * `width`  the geometry the box broadcast, which is what names the model (above).
- * `mac48`  the mastering peer's own address, packed (reac_mac48_pack) — the sighting that
- *          decided the verdict is the only evidence there is, since a box on M grants
- *          nothing. Always stamped, 0 included: 0 means NO BOX, not "leave it alone".
- * `locked` non-zero once the segment's RX is accepting the box's frames. That is the whole
- *          of "linked" here — nothing is granted in either direction on this wire, so the
- *          badge only ever reads probing or established.
- *
- * REAC_PROP_BOX_MODEL / REAC_PROP_BOX_WIDTH are stamped only when the width names a model.
- * They are NOT stamped as "none"/"0x0" the way the master's create-time seed is: that seed
- * belongs to a master that is about to probe and will learn the answer, whereas here the
- * answer has arrived and says nothing — and pw_properties merge, so a key never written is
- * a key a consumer does not find. `set` NULL is a no-op. */
+/* THE WHOLE IDENTITY OF A JOINED BOX MASTER, composed and STAMPED in one act: the link
+ * state (probing / established), REAC_PROP_BOX_MAC and REAC_PROP_BOX_WIDTH as the single
+ * number `width` — the inputs it broadcasts, which its cfea total_slots also announces. A
+ * box with its REAC Mode switch on M sends no config announce and no identity page, so
+ * neither its model nor its outputs are on the wire: no model is stamped and the width
+ * carries no output count (1.7.0; the model catalogue never names a connected box).
+ * `width` 0 stamps no width. `mac48` 0 means NO BOX. `set` NULL is a no-op. */
 void reac_box_master_identity_publish(unsigned width, uint64_t mac48, int locked,
                                       reac_prop_set_fn set, void *ctx);
 

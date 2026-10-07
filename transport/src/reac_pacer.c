@@ -14,6 +14,7 @@
 
 #include <reac/reac.h>     /* REAC_FRAME_BYTES, REAC_HDR_COUNTER_OFF, ... */
 #include <reac/reac_ports.h> /* the box's declared port table (config-announce) */
+#include <reac/reac_box_facts.h> /* the family a box's identity page names */
 #include <reac/reac_tunables.h>  /* the daemon's REACPW_GUARD_FLOOR_FRAMES/NO_HEADAMP */
 #include <reac/reac_code.h>      /* reac_code_emit — the ignored-override line */
 #include <reac/reac_packet_socket.h> /* the one door every AF_PACKET socket goes through */
@@ -495,6 +496,8 @@ static void sync_published_box(struct reac_pacer *p)
 			reac_identity_init(&p->rx_identity);
 			identity_write_end(p, s);
 		}
+		memset(&p->rx_identity_frag, 0, sizeof p->rx_identity_frag);
+		reac_master_identity_answered(&p->master, 0);
 	} else {
 		/* The base the master is actually granting with, which is the one the
 		 * box announced. Mirrored, never recomputed downstream. */
@@ -547,19 +550,21 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 	struct reac_disco_sighting sight;
 	if (reac_disco_classify_on_segment(&p->disco_peer_lock, frame, len, p->src, &sight) == 0 &&
 	    reac_disco_gate_should_push(&p->disco_gate, &sight, mono_ns())) {
-		/* The ring slot is bytes, not pointers: the model travels as its index in the
-		 * fixed matrix, +1 so 0 reads as "unidentified", and the frame's GEOMETRY
-		 * travels in the block's first byte. Without the width the main thread cannot
+		/* The ring slot is bytes, not pointers: the frame's GEOMETRY travels in the
+		 * block's first byte and the declaration, when the frame is one, in the next
+		 * three (has, in, out). Without the width the main thread cannot
 		 * tell a desk from a stagebox strapped to master — which is the one distinction
 		 * arbitration exists to make, and it was being dropped here. A legal geometry is
 		 * at most REAC_MAX_CHANNELS, so it fits a byte. */
-		int mi = reac_disco_model_index(sight.model);
 		uint8_t blk[32];
 		memset(blk, 0, sizeof blk);
 		blk[0] = sight.channels > REAC_MAX_CHANNELS ? (uint8_t)REAC_MAX_CHANNELS
 		                                            : (uint8_t)sight.channels;
-		pev_push(p, REAC_PEV_SIGHTING, (uint8_t)sight.role,
-		         (uint8_t)(mi + 1), sight.mac, blk);
+		blk[1] = sight.has_decl;
+		blk[2] = sight.decl_in;
+		blk[3] = sight.decl_out;
+		blk[4] = sight.announced_slots;
+		pev_push(p, REAC_PEV_SIGHTING, (uint8_t)sight.role, 0, sight.mac, blk);
 	}
 
 	/* IDENTITY replies, BEFORE the FSM filter. The box answers the identity poll
@@ -574,10 +579,24 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 		uint16_t addr_lo;
 		const uint8_t *payload;
 		size_t plen;
-		if (reac_ctrl_identity_reply(frame, len, &addr_lo, &payload, &plen) == 1) {
+		/* A single-record reply (firmware, hw block), or the name record closed
+		 * by its LAST fragment (the S-0808 sends one). */
+		/* ONLY THE ENROLLED BOX'S PAGE: another REAC peer on the segment must not
+		 * rename or re-version the node. Before a box is enrolled there is no
+		 * filter to apply, and the accumulator is reset when one is forgotten. */
+		const int from_ours = !reac_master_has_box(&p->master) ||
+		        memcmp(frame + 6, p->master.box_mac, 6) == 0 ||
+		        memcmp(p->master.box_mac, "\0\0\0\0\0\0", 6) == 0;
+		if (from_ours &&
+		    (reac_ctrl_identity_reply(frame, len, &addr_lo, &payload, &plen) == 1 ||
+		     reac_ctrl_identity_fragment(&p->rx_identity_frag, frame, len, &addr_lo,
+		                                 &payload, &plen) == 1)) {
 			unsigned s = identity_write_begin(p);
 			reac_identity_ingest(&p->rx_identity, addr_lo, payload, plen);
 			identity_write_end(p, s);
+			/* The master re-polls the identity page until both answers are in. */
+			reac_master_identity_answered(&p->master,
+			        p->rx_identity.has_fw && p->rx_identity.has_reac_version);
 		}
 	}
 
@@ -597,13 +616,14 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 	 * reac_ports_parse) — never a hand-kept list. Everything downstream — the
 	 * head-amp base, the grant sweep, the ENROLL group map, the cfea width, the
 	 * published node props, the node widths — derives from set_box and from
-	 * nothing else. The fixed matrix only NAMES the model for the log and the
-	 * published props: an unnamed box is still sized and granted. Emit once per
+	 * nothing else. The catalogue entry the declaration is byte-equal to is kept
+	 * ONLY so a binding can report a catalogue defect (reac_box_facts.h); it never
+	 * sizes or names the box. Emit once per
 	 * declared geometry (the box repeats its config-announce ~1/s). */
 	struct reac_box_ports ports;
 	if (len >= REAC_CTRL_BLOCK_OFF + REAC_CTRL_BLOCK_LEN &&
 	    reac_ports_parse(frame + REAC_CTRL_BLOCK_OFF, &ports) == 0) {
-		const struct reac_box_model *bm = reac_ctrl_identify_box(frame, len);
+		const struct reac_box_model *bm = reac_box_catalogue_match(frame, len);
 		const struct reac_box_model *prev_bm =
 			atomic_load_explicit(&p->recognized_box, memory_order_relaxed);
 		if (bm && bm != prev_bm)
@@ -648,8 +668,8 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 				int unknown = reac_ports_unknown(frame + REAC_CTRL_BLOCK_OFF,
 				                                 &note[1]);
 				note[0] = unknown > 0 ? (uint8_t)unknown : 0;
-				pev_push(p, REAC_PEV_RECOGNIZED, (uint8_t)ports.in_ch,
-				         (uint8_t)(reac_disco_model_index(bm) + 1),
+				note[2] = (uint8_t)ports.out_ch;
+				pev_push(p, REAC_PEV_RECOGNIZED, (uint8_t)ports.in_ch, 0,
 				         parsed.src, note);
 			}
 		}
@@ -880,10 +900,8 @@ int reac_pacer_log_drain(struct reac_pacer *p, FILE *out)
 			break;
 		}
 		case REAC_PEV_RECOGNIZED: {
-			/* b carries the matrix model index+1 (0 = no row names it) — never
-			 * reac_box_model_by_channels here: its S-1608 fallback would NAME a
-			 * box that only declared a width. */
-			const struct reac_box_model *bm = reac_disco_model_by_index((int)e.b - 1);
+			/* a = declared inputs, blk[2] = declared outputs: the box as it declared
+			 * itself. Its name waits for its identity page (reac_box_facts.h). */
 			/* The groups the port decoder could not place, carried on blk[0:2].
 			 * Printed BESIDE the recognition, never instead of it: the box is
 			 * enrolled at the width we read, and this is the byte a capture
@@ -894,13 +912,9 @@ int reac_pacer_log_drain(struct reac_pacer *p, FILE *out)
 				         " — %u channel(s) declared with slot code 0x%02x, which "
 				         "nothing has captured: they are NOT enrolled",
 				         (unsigned)e.blk[0], (unsigned)e.blk[1]);
-			if (bm)
-				fprintf(out, "reac-master: [%.6f] recognized box = %s from %s%s\n",
-				        ts, bm->display, mac, unknown);
-			else
-				fprintf(out, "reac-master: [%.6f] box declared %u inputs from %s "
-				        "(no matrix row — sized from the declaration)%s\n",
-				        ts, (unsigned)e.a, mac, unknown);
+			fprintf(out, "reac-master: [%.6f] box declared %u in / %u out from %s "
+			        "(sized from the declaration)%s\n",
+			        ts, (unsigned)e.a, (unsigned)e.blk[2], mac, unknown);
 			break;
 		}
 		case REAC_PEV_CLOCK: {
@@ -941,30 +955,34 @@ int reac_pacer_log_drain(struct reac_pacer *p, FILE *out)
 			memset(&s, 0, sizeof s);
 			memcpy(s.mac, e.src, 6);
 			s.role = (enum reac_disco_role)e.a;
-			s.model = reac_disco_model_by_index((int)e.b - 1);
+			s.has_decl = e.blk[1];
+			s.decl_in = e.blk[2];
+			s.decl_out = e.blk[3];
+			s.announced_slots = e.blk[4];
 			/* The geometry the classifier read, carried over the ring: it is what
 			 * separates a desk's 40-channel downstream from a stagebox strapped to
 			 * master, and the table merges the WIDEST it has seen from a peer. */
 			s.channels = e.blk[0];
 			int owned = (p->master.state == REAC_M_ESTABLISHED &&
 			             memcmp(p->master.box_mac, e.src, 6) == 0);
-			/* A box declares its model ONCE, at enrolment. Every frame after that is
-			 * audio FILLER carrying no identity, so passive classification of a
-			 * long-established box yields role=box / model=unknown — verified live on
-			 * the rig: 24001 frames in 3 s, not one config-announce among them. For
-			 * OUR peer the model is not unknown at all: the master matched its
-			 * config-announce byte-for-byte at enrolment and publishes it as
-			 * reac.box-model. Reuse that rather than let discovery report "unknown"
-			 * for the very box the stagebox badge beside it names. Still no
-			 * inference — recognized_box is only ever a byte-exact match. */
-			if (!s.model && owned)
-				s.model = atomic_load_explicit(&p->recognized_box,
-				                               memory_order_acquire);
+			/* A box declares itself ONCE, at enrolment; every frame after that is
+			 * FILLER. For OUR peer the master holds the declaration and the identity
+			 * page, so discovery reports what the box said rather than "unknown". */
+			if (owned) {
+				if (!s.has_decl && p->declared_in + p->declared_out > 0) {
+					s.has_decl = 1;
+					s.decl_in = (uint8_t)p->declared_in;
+					s.decl_out = (uint8_t)p->declared_out;
+				}
+				struct reac_identity id;
+				reac_pacer_read_identity(p, &id);
+				s.family = (uint8_t)reac_box_family_of(&id);
+			}
 			if (reac_disco_table_observe(&p->disco, &s, owned, e.mono_ns))
-				fprintf(out, "reac-disco: [%.6f] %s %s model=%s%s\n", ts,
+				fprintf(out, "reac-disco: [%.6f] %s %s declared=%s%u/%u%s\n", ts,
 				        reac_disco_role_name(s.role), mac,
-				        s.model ? s.model->token : "unknown",
-				        owned ? " (ours)" : "");
+				        s.has_decl ? "" : "none ", (unsigned)s.decl_in,
+				        (unsigned)s.decl_out, owned ? " (ours)" : "");
 			break;
 		}
 		default:

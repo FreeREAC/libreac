@@ -86,10 +86,17 @@ const char *reac_disco_role_name(enum reac_disco_role r);
 struct reac_disco_sighting {
 	uint8_t mac[6];
 	enum reac_disco_role role;
-	/* The byte-exact config-block match, or NULL when unidentified. NEVER filled from
-	 * reac_box_model_by_channels: that silently defaults an unknown width to S-1608
-	 * (reac_ctrl.c:394), which is a sane audio-path fallback and a LIE in a device list. */
-	const struct reac_box_model *model;
+	/* What the peer DECLARED, when this frame is its config announce (reac_ports_parse):
+	 * `has_decl` and the two widths. Never filled from the model catalogue (1.7.0). */
+	uint8_t has_decl;
+	uint8_t decl_in, decl_out;
+	/* The box family its identity page named (enum reac_box_family), 0 when unknown.
+	 * A passive frame never carries it; the master fills it in for its own peer. */
+	uint8_t family;
+	/* The `total_slots` a master announce (cfea, block[15]) carried, 0 when this frame
+	 * is not one (1.7.0). A desk writes 0x28 there; a box on M writes its own input
+	 * width (reac.ksy `cfea_payload.announces_box`). */
+	uint8_t announced_slots;
 	/* The peer's DATA-FRAME WIDTH in channels, from the frame length alone; 0 when the frame
 	 * carried no legal `52 + n*36` geometry. The role field says what the peer CLAIMS; this
 	 * says what it IS, and a stagebox strapped to master mode claims master while emitting a
@@ -130,12 +137,6 @@ int reac_disco_classify_on_segment(struct reac_disco_peer_lock *lock, const uint
                                    size_t len, const uint8_t our_mac[6],
                                    struct reac_disco_sighting *out);
 
-/* Index of a model in the fixed matrix (reac_box_model_table), the form a model takes
- * when it crosses the pacer's event ring: the ring slot carries bytes, not pointers.
- * -1 / 0 == unidentified. The table rows are static and const, so an index is a stable,
- * marshalling-free name for one. */
-int reac_disco_model_index(const struct reac_box_model *m);
-const struct reac_box_model *reac_disco_model_by_index(int idx);
 
 /* --- the RT-side announce gate -------------------------------------------------
  * Which sightings earn a slot on the pacer's 128-entry event ring.
@@ -151,7 +152,8 @@ const struct reac_box_model *reac_disco_model_by_index(int idx);
 struct reac_disco_gate_entry {
 	uint8_t mac[6];
 	enum reac_disco_role role;
-	int model_idx;
+	int decl_key;              /* (in << 8 | out) of the declaration, -1 before one */
+	uint8_t announced_slots;   /* the cfea total_slots last pushed, 0 = none */
 	uint64_t last_push_ns;
 };
 
@@ -170,7 +172,8 @@ int reac_disco_gate_should_push(struct reac_disco_gate *g,
 struct reac_disco_entry {
 	uint8_t mac[6];
 	enum reac_disco_role role;
-	const struct reac_box_model *model;
+	uint8_t has_decl, decl_in, decl_out, family;   /* as in the sighting */
+	uint8_t announced_slots;   /* the latest cfea total_slots heard, 0 = none yet */
 	/* The widest geometry heard from this peer; 0 while none was legal. Kept as a MAX rather
 	 * than last-wins: a control frame carries no audio geometry, so a peer's data frames are
 	 * what answer, and one stray short frame must not erase them. */

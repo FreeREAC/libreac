@@ -77,9 +77,9 @@ enum reac_tap_stream_kind {
  * downstream and nothing else, every legal `52 + n*36` is a box return of width n, and
  * the wire declares the width so nothing configures or remembers it.
  *
- * `model_index` is the separate fact the box's own CONFIG-ANNOUNCE carries (a byte-exact
- * match through reac_ctrl_identify_box; -1 until one arrives). It names the MODEL, and
- * the model's nominal input width lands in `announced_channels`. When the two widths
+ * `announced` is the separate fact the box's own CONFIG-ANNOUNCE carries (its declared
+ * widths, reac_ports_parse; 0 until one arrives): its input width lands in
+ * `announced_channels` and its output width in `announced_out`. When the two widths
  * disagree, `width_disagrees` says so and `channels` still wins: a tap serves what is on
  * the wire, and a declaration that does not match the frames is a fact to report, not a
  * width to adopt. */
@@ -87,8 +87,9 @@ struct reac_tap_stream {
 	enum reac_tap_stream_kind kind;
 	uint8_t  src[6];
 	unsigned channels;            /* from the frame geometry; 40 for the master */
-	int      model_index;         /* reac_disco_model_index of the announce, or -1 */
-	unsigned announced_channels;  /* the announced model's in_ch, or 0 */
+	int      announced;           /* a config announce was heard from this source */
+	unsigned announced_channels;  /* its declared inputs, or 0 */
+	unsigned announced_out;       /* its declared outputs, or 0 */
 	int      width_disagrees;     /* announce width != frame width, both known */
 
 	/* Frame accounting, per stream. A mirror twin lands in `dups`, NEVER in `gaps`:

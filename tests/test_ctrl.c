@@ -188,7 +188,7 @@ int main(void)
 
 	/* ---- the box's declaration reaches the model matrix and the port table -- */
 	frame_of(f, FX_L1_DECL_82);
-	CHK(reac_ctrl_identify_box(f, sizeof f) != NULL);
+	CHK(reac_box_catalogue_match(f, sizeof f) != NULL);
 	struct reac_box_ports ports;
 	CHK(reac_ports_parse(f + REAC_CTRL_BLOCK_OFF, &ports) == 0);
 	CHK(ports.in_ch == 16 && ports.out_ch == 8);
@@ -197,7 +197,7 @@ int main(void)
 	CHK(ports.in_ch == 8 && ports.out_ch == 8);
 	/* and no other link-1 message does */
 	frame_of(f, FX_L1_SLOT_MAP);
-	CHK(reac_ctrl_identify_box(f, sizeof f) == NULL);
+	CHK(reac_box_catalogue_match(f, sizeof f) == NULL);
 	CHK(reac_ports_parse(f + REAC_CTRL_BLOCK_OFF, &ports) == -1);
 	frame_of(f, FX_L1_GROUP_MAP);
 	CHK(reac_ports_parse(f + REAC_CTRL_BLOCK_OFF, &ports) == -1);

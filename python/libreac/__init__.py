@@ -271,12 +271,12 @@ class BoxModel(ctypes.Structure):
     ]
 
 
-_c.reac_box_model_table.restype = ctypes.POINTER(BoxModel)
-_c.reac_box_model_table.argtypes = [ctypes.POINTER(ctypes.c_size_t)]
-_c.reac_box_model_by_token.restype = ctypes.POINTER(BoxModel)
-_c.reac_box_model_by_token.argtypes = [ctypes.c_char_p]
-_c.reac_box_model_by_channels.restype = ctypes.POINTER(BoxModel)
-_c.reac_box_model_by_channels.argtypes = [ctypes.c_int]
+_c.reac_box_catalogue.restype = ctypes.POINTER(BoxModel)
+_c.reac_box_catalogue.argtypes = [ctypes.POINTER(ctypes.c_size_t)]
+_c.reac_box_catalogue_by_token.restype = ctypes.POINTER(BoxModel)
+_c.reac_box_catalogue_by_token.argtypes = [ctypes.c_char_p]
+_c.reac_box_catalogue_by_width.restype = ctypes.POINTER(BoxModel)
+_c.reac_box_catalogue_by_width.argtypes = [ctypes.c_int]
 
 
 def box_models() -> list:
@@ -299,16 +299,16 @@ def box_models() -> list:
     """
     seen, out = set(), []
     for width in range(1, 65):
-        row = box_model_by_channels(width)
+        row = box_catalogue_by_width(width)
         if row and row[0] not in seen:
             seen.add(row[0])
             out.append(row)
     return out
 
 
-def box_model_by_channels(in_ch: int):
+def box_catalogue_by_width(in_ch: int):
     """The model a box of this input width declares itself to be, or None."""
-    p = _c.reac_box_model_by_channels(in_ch)
+    p = _c.reac_box_catalogue_by_width(in_ch)
     if not p:
         return None
     return (p[0].token.decode(), p[0].display.decode(), p[0].in_ch, p[0].out_ch)

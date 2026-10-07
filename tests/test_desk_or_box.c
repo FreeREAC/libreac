@@ -23,6 +23,8 @@
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_disco.h>
 #include <reac/reac_arbitration.h>
+#include <reac/reac_hunt.h>
+#include <reac/reac_master.h>
 #include <reac/reac_encode.h>
 #include <reac/reac_upstream.h>
 
@@ -79,7 +81,7 @@ static size_t desk_announce(uint8_t *f)
 static int box_is_a_box(const char *token, int want_width)
 {
 	const int before = fails;
-	const struct reac_box_model *m = reac_box_model_by_token(token);
+	const struct reac_box_model *m = reac_box_catalogue_by_token(token);
 	CHK(m != NULL);
 	if (!m)
 		return 0;
@@ -96,7 +98,8 @@ static int box_is_a_box(const char *token, int want_width)
 	CHK(reac_upstream_channels(l2) == w);
 
 	const struct reac_disco_entry *e = entry(&t, mac);
-	CHK(e && e->role == REAC_DISCO_ROLE_BOX && e->model == m);
+	CHK(e && e->role == REAC_DISCO_ROLE_BOX && e->has_decl &&
+	    e->decl_in == m->in_ch && e->decl_out == m->out_ch);
 	CHK(e && e->channels == (unsigned)w);
 	CHK(reac_rival_kind_of(e) == REAC_RIVAL_BOX);
 
@@ -123,7 +126,7 @@ int main(void)
 		CHK(see(&t, frame, l, 1000) == 0);
 		CHK(see(&t, frame, desk_announce(frame), 2000) == 0);
 		const struct reac_disco_entry *e = entry(&t, DESK);
-		CHK(e && e->role == REAC_DISCO_ROLE_MASTER && e->model == NULL);
+		CHK(e && e->role == REAC_DISCO_ROLE_MASTER && !e->has_decl);
 		CHK(e && e->channels == REAC_MAX_CHANNELS);
 		CHK(reac_rival_kind_of(e) == REAC_RIVAL_DESK);
 
@@ -136,7 +139,7 @@ int main(void)
 
 	/* ---- BOX ON M: it declared a box model, then announced master ---- */
 	{
-		const struct reac_box_model *m = reac_box_model_by_token("s2416");
+		const struct reac_box_model *m = reac_box_catalogue_by_token("s2416");
 		static const uint8_t BOXM[6] = { 0x00, 0x40, 0xab, 0x24, 0x16, 0x01 };
 		struct reac_disco_table t;
 		reac_disco_table_init(&t);
@@ -147,9 +150,137 @@ int main(void)
 		memcpy(frame + 6, BOXM, 6);
 		CHK(see(&t, frame, ld, 2000) == 0);
 		const struct reac_disco_entry *e = entry(&t, BOXM);
-		CHK(e && e->model == m);
+		CHK(e && e->has_decl && e->decl_in == m->in_ch && e->decl_out == m->out_ch);
 		CHK(reac_rival_kind_of(e) == REAC_RIVAL_BOX);
 		CHK(strcmp(reac_rival_refusal(reac_rival_kind_of(e)), "rival-master-box") == 0);
+	}
+
+	/* ---- DESK OR BOX MASTER, FROM THE WIRE (ruling 2026-10-07) ----
+	 * A box on M sends cfea, chanmap and scene pushes like a desk; what tells them apart
+	 * is the cfea's total_slots (block[15]) and the broadcast's width. Captured blocks:
+	 * the S-1608 on M (box-to-box-2026-09-13 enrol-main-port-slice.pcap frame 3544, a
+	 * 628 B broadcast) and the M-200 (real-m200-s1608-coldboot-2026-07-11 frame 754). */
+	{
+		static const char *S1608_ON_M =
+			"cfeaffff010001030d01040040abc4803b1008010001000000000000000000000067";
+		static const char *M200 =
+			"cfeaffff010001030d01040040abc9cc03281000000100000000000000000000002f";
+		static const uint8_t BOXM[6] = { 0x00, 0x40, 0xab, 0xc4, 0x80, 0x3b };
+		static const uint8_t M200M[6] = { 0x00, 0x40, 0xab, 0xc9, 0xcc, 0x03 };
+		struct reac_disco_table t;
+		struct reac_arbitration a;
+		const struct reac_disco_entry *e;
+		uint8_t win[34];
+		for (int i = 0; i < 34; i++) { unsigned v; sscanf(S1608_ON_M + 2 * i, "%2x", &v); win[i] = (uint8_t)v; }
+
+		/* 1. the S-1608 on M: 628 B broadcast, cfea 0x10 -> a BOX, 16 wide */
+		reac_disco_table_init(&t);
+		size_t l = reac_ctrl_build_flood_filler(frame, BCAST, BOXM, 1, 16, NULL, 12);
+		CHK(l == 628);
+		memcpy(frame + 16, win, 34);
+		CHK(see(&t, frame, l, 1000) == 0);
+		e = entry(&t, BOXM);
+		CHK(e && e->role == REAC_DISCO_ROLE_MASTER && e->announced_slots == 0x10);
+		CHK(reac_rival_kind_of(e) == REAC_RIVAL_BOX);
+		reac_arbitrate(&t, US, REAC_M_IDLE, REAC_PACE_FREE_RUN, 2000, &a);
+		CHK(a.state == REAC_SEGMENT_FOREIGN && a.rival == REAC_RIVAL_BOX && a.rival_channels == 16);
+
+		/* 2. the same box's cfea in a 1492 B broadcast: still a BOX — the announce
+		 * says 16, whatever the frame says */
+		reac_disco_table_init(&t);
+		l = desk_downstream(frame);
+		memcpy(frame + 6, BOXM, 6);
+		memcpy(frame + 16, win, 34);
+		CHK(see(&t, frame, l, 1000) == 0);
+		CHK(reac_rival_kind_of(entry(&t, BOXM)) == REAC_RIVAL_BOX);
+
+		/* 3. the M-200: 1492 B broadcast, cfea 0x28 -> a DESK */
+		for (int i = 0; i < 34; i++) { unsigned v; sscanf(M200 + 2 * i, "%2x", &v); win[i] = (uint8_t)v; }
+		reac_disco_table_init(&t);
+		l = desk_downstream(frame);
+		memcpy(frame + 6, M200M, 6);
+		memcpy(frame + 16, win, 34);
+		CHK(see(&t, frame, l, 1000) == 0);
+		e = entry(&t, M200M);
+		CHK(e && e->announced_slots == 0x28 && e->channels == REAC_MAX_CHANNELS);
+		CHK(reac_rival_kind_of(e) == REAC_RIVAL_DESK);
+
+		/* 4. a 1492 B master with no cfea heard yet (a chanmap only): PENDING, never a
+		 * desk by default — and the hunt waits rather than join or refuse */
+		reac_disco_table_init(&t);
+		struct reac_disco_entry pend = { .role = REAC_DISCO_ROLE_MASTER,
+		                                 .channels = REAC_MAX_CHANNELS,
+		                                 .first_seen_ns = 1000, .last_seen_ns = 1000 };
+		memcpy(pend.mac, M200M, 6);
+		t.e[t.n++] = pend;
+		CHK(reac_rival_kind_of(&t.e[0]) == REAC_RIVAL_PENDING);
+		reac_arbitrate(&t, US, REAC_M_IDLE, REAC_PACE_FREE_RUN, 2000, &a);
+		CHK(a.state == REAC_SEGMENT_FOREIGN && a.rival == REAC_RIVAL_PENDING);
+		CHK(strcmp(reac_rival_kind_name(REAC_RIVAL_PENDING), "pending") == 0);
+		CHK(strcmp(reac_rival_refusal(REAC_RIVAL_PENDING), "none") == 0);
+
+		/* 4b. ...end to end through the hunt: a 1492 B chanmap from a master that has
+		 * not announced itself leaves the wire HUNTING, then its cfea 0x28 joins it */
+		{
+			struct reac_hunt h;
+			reac_hunt_init(&h, US, 1000);
+			static struct reac_master m;
+			reac_master_init(&m, M200M, NULL, 4000);
+			size_t hl = desk_downstream(frame);
+			memcpy(frame + 6, M200M, 6);
+			CHK(reac_master_stamp(&m, frame, REAC_M_EMIT_CHANMAP, 0) == 0);
+			CHK(reac_hunt_observe(&h, frame, hl, 2000, NULL) >= 0);
+			reac_hunt_step(&h, 3000);
+			CHK(h.arb.rival == REAC_RIVAL_PENDING);
+			CHK(h.verdict == REAC_HUNT_HUNTING);
+			l = desk_downstream(frame);
+			memcpy(frame + 6, M200M, 6);
+			memcpy(frame + 16, win, 34);                /* the M-200's own cfea */
+			CHK(reac_hunt_observe(&h, frame, l, 4000, NULL) >= 0);
+			reac_hunt_step(&h, 5000);
+			CHK(h.arb.rival == REAC_RIVAL_DESK && h.verdict == REAC_HUNT_SLAVE);
+		}
+		/* 4b'. pending changes nothing: a wire already decided keeps its verdict */
+		{
+			struct reac_hunt h;
+			reac_hunt_init(&h, US, 1000);
+			h.verdict = REAC_HUNT_MASTER;              /* we were driving it */
+			static struct reac_master m2;
+			reac_master_init(&m2, M200M, NULL, 4000);
+			size_t hl = desk_downstream(frame);
+			memcpy(frame + 6, M200M, 6);
+			CHK(reac_master_stamp(&m2, frame, REAC_M_EMIT_CHANMAP, 0) == 0);
+			CHK(reac_hunt_observe(&h, frame, hl, 2000, NULL) >= 0);
+			reac_hunt_step(&h, 3000);
+			CHK(h.arb.rival == REAC_RIVAL_PENDING);
+			CHK(h.verdict == REAC_HUNT_MASTER);
+		}
+
+		/* 4c. the cfea crosses the pacer's ring: a gate that let only role and
+		 * declaration through would hold a running segment pending for ever */
+		{
+			struct reac_disco_gate g;
+			reac_disco_gate_init(&g);
+			struct reac_disco_sighting sg = { .role = REAC_DISCO_ROLE_MASTER,
+			                                  .channels = REAC_MAX_CHANNELS };
+			memcpy(sg.mac, M200M, 6);
+			CHK(reac_disco_gate_should_push(&g, &sg, 1000) == 1);
+			CHK(reac_disco_gate_should_push(&g, &sg, 2000) == 0);   /* a repeat */
+			sg.announced_slots = 0x28;
+			CHK(reac_disco_gate_should_push(&g, &sg, 3000) == 1);   /* its announce */
+			CHK(reac_disco_gate_should_push(&g, &sg, 4000) == 0);
+		}
+
+		/* 5. a box-width broadcast master with no cfea (a box on M that never
+		 * announces): a BOX by its width */
+		t.e[0].channels = 8;
+		CHK(reac_rival_kind_of(&t.e[0]) == REAC_RIVAL_BOX);
+
+		/* 6. THE KNOWN GAP, written down: a 40-input box on M announcing 0x28 in a
+		 * 1492 B broadcast reads as a DESK until one is captured */
+		t.e[0].channels = REAC_MAX_CHANNELS;
+		t.e[0].announced_slots = 0x28;
+		CHK(reac_rival_kind_of(&t.e[0]) == REAC_RIVAL_DESK);
 	}
 
 	/* ---- the width alone decides nothing: the old rule would have said DESK for

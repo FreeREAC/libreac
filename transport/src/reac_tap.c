@@ -16,6 +16,7 @@
 #include <reac/reac_capture.h>
 #include <reac/reac_ctrlblk.h>
 #include <reac/reac_disco.h>
+#include <reac/reac_ports.h>
 #include <reac/reac_arbitration.h>   /* the hold's limit: one master-only cadence */
 #include <reac/reac_upstream.h>
 #include <reac/pcap_source.h>
@@ -74,7 +75,6 @@ static int stream_for(struct reac_tap_survey *s, const uint8_t src[6],
 	st->kind = kind;
 	memcpy(st->src, src, 6);
 	st->channels = channels;
-	st->model_index = -1;
 	return (int)s->n++;
 }
 
@@ -91,7 +91,7 @@ static void resolve_by_role(const struct reac_tap_survey *s, struct reac_tap_str
 	struct reac_disco_sighting sg;
 	if (reac_disco_classify(frame, clean, s->have_self ? s->self_mac : NONE, &sg) != 0)
 		return;
-	if (sg.model != NULL || sg.role == REAC_DISCO_ROLE_BOX || st->model_index >= 0)
+	if (sg.has_decl || sg.role == REAC_DISCO_ROLE_BOX || st->announced)
 		st->kind = REAC_TAP_STREAM_BOX;
 	else if (sg.role == REAC_DISCO_ROLE_MASTER)
 		st->kind = REAC_TAP_STREAM_MASTER;
@@ -147,19 +147,19 @@ unsigned reac_tap_survey_resolve(struct reac_tap_survey *s, uint64_t now_usec)
 	return left;
 }
 
-/* The box's own CONFIG-ANNOUNCE, if this frame carries one: a byte-exact match against
- * the fixed model matrix, never reac_box_model_by_channels (whose S-1608 default would
- * name a box that was never identified — reac_disco.h says why). Recorded once; the
- * announced width is compared with the geometry rather than replacing it. */
+/* The box's own CONFIG-ANNOUNCE, if this frame carries one: its declared widths
+ * (reac_ports_parse), never a catalogue entry. Recorded once; the announced width is
+ * compared with the geometry rather than replacing it. */
 static void note_model(struct reac_tap_stream *st, const uint8_t *frame, size_t len)
 {
-	if (st->model_index >= 0)
+	if (st->announced || len < REAC_CTRL_BLOCK_OFF + REAC_CTRL_BLOCK_LEN)
 		return;
-	const struct reac_box_model *m = reac_ctrl_identify_box(frame, len);
-	if (!m)
+	struct reac_box_ports ports;
+	if (reac_ports_parse(frame + REAC_CTRL_BLOCK_OFF, &ports) != 0)
 		return;
-	st->model_index = reac_disco_model_index(m);
-	st->announced_channels = (unsigned)(m->in_ch > 0 ? m->in_ch : 0);
+	st->announced = 1;
+	st->announced_channels = (unsigned)(ports.in_ch > 0 ? ports.in_ch : 0);
+	st->announced_out = (unsigned)(ports.out_ch > 0 ? ports.out_ch : 0);
 	if (st->announced_channels && st->channels)
 		st->width_disagrees = st->announced_channels != st->channels;
 }

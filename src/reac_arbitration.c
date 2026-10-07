@@ -151,17 +151,40 @@ void reac_arbitrate(const struct reac_disco_table *table,
 	out->state = REAC_SEGMENT_NONE;
 }
 
+/* DESK OR BOX MASTER, FROM THE WIRE (ruling 2026-10-07; reac.ksy cfea_payload).
+ *
+ * A box that declared itself, or spoke as only a box does, is a box. A master is told
+ * apart by two captured facts, never by its record kinds (a box on M sends cfea, chanmap
+ * and scene pushes just as a desk does — box-to-box-2026-09-13, s1608-master-96k):
+ *
+ *   - its cfea announces fewer than 40 slots: a BOX at that width (the S-1608 on M
+ *     writes 0x10, the S-4000S 0x20; every desk writes 0x28, 16 867 announces);
+ *   - its broadcast is narrower than 1492 B (52 + n*36, n < 40): a BOX at that width;
+ *   - a 1492 B broadcast whose cfea says 0x28: a DESK — a captured fact, three consoles;
+ *   - a 1492 B broadcast with no cfea heard yet: PENDING, never a desk by default.
+ *
+ * The S-0808 on M announces nothing (s0808-as-master-20261007-122036: 340 B broadcasts,
+ * channel map and scene push, no cfea); its width alone makes it a box, with no hold.
+ *
+ * THE KNOWN GAP: a 40-input box on M (an S-4000S-4000) would broadcast 1492 B and may
+ * announce 0x28 (read as a desk) or nothing (pending); nobody has captured one. */
 enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e)
 {
 	if (!e)
 		return REAC_RIVAL_NONE;
-	if (e->model != NULL || e->role == REAC_DISCO_ROLE_BOX)
+	if (e->has_decl || e->role == REAC_DISCO_ROLE_BOX)
 		return REAC_RIVAL_BOX;        /* it said what it is, or spoke as only a box does */
+	if (e->announced_slots && e->announced_slots < REAC_MAX_CHANNELS)
+		return REAC_RIVAL_BOX;        /* announced its own width */
 	if (e->channels == 0)
 		return REAC_RIVAL_UNKNOWN;    /* no stream heard yet: refused, §4 */
-	if (e->role == REAC_DISCO_ROLE_MASTER)
-		return REAC_RIVAL_DESK;       /* announced master, declared no box */
-	return REAC_RIVAL_UNKNOWN;
+	if (e->channels < REAC_MAX_CHANNELS)
+		return REAC_RIVAL_BOX;        /* broadcasts a box width */
+	if (e->role != REAC_DISCO_ROLE_MASTER)
+		return REAC_RIVAL_UNKNOWN;
+	if (e->announced_slots == REAC_MAX_CHANNELS)
+		return REAC_RIVAL_DESK;       /* 1492 B and cfea 0x28: what every desk does */
+	return REAC_RIVAL_PENDING;        /* 1492 B, no cfea yet: wait for it */
 }
 
 uint32_t reac_master_only_cadence_frames(int fps)
@@ -203,7 +226,7 @@ enum reac_rival_kind reac_sender_kind(const struct reac_disco_entry *e, uint64_t
 {
 	if (!e)
 		return REAC_RIVAL_NONE;
-	if (e->model != NULL || e->role == REAC_DISCO_ROLE_BOX || e->role == REAC_DISCO_ROLE_MASTER)
+	if (e->has_decl || e->role == REAC_DISCO_ROLE_BOX || e->role == REAC_DISCO_ROLE_MASTER)
 		return reac_rival_kind_of(e);   /* its own frames already said what it is */
 	if (e->channels == 0)
 		return REAC_RIVAL_UNKNOWN;      /* nothing heard to hold on */
@@ -227,6 +250,7 @@ const char *reac_rival_kind_name(enum reac_rival_kind k)
 	case REAC_RIVAL_DESK:    return "desk";
 	case REAC_RIVAL_BOX:     return "box";
 	case REAC_RIVAL_UNKNOWN: return "unknown";
+	case REAC_RIVAL_PENDING: return "pending";
 	case REAC_RIVAL_NONE:    break;
 	}
 	return "none";
@@ -239,6 +263,7 @@ const char *reac_rival_refusal(enum reac_rival_kind k)
 	case REAC_RIVAL_BOX:     return "rival-master-box";
 	case REAC_RIVAL_UNKNOWN: return "rival-master-unknown";
 	case REAC_RIVAL_DESK:
+	case REAC_RIVAL_PENDING:     /* not declined: undecided, and waited on */
 	case REAC_RIVAL_NONE:    break;
 	}
 	return "none";

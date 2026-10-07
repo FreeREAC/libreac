@@ -238,7 +238,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * 1.2.0 IS AN ABI BREAK, and again a measurement says so. `struct
  * reac_box_model` (reac_ctrlblk.h) is a PUBLIC struct, and the TABLE of them is
- * walked BY INDEX by every consumer that calls reac_box_model_table() — so its
+ * walked BY INDEX by every consumer that calls reac_box_catalogue() — so its
  * sizeof is part of the ABI in the strongest possible way: a consumer built
  * against the old header steps 256 bytes into rows that are now 296 and reads
  * the middle of its neighbour.
@@ -280,6 +280,27 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.7.0: EVERY FACT ABOUT A CONNECTED BOX COMES FROM ITS FRAMES (operator ruling
+ *        2026-10-07; FreeREAC/reac-pw#5). reac_box_facts.h is ADDED: the family off the
+ *        identity page's hw block (reac_box_family_of), the model name from the family and
+ *        the declared widths (reac_box_name, reac.ksy `box_model`), and the catalogue-defect
+ *        check. The model table is now the MODEL CATALOGUE, for emulation and offline
+ *        planning only: reac_box_model_table/_by_token/_by_channels and
+ *        reac_ctrl_identify_box are RENAMED reac_box_catalogue/_by_token/_by_width and
+ *        reac_box_catalogue_match; reac_box_master_model is REMOVED and
+ *        reac_box_master_identity_publish no longer names a box master from its width.
+ *        Discovery and the tap carry the DECLARED widths instead of a catalogue pointer
+ *        (struct reac_disco_sighting/entry/gate_entry, struct reac_tap_stream);
+ *        reac_disco_model_index/_by_index are REMOVED. The identity page is read from
+ *        every box: reac_ctrl_identity_fragment reassembles the S-0808's name record, and
+ *        the master re-polls the page once a second after the box has joined until the
+ *        firmware and hw block are in (REAC_M_EMIT_IDENTITY_POLL, APPENDED;
+ *        reac_master_identity_answered, ADDED) — an S-0808 polled before its JOIN never
+ *        answered. A desk is told from a box on M by its cfea total_slots and its broadcast
+ *        width (reac_rival_kind_of; REAC_RIVAL_PENDING, APPENDED, while a 1492 B master has
+ *        not announced itself), never by its record kinds; the discovery structs carry
+ *        announced_slots. struct reac_master and struct reac_pacer grow: LIBREAC_ABI 5 -> 6,
+ *        libreac-transport's soname 6 -> 7.
  * 1.6.0: THE 2026-09-25 REVIEW'S FIXES (2026-09-25-libreac-review). A minor,
  *        not a patch, because reac_cfg.h's PUBLIC vocabulary moves: REAC_CFG_REFUSED_NONE is
  *        "none" (was ""), REAC_ROLE_PROP and REAC_CFG_ROLE_STATE_HUNTING are ADDED, and
@@ -362,7 +383,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 6
+#define LIBREAC_VERSION_MINOR 7
 #define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
@@ -375,7 +396,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
  * number; packaging/make-tarball.sh refuses a tarball whose spec disagrees. */
-#define LIBREAC_ABI 5
+#define LIBREAC_ABI 6
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)

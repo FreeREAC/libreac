@@ -74,11 +74,11 @@ int main(void)
 
 	/* The model door: the 40-in and 40-out experiment rows build; a row wider than
 	 * the fabric, or odd, either way, is refused. */
-	const struct reac_box_model *fr40 = reac_box_model_by_token("fr4000");
+	const struct reac_box_model *fr40 = reac_box_catalogue_by_token("fr4000");
 	CHK(fr40 && reac_box_model_upstream_width(fr40) == 40);
 	CHK(reac_ctrl_build_as(frame, fr40, REAC_BOX_BLOCK_CONFIG, MASTER, SRC, 1, NULL, 0)
 	    == reac_ctrl_box_frame_len(40));
-	CHK(reac_box_model_upstream_width(reac_box_model_by_token("fr0040")) == 2);
+	CHK(reac_box_model_upstream_width(reac_box_catalogue_by_token("fr0040")) == 2);
 	struct reac_box_model wide = *fr40;
 	wide.in_ch = 42;
 	CHK(reac_box_model_upstream_width(&wide) == 0);

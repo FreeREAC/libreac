@@ -446,10 +446,11 @@ struct reac_pacer {
 	_Atomic uint64_t rx_box_frames;  /* classified box frames (incl. FILLER) */
 	_Atomic uint64_t rx_box_ctrl;    /* classified box CONTROL frames */
 	_Atomic uint64_t rx_joins;       /* validated JOINs seen */
-	/* Written only by the pacer thread (dedup for the RECOGNIZED pev); _Atomic
-	 * so a non-RT reader (the reac.box-model / reac.box-width property poll)
-	 * can load it from another thread without a data race. A pointer store/load
-	 * is lock-free on every arch reac-pw targets. */
+	/* THE CATALOGUE ENTRY the box's declaration is byte-equal to, or NULL
+	 * (reac_box_catalogue_match). For a binding's CATALOGUE DEFECT check only
+	 * (reac_box_catalogue_defect): the box's widths are declared_in/declared_out
+	 * and its name comes from reac_box_name, never from this entry (1.7.0).
+	 * Written only by the pacer thread; _Atomic for the non-RT reader. */
 	_Atomic (const struct reac_box_model *) recognized_box;
 	/* THE ESTABLISHED BOX'S HEAD-AMP BASE, mirrored for cross-thread reads. It is
 	 * the chassis strap the box announced (libreac reac_ports.h), carried here
@@ -614,6 +615,10 @@ struct reac_pacer {
 	uint64_t log_last_ns;            /* mono_ns of the last emitted depth line */
 	uint64_t log_last_trims;         /* ring_trims count at the last depth line */
 	struct reac_discard_watch discard;  /* sustained audio-discard detector     */
+
+	/* The identity page's name record arrives in two link-4 fragments; the FIRST
+	 * waits here for its LAST (reac_ctrl_identity_fragment). Pacer thread only. */
+	struct reac_identity_frag rx_identity_frag;
 };
 
 /* period for an fps (ns). Exposed for the unit test. */

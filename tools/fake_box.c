@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 	uint8_t model_blk[32];
 	int stream_ch = BOX_CHANNELS;
 	if (argc > 3 && argv[3][0]) {
-		model = reac_box_model_by_token(argv[3]);
+		model = reac_box_catalogue_by_token(argv[3]);
 		if (!model) {
 			fprintf(stderr, "fake_box: no table row named '%s'\n", argv[3]);
 			return 2;
@@ -206,7 +206,10 @@ int main(int argc, char **argv)
 	uint8_t rx[REAC_FRAME_BYTES + 64], tx[REAC_FRAME_BYTES + 64];
 	uint8_t master[6] = { 0 };
 	int have_master = 0, saw_first = 0, mids = 0, committed = 0, joined = 0;
-	long transfers = 0, ignored = 0, sent = 0;
+	long transfers = 0, ignored = 0, sent = 0, ident_ignored = 0, ident_sent = 0;
+	unsigned ident_due = 0;
+	const struct reac_box_model *ident_row = model ? model
+	                                              : reac_box_catalogue_by_token("s4000s");
 	/* DROPPED MODE: deaf to every frame until its own PHY comes back. */
 	const char *dropped_env = getenv("FAKE_BOX_DROPPED");
 	const int dropped = dropped_env && dropped_env[0] == '1';
@@ -251,6 +254,26 @@ int main(int argc, char **argv)
 				} else if (committed && !joined && !join_at &&
 				           k == REAC_CTRL_GROUP_MAP) {
 					join_at = now + JOIN_DELAY_NS;
+				}
+				/* THE IDENTITY PAGE, ANSWERED THE WAY A REAL BOX ANSWERS IT: only
+				 * once it has JOINED. An S-0808 on reac-pw ignored the six RQ1s
+				 * that reached it 0.8 s before its JOIN
+				 * (reacA-s0808-reacpw-coldboot.pcap, 2026-10-07), so a master that
+				 * asks only in the grant sweep reads nothing; this box makes the
+				 * same demand of the master under test. */
+				const uint8_t *b = rx + REAC_CTRL_BLOCK_OFF;
+				if (n >= REAC_CTRL_BLOCK_OFF + REAC_CTRL_BLOCK_LEN && b[0] == 0x04 &&
+				    b[1] == 0x03 && b[9] == 0xf0 && b[15] == 0x11 &&
+				    b[16] == 0x05 && b[17] == 0x00) {
+					unsigned addr = (unsigned)b[18] << 8 | b[19];
+					if (!joined)
+						ident_ignored++;
+					else if (addr == 0x0000)
+						ident_due |= 1;
+					else if (addr == 0x0600)
+						ident_due |= 2;
+					else if (addr == 0x1000)
+						ident_due |= 4;
 				}
 			}
 		}
@@ -301,6 +324,25 @@ int main(int argc, char **argv)
 			fprintf(stderr, "fake_box: 04 03 burst sent, 1.489 s after the "
 			        "master's ENROLL group map\n");
 		}
+		/* The identity replies the master asked for, from this row's own facts. */
+		if (ident_due && ident_row) {
+			static const enum reac_box_block B[] = {
+				REAC_BOX_BLOCK_CC0016, REAC_BOX_BLOCK_CC001A,
+				REAC_BOX_BLOCK_IDENT_FIRST, REAC_BOX_BLOCK_IDENT_LAST };
+			for (int i = 0; i < 4; i++) {
+				unsigned bit = i < 2 ? (1u << i) : 4u;
+				if (!(ident_due & bit))
+					continue;
+				size_t len = reac_ctrl_build_as(tx, ident_row, B[i], master, BOX_MAC,
+				                                (uint16_t)sent, NULL, 0);
+				if (len && sendto(fd, tx, len, 0, (struct sockaddr *)&to,
+				                  sizeof to) > 0) {
+					sent++;
+					ident_sent++;
+				}
+			}
+			ident_due = 0;
+		}
 		/* Once committed the box streams — a linked box is never silent again. */
 		if (committed && now >= next_stream) {
 			size_t len = reac_ctrl_build_upstream_filler(tx, master, BOX_MAC,
@@ -315,9 +357,9 @@ int main(int argc, char **argv)
 	}
 	fprintf(stderr, "fake_box: %ld complete transfers seen, %ld ignored, "
 	        "%ld frames sent, committed=%d joined=%d dropped=%d deaf_transfers=%ld "
-	        "phy_edge=%d\n",
+	        "phy_edge=%d identity: %ld polls before the JOIN ignored, %ld replies sent\n",
 	        transfers, ignored, sent, committed, joined, dropped, deaf_transfers,
-	        phy_edge);
+	        phy_edge, ident_ignored, ident_sent);
 	close(fd);
 	/* In dropped mode committing is not enough: it has to have taken an EDGE to get
 	 * there, and the master has to have spent whole pushes before it. A run that
