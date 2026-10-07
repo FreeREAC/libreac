@@ -153,6 +153,7 @@ struct reac_disco_gate_entry {
 	uint8_t mac[6];
 	enum reac_disco_role role;
 	int decl_key;              /* (in << 8 | out) of the declaration, -1 before one */
+	uint8_t announced_slots;   /* the cfea total_slots last pushed, 0 = none */
 	uint64_t last_push_ns;
 };
 

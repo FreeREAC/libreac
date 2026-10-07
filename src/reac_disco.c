@@ -210,9 +210,12 @@ int reac_disco_gate_should_push(struct reac_disco_gate *g,
 		 * to a second later. Facts only sharpen (unknown -> known), so an ambiguous
 		 * frame arriving after a definite one is not an edge. */
 		if ((s->role != REAC_DISCO_ROLE_UNKNOWN && s->role != e->role) ||
-		    (decl_key >= 0 && decl_key != e->decl_key)) {
+		    (decl_key >= 0 && decl_key != e->decl_key) ||
+		    (s->announced_slots && s->announced_slots != e->announced_slots)) {
 			if (s->role != REAC_DISCO_ROLE_UNKNOWN)
 				e->role = s->role;
+			if (s->announced_slots)
+				e->announced_slots = s->announced_slots;
 			if (decl_key >= 0)
 				e->decl_key = decl_key;
 			e->last_push_ns = now_ns;
@@ -236,6 +239,7 @@ int reac_disco_gate_should_push(struct reac_disco_gate *g,
 	memcpy(e->mac, s->mac, 6);
 	e->role = s->role;
 	e->decl_key = decl_key;
+	e->announced_slots = s->announced_slots;
 	e->last_push_ns = now_ns;
 	return 1;   /* a MAC never seen before is always worth a slot */
 }

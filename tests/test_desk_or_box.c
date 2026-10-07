@@ -241,6 +241,21 @@ int main(void)
 			CHK(h.arb.rival == REAC_RIVAL_DESK && h.verdict == REAC_HUNT_SLAVE);
 		}
 
+		/* 4c. the cfea crosses the pacer's ring: a gate that let only role and
+		 * declaration through would hold a running segment pending for ever */
+		{
+			struct reac_disco_gate g;
+			reac_disco_gate_init(&g);
+			struct reac_disco_sighting sg = { .role = REAC_DISCO_ROLE_MASTER,
+			                                  .channels = REAC_MAX_CHANNELS };
+			memcpy(sg.mac, M200M, 6);
+			CHK(reac_disco_gate_should_push(&g, &sg, 1000) == 1);
+			CHK(reac_disco_gate_should_push(&g, &sg, 2000) == 0);   /* a repeat */
+			sg.announced_slots = 0x28;
+			CHK(reac_disco_gate_should_push(&g, &sg, 3000) == 1);   /* its announce */
+			CHK(reac_disco_gate_should_push(&g, &sg, 4000) == 0);
+		}
+
 		/* 5. a box-width broadcast master with no cfea (a box on M that never
 		 * announces): a BOX by its width */
 		t.e[0].channels = 8;
