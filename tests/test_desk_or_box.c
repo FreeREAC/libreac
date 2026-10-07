@@ -240,6 +240,21 @@ int main(void)
 			reac_hunt_step(&h, 5000);
 			CHK(h.arb.rival == REAC_RIVAL_DESK && h.verdict == REAC_HUNT_SLAVE);
 		}
+		/* 4b'. pending changes nothing: a wire already decided keeps its verdict */
+		{
+			struct reac_hunt h;
+			reac_hunt_init(&h, US, 1000);
+			h.verdict = REAC_HUNT_MASTER;              /* we were driving it */
+			static struct reac_master m2;
+			reac_master_init(&m2, M200M, NULL, 4000);
+			size_t hl = desk_downstream(frame);
+			memcpy(frame + 6, M200M, 6);
+			CHK(reac_master_stamp(&m2, frame, REAC_M_EMIT_CHANMAP, 0) == 0);
+			CHK(reac_hunt_observe(&h, frame, hl, 2000, NULL) >= 0);
+			reac_hunt_step(&h, 3000);
+			CHK(h.arb.rival == REAC_RIVAL_PENDING);
+			CHK(h.verdict == REAC_HUNT_MASTER);
+		}
 
 		/* 4c. the cfea crosses the pacer's ring: a gate that let only role and
 		 * declaration through would hold a running segment pending for ever */

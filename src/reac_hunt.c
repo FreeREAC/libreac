@@ -221,9 +221,11 @@ static enum reac_hunt_verdict decide(const struct reac_hunt *h, uint64_t now_ns)
 	 * a longer wait could add. */
 	if (h->arb.state == REAC_SEGMENT_FOREIGN) {
 		/* A 40-slot master that has not announced itself is a desk or a 40-input box
-		 * on M: undecided, so the hunt waits for its cfea rather than guess (1.7.0). */
+		 * on M: undecided, so nothing changes until its cfea arrives (1.7.0) — a hunt
+		 * keeps hunting, and a segment already served keeps its verdict rather than
+		 * being re-decided on a guess. */
 		if (h->arb.rival == REAC_RIVAL_PENDING)
-			return REAC_HUNT_HUNTING;
+			return h->verdict;
 		return h->arb.rival == REAC_RIVAL_UNKNOWN ? REAC_HUNT_REFUSED : REAC_HUNT_SLAVE;
 	}
 
