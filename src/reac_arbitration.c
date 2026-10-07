@@ -163,8 +163,11 @@ void reac_arbitrate(const struct reac_disco_table *table,
  *   - a 1492 B broadcast whose cfea says 0x28: a DESK — a captured fact, three consoles;
  *   - a 1492 B broadcast with no cfea heard yet: PENDING, never a desk by default.
  *
+ * The S-0808 on M announces nothing (s0808-as-master-20261007-122036: 340 B broadcasts,
+ * channel map and scene push, no cfea); its width alone makes it a box, with no hold.
+ *
  * THE KNOWN GAP: a 40-input box on M (an S-4000S-4000) would broadcast 1492 B and may
- * announce 0x28; nobody has captured one, and until it is captured it reads as a desk. */
+ * announce 0x28 (read as a desk) or nothing (pending); nobody has captured one. */
 enum reac_rival_kind reac_rival_kind_of(const struct reac_disco_entry *e)
 {
 	if (!e)
