@@ -580,9 +580,16 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 		size_t plen;
 		/* A single-record reply (firmware, hw block), or the name record closed
 		 * by its LAST fragment (the S-0808 sends one). */
-		if (reac_ctrl_identity_reply(frame, len, &addr_lo, &payload, &plen) == 1 ||
-		    reac_ctrl_identity_fragment(&p->rx_identity_frag, frame, len, &addr_lo,
-		                                &payload, &plen) == 1) {
+		/* ONLY THE ENROLLED BOX'S PAGE: another REAC peer on the segment must not
+		 * rename or re-version the node. Before a box is enrolled there is no
+		 * filter to apply, and the accumulator is reset when one is forgotten. */
+		const int from_ours = !reac_master_has_box(&p->master) ||
+		        memcmp(frame + 6, p->master.box_mac, 6) == 0 ||
+		        memcmp(p->master.box_mac, "\0\0\0\0\0\0", 6) == 0;
+		if (from_ours &&
+		    (reac_ctrl_identity_reply(frame, len, &addr_lo, &payload, &plen) == 1 ||
+		     reac_ctrl_identity_fragment(&p->rx_identity_frag, frame, len, &addr_lo,
+		                                 &payload, &plen) == 1)) {
 			unsigned s = identity_write_begin(p);
 			reac_identity_ingest(&p->rx_identity, addr_lo, payload, plen);
 			identity_write_end(p, s);

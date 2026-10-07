@@ -52,12 +52,17 @@ int reac_ctrl_checksum_verify(const uint8_t *frame)
 }
 
 /* The nested record checksum sums to 0x80, not to 0. */
+/* THE ROLAND DT1 CHECKSUM IS SEVEN BITS: the byte makes TAG..CKSUM sum to 0 mod 128
+ * (1.7.0). The old rule — sum to 0x80 mod 256 — gave the same byte only while the
+ * record's sum before the checksum had an even number of 128s in it, which every short
+ * record in the corpus has; a longer one (a name) with an odd count was stamped with a
+ * byte >= 0x80, which is not a MIDI data byte, and refused when it arrived. */
 void reac_ctrl_record_cksum_stamp(uint8_t *rec, size_t n)
 {
 	unsigned s = 0;
 	for (size_t i = 0; i + 1 < n; i++)
 		s += rec[i];
-	rec[n - 1] = (uint8_t)((0x80 - s) & 0xff);
+	rec[n - 1] = (uint8_t)((0x80 - (s & 0x7f)) & 0x7f);
 }
 
 int reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n)
@@ -65,7 +70,7 @@ int reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n)
 	unsigned s = 0;
 	for (size_t i = 0; i < n; i++)
 		s += rec[i];
-	return ((s & 0xff) == 0x80) ? 0 : -1;
+	return ((s & 0x7f) == 0) ? 0 : -1;
 }
 
 /* ---- the scene push ------------------------------------------------------

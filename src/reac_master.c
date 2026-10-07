@@ -1268,7 +1268,9 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 			}
 		}
 		/* THE IDENTITY RE-POLL: six RQ1s, one every grant_stride slots, armed once a
-		 * second (half a second after the cfea) while the box has not answered. */
+		 * second while the box has not answered. Armed a quarter second after the cfea:
+		 * reset_control_cadence puts the chanmap HALF a second after it, and an arm
+		 * on that slot would never be reached — the chanmap returns first. */
 		if (m->identity_poll_left > 0) {
 			if (++m->identity_poll_slot >= m->grant_stride) {
 				m->identity_poll_slot = 0;
@@ -1277,7 +1279,7 @@ static enum reac_master_emit control_cadence(struct reac_master *m, int *idx)
 				return REAC_M_EMIT_IDENTITY_POLL;
 			}
 		} else if (!m->identity_complete && m->identity_polls < REAC_M_IDENTITY_POLLS &&
-		           m->announce_tick == m->fps / 2) {
+		           m->announce_tick == m->fps / 4) {
 			m->identity_polls++;
 			m->identity_poll_left = REAC_GRANT_GROUPB_LEN;
 			m->identity_poll_slot = 0;

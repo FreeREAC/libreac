@@ -51,7 +51,8 @@ void reac_ctrl_checksum_apply(uint8_t *frame);
 int  reac_ctrl_checksum_verify(const uint8_t *frame);
 
 /* The NESTED record checksum (head-amp DT1 and friends): a record's last byte is
- * set so the record sums to 0x80, not to 0. It is stamped BEFORE the block
+ * set so the record sums to 0 mod 128 — the Roland seven-bit DT1 checksum (1.7.0; the
+ * short records of the corpus all sum to 0x80, which is the same rule). Stamped BEFORE the block
  * checksum that encloses it — a record fixed up afterwards invalidates the
  * block, which is a real bug this ordering exists to prevent. */
 void reac_ctrl_record_cksum_stamp(uint8_t *rec, size_t n);

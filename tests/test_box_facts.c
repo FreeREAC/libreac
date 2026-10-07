@@ -180,6 +180,10 @@ int main(void)
 		struct reac_master m;
 		reac_master_init(&m, US, &cfg, fps);
 		m.state = REAC_M_ESTABLISHED;
+		/* the phases enter_established leaves (reset_control_cadence): cfea a quarter
+		 * second in, chanmap three quarters — the arm must not sit under either */
+		m.announce_tick = (3 * fps) / 4;
+		m.est_chanmap_tick = fps / 4;
 		/* the box keeps talking: every RX reloads link_check (reac_master_rx) */
 #define HELD(m) ((m).link_check = (m).link_check_reload + 1)
 		uint8_t want[REAC_GRANT_GROUPB_LEN][34];
@@ -218,6 +222,21 @@ int main(void)
 			polls += reac_master_next(&m, &c, &idx) == REAC_M_EMIT_IDENTITY_POLL;
 		}
 		CHK(polls == (REAC_M_IDENTITY_POLLS - 2) * REAC_GRANT_GROUPB_LEN);
+	}
+
+	/* ---- 5. the Roland checksum is seven bits. A record whose sum before the checksum
+	 * has an ODD number of 128s (here 0x00 0x00 + "AB": tag..data sum 05+00+10+00+01+41+42
+	 * = 0x99, i.e. one 128) closes at 0 mod 256, not 0x80, and is still valid. */
+	{
+		uint8_t rec[9] = { 0x05, 0x00, 0x10, 0x00, 0x01, 0x41, 0x42, 0x00 };
+		reac_ctrl_record_cksum_stamp(rec, 8);
+		CHK(rec[7] < 0x80);                               /* a MIDI data byte */
+		unsigned sum = 0;
+		for (int i = 0; i < 8; i++) sum += rec[i];
+		CHK(sum % 128 == 0 && sum % 256 == 0);            /* the case the old rule refused */
+		CHK(reac_ctrl_record_cksum_verify(rec, 8) == 0);
+		rec[6] ^= 1;
+		CHK(reac_ctrl_record_cksum_verify(rec, 8) != 0);
 	}
 
 	printf("OK: box facts — the hw block names the family, the declaration and family "
