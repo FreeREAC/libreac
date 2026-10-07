@@ -9,7 +9,7 @@ Version:        1.6.0
 # LIBREAC_ABI in include/reac/reac.h -- packaging/make-tarball.sh refuses to
 # build a tarball when this copy and the header disagree, which is the only
 # moment the copy can be caught.
-%global abi 4
+%global abi 5
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -108,6 +108,8 @@ make test
 
 %changelog
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
+- 1.5.1's GRANT WIDTH, carried forward from release/1.5: REAC_GRANT_MAX_WIDTH is 40
+  (operator ruling 2026-10-06), grant_burst grows to 128 rows, LIBREAC_ABI 4 -> 5.
 - ONE HOME FOR WHAT reac-pw COPIES (shared-code audit lane A,
   2026-10-02-one-home-for-what-reac-pw-copies). reac_code.h's
   REAC_CODE_LIST gains reac-pw's seven tokens (E_LINK_BUDGET, E_ORPHAN_PAIR,

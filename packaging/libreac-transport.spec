@@ -4,7 +4,7 @@
 # 2026-09-11-reac-transport-library for what moved and why.
 Name:           libreac-transport
 Version:        1.6.0
-%global abi 5
+%global abi 6
 Release:        1%{?dist}
 Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
 
@@ -88,7 +88,9 @@ PC
 
 %changelog
 * Fri Sep 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.6.0-1
-- No existing symbol or struct changes in this library. reac_role_swap.h's
+- 1.5.1's grant width, carried forward: grant_burst grows to 128 rows, so struct
+  reac_master and struct reac_pacer move and the soname goes 5 -> 6, as on 1.5.1.
+- No other existing symbol or struct changes in this library. reac_role_swap.h's
   REAC_ROLE_STATE_HUNTING and the vendored reac-pw cfg headers now alias libreac's
   reac_cfg.h instead of typing the vocabulary a second time.
 - THE ONE HOME OF WHAT reac-pw RE-IMPLEMENTS (shared-code audit lane A,

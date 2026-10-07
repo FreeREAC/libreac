@@ -311,6 +311,15 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        counters, over the one RTM_GETQDISC dump walker). Nothing moves: LIBREAC_ABI
  *        stays 4, and tests/abi-layout.inc now records all 68 public structs (607
  *        offsets), five of which had been added since it was last generated.
+ *        AND 1.5.1's GRANT WIDTH, carried forward from release/1.5: REAC_GRANT_MAX_WIDTH
+ *        is 40 (operator ruling 2026-10-06); struct reac_master's grant_burst grows
+ *        from 104 to 128 rows, so LIBREAC_ABI is 5 and libreac-transport's soname 6,
+ *        exactly as on 1.5.1 (a superset of it, nothing else moved).
+ * 1.5.1: A BOX IS GRANTED AT ANY WIDTH IT CAN DECLARE. REAC_GRANT_MAX_WIDTH is 40, the
+ *        REAC frame's channel count (operator ruling 2026-10-06), not 32; a 40 in / 0 out
+ *        box was refused and never granted. struct reac_master's grant_burst grows from
+ *        104 to 128 rows, which moves struct reac_master and struct reac_pacer: LIBREAC_ABI
+ *        4 -> 5, libreac-transport's soname 5 -> 6, tests/abi-layout.inc regenerated.
  * 1.5.0: A TRUNK NAMES ITS VLANS BY TAGGING, AND THE TAP HEARS THEM (operator ruling
  *        2026-09-22; reac-pw's 2026-09-16-segments-and-roles-are-autodetected,
  *        amendment of that date). reac_topo's tap was BPF-filtered to 0x8819, so a VLAN
@@ -366,7 +375,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
  * number; packaging/make-tarball.sh refuses a tarball whose spec disagrees. */
-#define LIBREAC_ABI 4
+#define LIBREAC_ABI 5
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)
