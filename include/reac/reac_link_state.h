@@ -40,11 +40,14 @@
 
 /* PipeWire node property keys the badge consumer reads. reac.link-state is
  * the must-have; reac.box-model / reac.box-width are best-effort (populated
- * once the master's box recognizer matches a fixed-matrix model; "none" /
- * "0x0" until then — see reac_ctrl.h's reac_box_model). */
+ * once the box has declared itself and its name is derived from its frames
+ * (reac_box_facts.h); "none" / "0x0" until then). */
 #define REAC_PROP_LINK_STATE "reac.link-state"
 #define REAC_PROP_BOX_MODEL  "reac.box-model"
 #define REAC_PROP_BOX_WIDTH  "reac.box-width"
+/* The box's model NAME as reac_box_name derives it from its frames ("S-1608",
+ * "S-4000S-1624", "REAC-0816"); reac.box-model carries the same as a token (1.7.0). */
+#define REAC_PROP_BOX_NAME   "reac.box-name"
 
 /* The box's OWN identity, decoded from the identity-page replies (DT1 tag 0x0500)
  * the grant sweep polls — beside reac.box-model, which comes from the geometry.
