@@ -55,13 +55,18 @@ void reac_box_mac_publish(uint64_t mac48, reac_prop_set_fn set, void *ctx)
 	set(ctx, REAC_PROP_BOX_MAC, out);
 }
 
-void reac_box_master_identity_publish(uint64_t mac48, int locked,
+void reac_box_master_identity_publish(unsigned width, uint64_t mac48, int locked,
                                       reac_prop_set_fn set, void *ctx)
 {
 	if (!set)
 		return;
 	set(ctx, REAC_PROP_LINK_STATE,
 	    reac_link_state_name(locked ? REAC_LINK_ESTABLISHED : REAC_LINK_PROBING));
+	if (width > 0) {
+		char w[12];
+		snprintf(w, sizeof w, "%u", width);
+		set(ctx, REAC_PROP_BOX_WIDTH, w);
+	}
 	reac_box_mac_publish(mac48, set, ctx);
 }
 

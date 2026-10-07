@@ -246,11 +246,13 @@ typedef void (*reac_prop_set_fn)(void *ctx, const char *key, const char *value);
 void reac_box_mac_publish(uint64_t mac48, reac_prop_set_fn set, void *ctx);
 
 /* THE WHOLE IDENTITY OF A JOINED BOX MASTER, composed and STAMPED in one act: the link
- * state (probing / established) and REAC_PROP_BOX_MAC. A box with its REAC Mode switch on
- * M sends no config announce and no identity page, so neither its model nor its outputs
- * are on the wire, and nothing is stamped for them (1.7.0; the model catalogue never names
- * a connected box). `mac48` 0 means NO BOX. `set` NULL is a no-op. */
-void reac_box_master_identity_publish(uint64_t mac48, int locked,
+ * state (probing / established), REAC_PROP_BOX_MAC and REAC_PROP_BOX_WIDTH as the single
+ * number `width` — the inputs it broadcasts, which its cfea total_slots also announces. A
+ * box with its REAC Mode switch on M sends no config announce and no identity page, so
+ * neither its model nor its outputs are on the wire: no model is stamped and the width
+ * carries no output count (1.7.0; the model catalogue never names a connected box).
+ * `width` 0 stamps no width. `mac48` 0 means NO BOX. `set` NULL is a no-op. */
+void reac_box_master_identity_publish(unsigned width, uint64_t mac48, int locked,
                                       reac_prop_set_fn set, void *ctx);
 
 /* THE IDENTITY-PAGE BADGE, composed and STAMPED in one act — REAC_PROP_BOX_FIRMWARE,
