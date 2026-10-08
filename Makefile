@@ -295,6 +295,9 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# freereac-ops and are cited by bare slug: the public half refuses a docs path, a docs
 	# tree or a build command in the README; the ops half resolves every slug in the
 	# sibling checkout, and says OPS-ABSENT (SKIP) where there is none.
+	# THE VERSION AND THE SONAMES HAVE ONE DEFINITION (reac.h); the spec, debian/ and CHANGELOG.md copy
+	# them, and a copy that lags is refused here instead of shipping a package that loads a stale ABI.
+	$(RUN_TEST) tests/conformance-packaging.sh
 	$(RUN_TEST) tests/conformance-public-docs.sh
 	$(RUN_TEST) tools/ops-slugs.sh --self-test
 	$(RUN_TEST) tools/ops-slugs.sh
