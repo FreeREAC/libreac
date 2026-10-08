@@ -65,11 +65,24 @@ byte is derived, from the running rate in packets per second (≥ 8000 pps → 9
 
 ## Install
 
-Fedora packages are published, signed, at [freereac.github.io/rpm](https://freereac.github.io/rpm):
+Both libraries are published, signed, in the FreeMixer package channel for Fedora 44 (x86_64,
+aarch64) and for Debian bookworm and trixie, including Raspberry Pi OS (amd64, arm64).
+
+Fedora:
 
 ```
-sudo dnf config-manager addrepo --from-repofile=https://freereac.github.io/rpm/freereac.repo
+sudo dnf config-manager addrepo --from-repofile=https://freemixer.github.io/rpm/freemixer.repo
 sudo dnf install libreac-devel libreac-transport-devel
+```
+
+Debian and Raspberry Pi OS:
+
+```
+sudo install -d /etc/apt/keyrings
+sudo curl -fsSL -o /etc/apt/keyrings/freemixer.asc https://freemixer.github.io/deb/freemixer.asc
+echo "deb [signed-by=/etc/apt/keyrings/freemixer.asc] https://freemixer.github.io/deb/debian/$(. /etc/os-release && echo $VERSION_CODENAME) ./" | sudo tee /etc/apt/sources.list.d/freemixer.list
+sudo apt update
+sudo apt install libreac-dev libreac-transport-dev
 ```
 
 To build from source, see [BUILDING.md](BUILDING.md).

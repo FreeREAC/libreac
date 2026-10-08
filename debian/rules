@@ -1,0 +1,58 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+include /usr/share/dpkg/buildflags.mk
+
+MULTIARCH = $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+LIBDIR = usr/lib/$(MULTIARCH)
+TMP = $(CURDIR)/debian/tmp
+
+# The version and libreac's soname live in include/reac/reac.h and nowhere else; the
+# soname of libreac-transport is its own and names the libreac-transport7 package.
+VERSION = $(shell awk '/^\#define LIBREAC_VERSION_(MAJOR|MINOR|PATCH)/ { v = v (v == "" ? "" : ".") $$3 } END { print v }' include/reac/reac.h)
+ABI = $(shell awk '/^\#define LIBREAC_ABI[ \t]/ { print $$3; exit }' include/reac/reac.h)
+TABI = 7
+
+%:
+	dh $@
+
+# Every src/*.c, never a hand-kept list. --no-undefined refuses a shared object with a
+# symbol nothing defines, here, where the missing file is.
+override_dh_auto_build:
+	for f in src/*.c; do \
+	  $(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -Iinclude -c $$f -o $$(basename $$f .c).o || exit 1; \
+	done
+	$(CC) $(LDFLAGS) -shared -Wl,-soname,libreac.so.$(ABI) -Wl,--no-undefined \
+	  -o libreac.so.$(VERSION) *.o -lm
+	ln -sf libreac.so.$(VERSION) libreac.so
+	mkdir -p transport-obj
+	for f in transport/src/*.c; do \
+	  $(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -D_GNU_SOURCE -Iinclude -Itransport/src \
+	    -Ipackaging/vendor/reac-pw-headers -c $$f -o transport-obj/$$(basename $$f .c).o || exit 1; \
+	done
+	$(CC) $(LDFLAGS) -shared -Wl,-soname,libreac-transport.so.$(TABI) -Wl,--no-undefined \
+	  -o libreac-transport.so.$(VERSION) transport-obj/*.o -L. -lreac -lm -lpthread
+
+override_dh_auto_install:
+	install -Dm0755 libreac.so.$(VERSION) $(TMP)/$(LIBDIR)/libreac.so.$(VERSION)
+	ln -s libreac.so.$(VERSION) $(TMP)/$(LIBDIR)/libreac.so.$(ABI)
+	ln -s libreac.so.$(ABI) $(TMP)/$(LIBDIR)/libreac.so
+	install -Dm0755 libreac-transport.so.$(VERSION) $(TMP)/$(LIBDIR)/libreac-transport.so.$(VERSION)
+	ln -s libreac-transport.so.$(VERSION) $(TMP)/$(LIBDIR)/libreac-transport.so.$(TABI)
+	ln -s libreac-transport.so.$(TABI) $(TMP)/$(LIBDIR)/libreac-transport.so
+	for h in include/reac/*.h include/reac/transport/*.h; do \
+	  install -Dm0644 $$h $(TMP)/usr/$${h}; \
+	done
+	install -d $(TMP)/$(LIBDIR)/pkgconfig
+	sed -e 's|@LIB@|lib/$(MULTIARCH)|' -e 's|@VERSION@|$(VERSION)|' packaging/libreac.pc.in \
+	  > $(TMP)/$(LIBDIR)/pkgconfig/libreac.pc
+	sed -e 's|@LIB@|lib/$(MULTIARCH)|' -e 's|@VERSION@|$(VERSION)|' packaging/libreac-transport.pc.in \
+	  > $(TMP)/$(LIBDIR)/pkgconfig/libreac-transport.pc
+
+# libreac's own suite, against the objects built above (the Makefile finds them up to date).
+override_dh_auto_test:
+	$(MAKE) test
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf transport-obj libreac.so libreac.so.* libreac-transport.so.*

@@ -1,6 +1,15 @@
 name: ci
 on: [push, pull_request]
 jobs:
+  # CHANGELOG.md is the one changelog: the spec's %changelog and debian/changelog are generated from it,
+  # and a hand edit or a stale copy fails here
+  changelog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FreeMixer/.github/.github/actions/changelog@main
+
   test:
     runs-on: ubuntu-latest
     # A backstop only: every test already carries its own timeout (tests/run-test.sh),

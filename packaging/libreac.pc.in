@@ -1,0 +1,9 @@
+prefix=/usr
+libdir=${prefix}/@LIB@
+includedir=${prefix}/include
+
+Name: libreac
+Description: Roland REAC wire-format core
+Version: @VERSION@
+Libs: -L${libdir} -lreac
+Cflags: -I${includedir}
