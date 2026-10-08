@@ -34,6 +34,7 @@ check() {
 	spec_abi=$(awk '/^%global abi[ \t]/ { print $3; exit }' "$spec")
 	spec_tabi=$(awk '/^%global tabi[ \t]/ { print $3; exit }' "$spec")
 	deb_ver=$(sed -n '1s/^[^ ]* (\([^)]*\)).*/\1/p' "$t/debian/changelog")
+	deb_ver=${deb_ver%%~*}   # an untagged CI build stamps ~git<sha> on the top entry; the release version is before it
 	deb_abi=$(sed -n 's/^Package: libreac\([0-9][0-9]*\)$/\1/p' "$t/debian/control")
 	deb_tabi=$(sed -n 's/^Package: libreac-transport\([0-9][0-9]*\)$/\1/p' "$t/debian/control")
 	rules_tabi=$(sed -n 's/^TABI *= *//p' "$t/debian/rules")
