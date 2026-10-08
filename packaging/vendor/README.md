@@ -6,8 +6,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 reac-pw headers that `include/reac/transport/reac_pacer.h` and `reac_role_swap.h` still
 `#include` for their pure declarations (`2026-09-11-reac-transport-library`
 §2/§5 names this seam explicitly — it is not an oversight). They exist here only so
-`packaging/libreac-transport.spec`'s `%build` has something to point `REACPW_INCLUDE` at without
-requiring a reac-pw source checkout inside the libreac SRPM, which would be a real circular build
+`packaging/libreac.spec`'s `%build` and `debian/rules` have something to point their include path at
+without requiring a reac-pw source checkout inside the libreac SRPM, which would be a real circular build
 dependency (reac-pw's own spec requires `libreac-transport-devel`).
 
 **This is a stopgap.** The honest fix is the header split the design spec already names as open:

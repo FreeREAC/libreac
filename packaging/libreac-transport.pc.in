@@ -1,0 +1,10 @@
+prefix=/usr
+libdir=${prefix}/@LIB@
+includedir=${prefix}/include
+
+Name: libreac-transport
+Description: The REAC transport layer (sockets, pacer, RT threads, VLAN scan)
+Version: @VERSION@
+Requires: libreac >= 1.1.0
+Libs: -L${libdir} -lreac-transport -lpthread -lm
+Cflags: -I${includedir}

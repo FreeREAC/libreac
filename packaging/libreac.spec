@@ -1,15 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# libreac — Roland REAC RX core, Fedora shared library.
+# libreac — the Roland REAC protocol library — and libreac-transport, the sockets and threads that
+# carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
 Version:        1.7.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
 # instead of failing at exec time with `undefined symbol`. It tracks
-# LIBREAC_ABI in include/reac/reac.h -- packaging/make-tarball.sh refuses to
-# build a tarball when this copy and the header disagree, which is the only
-# moment the copy can be caught.
+# LIBREAC_ABI in include/reac/reac.h -- tests/conformance-packaging.sh refuses a copy
+# that disagrees with the header, in `make test`, before a package is built.
 %global abi 6
+# libreac-transport's own soname major. It moves independently of libreac's: the two libraries
+# are built from this one source and share a version, not an ABI.
+%global tabi 7
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -41,6 +44,26 @@ Requires:       %{name}%{?_isa} = %{version}-%{release}
 %description devel
 Headers and pkg-config for building against libreac.
 
+%package -n libreac-transport
+Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
+Requires:       libreac%{?_isa} >= 1.1.0
+
+%description -n libreac-transport
+libreac-transport is the REAC transport layer: AF_PACKET frame RX/TX over a lock-free
+ring, a SCHED_FIFO cadence pacer with clock discipline, network interface and VLAN
+scanning, segment locking, and slave/master establishment orchestration built on
+libreac's protocol state machines. The public API carries no socket type, so an
+alternate backend can implement the same shape; the library holds no Linux capability
+itself, that belongs to the process that links it.
+
+%package -n libreac-transport-devel
+Summary:        Development files for libreac-transport
+Requires:       libreac-transport%{?_isa} = %{version}-%{release}
+Requires:       pkgconfig(libreac) >= 1.1.0
+
+%description -n libreac-transport-devel
+Headers and pkg-config for building against libreac-transport.
+
 %prep
 %autosetup -n %{name}-%{version}
 
@@ -68,6 +91,22 @@ done
 cc %{build_ldflags} -shared -Wl,-soname,libreac.so.%{abi} -Wl,--no-undefined \
   -o libreac.so.%{version} *.o -lm
 
+# libreac-transport: a second, parallel object family in its own directory, never folded into the
+# glob above, or every transport file would join libreac's own soname. Two of its headers
+# (reac_pacer.h, reac_role_swap.h) #include pure declarations from reac-pw; the vendored snapshot
+# under packaging/vendor lets this build without a reac-pw checkout (see packaging/vendor/README.md).
+# It links the libreac.so just built, through a development symlink that stays in the build tree.
+ln -s libreac.so.%{version} libreac.so
+mkdir transport-obj
+for f in transport/src/*.c; do
+  cc %{optflags} -fPIC -D_GNU_SOURCE -Iinclude -Itransport/src -Ipackaging/vendor/reac-pw-headers \
+     -c "$f" -o transport-obj/"$(basename "$f" .c).o"
+done
+# --no-undefined is the same gate as above: a symbol the transport calls into libreac that libreac
+# lacks fails here, at package build, not at a consumer's exec.
+cc %{build_ldflags} -shared -Wl,-soname,libreac-transport.so.%{tabi} -Wl,--no-undefined \
+  -o libreac-transport.so.%{version} transport-obj/*.o -L. -lreac -lm -lpthread
+
 %install
 install -Dm0755 libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{version}
 ln -s libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{abi}
@@ -77,19 +116,20 @@ ln -s libreac.so.%{abi}     %{buildroot}%{_libdir}/libreac.so
 for h in include/reac/*.h; do
   install -Dm0644 "$h" %{buildroot}%{_includedir}/reac/"$(basename "$h")"
 done
+# The pkg-config files are templates in packaging/, shared with the Debian build.
 mkdir -p %{buildroot}%{_libdir}/pkgconfig
-cat > %{buildroot}%{_libdir}/pkgconfig/libreac.pc <<PC
-prefix=%{_prefix}
-exec_prefix=\${prefix}
-libdir=\${exec_prefix}/%{_lib}
-includedir=\${prefix}/include
+sed -e 's|@LIB@|%{_lib}|' -e 's|@VERSION@|%{version}|' packaging/libreac.pc.in \
+  > %{buildroot}%{_libdir}/pkgconfig/libreac.pc
 
-Name: libreac
-Description: Roland REAC wire-format core
-Version: %{version}
-Libs: -L\${libdir} -lreac
-Cflags: -I\${includedir}
-PC
+# libreac-transport
+install -Dm0755 libreac-transport.so.%{version} %{buildroot}%{_libdir}/libreac-transport.so.%{version}
+ln -s libreac-transport.so.%{version} %{buildroot}%{_libdir}/libreac-transport.so.%{tabi}
+ln -s libreac-transport.so.%{tabi}    %{buildroot}%{_libdir}/libreac-transport.so
+for h in include/reac/transport/*.h; do
+  install -Dm0644 "$h" %{buildroot}%{_includedir}/reac/transport/"$(basename "$h")"
+done
+sed -e 's|@LIB@|%{_lib}|' -e 's|@VERSION@|%{version}|' packaging/libreac-transport.pc.in \
+  > %{buildroot}%{_libdir}/pkgconfig/libreac-transport.pc
 
 %check
 # libreac's own suite, against the very objects %%build produced (the Makefile
@@ -110,6 +150,17 @@ make test
 %{_includedir}/reac/*.h
 %{_libdir}/libreac.so
 %{_libdir}/pkgconfig/libreac.pc
+
+%files -n libreac-transport
+%license LICENSE
+%{_libdir}/libreac-transport.so.%{version}
+%{_libdir}/libreac-transport.so.%{tabi}
+
+%files -n libreac-transport-devel
+%dir %{_includedir}/reac/transport
+%{_includedir}/reac/transport/*.h
+%{_libdir}/libreac-transport.so
+%{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
 * Wed Oct 07 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.0-1
