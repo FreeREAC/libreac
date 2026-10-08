@@ -210,8 +210,8 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * #ifndef, openwrt/libreac/Makefile said 0.5.0, packaging/libreac.spec said
  * 0.6.0 - and none of them was reachable from a consumer at compile time, so
  * no version floor anywhere in the estate could fail. The RPM spec and the
- * OpenWrt recipe read the three numbers below; packaging/make-tarball.sh
- * refuses to build a tarball whose spec disagrees with them.
+ * OpenWrt recipe read the three numbers below; tests/conformance-packaging.sh
+ * refuses a spec or debian/ copy that disagrees with them.
  *
  * The digits appear once. The string is built from them, so the two spellings
  * cannot drift.
@@ -384,7 +384,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
 #define LIBREAC_VERSION_MINOR 7
-#define LIBREAC_VERSION_PATCH 0
+#define LIBREAC_VERSION_PATCH 1
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
@@ -395,7 +395,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * the mismatch impossible: a binary linked against .so.1 will not load .so.0.
  *
  * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
- * number; packaging/make-tarball.sh refuses a tarball whose spec disagrees. */
+ * number; tests/conformance-packaging.sh refuses a spec or debian/ copy that disagrees. */
 #define LIBREAC_ABI 6
 
 #define LIBREAC__STR(x)  #x
