@@ -1,0 +1,3 @@
+usr/include/reac/*.h
+usr/lib/*/libreac.so
+usr/lib/*/pkgconfig/libreac.pc

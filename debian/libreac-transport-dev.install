@@ -1,0 +1,3 @@
+usr/include/reac/transport
+usr/lib/*/libreac-transport.so
+usr/lib/*/pkgconfig/libreac-transport.pc
