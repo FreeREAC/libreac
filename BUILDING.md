@@ -50,29 +50,17 @@ One source builds two libraries, `libreac` and `libreac-transport`, as four bina
 `packaging/*.pc.in`. `openwrt/libreac/Makefile` is the OpenWrt package.
 
 The version and libreac's soname are defined once, in `include/reac/reac.h`;
-`tests/conformance-packaging.sh` (part of `make test`) refuses a spec, `debian/` or `CHANGELOG.md`
+`tests/conformance-packaging.sh` (part of `make test`) refuses a spec or `debian/`
 that disagrees. libreac-transport's soname is its own, in `%global tabi` of the spec and `TABI` of
 `debian/rules`, and names the `libreac-transport7` package.
 
-### Changelog
-
-`CHANGELOG.md` is the one changelog. The spec's `%changelog` and `debian/changelog` are generated
-from it with `changelog.sh` of [FreeMixer/.github](https://github.com/FreeMixer/.github)
-(`.github/actions/changelog/changelog.sh`), and CI refuses a copy that was edited by hand:
-
-```
-changelog.sh sync                # rewrite the spec's %changelog and debian/changelog
-changelog.sh check -t vX.Y.Z     # what CI runs; the tag must be the newest entry
-```
-
 ### Releasing
 
-Add the version's entry to `CHANGELOG.md`, run `changelog.sh sync`, set the version in
-`include/reac/reac.h` and `Version:` in the spec, then tag `vX.Y.Z`. The tag runs
+Set the version in `include/reac/reac.h`, `Version:` in the spec and the top entry of
+`debian/changelog`, then tag `vX.Y.Z`. The tag runs
 `.github/workflows/release.yml`, which calls the shared `build-rpm.yml` and `build-deb.yml` workflows of
 FreeMixer/.github: signed RPMs for Fedora 44 (x86_64, aarch64) and DEBs for Debian bookworm and trixie
-(amd64, arm64) are published to the FreeMixer channel and attached to the GitHub release, whose notes are
-the changelog entry. A pull request or a branch runs the same workflows as a dry run that builds, lints
+(amd64, arm64) are published to the FreeMixer channel and attached to the GitHub release. Git history is the changelog; no changelog file is maintained. A pull request or a branch runs the same workflows as a dry run that builds, lints
 and publishes nothing.
 
 Publish a libreac release before the reac-pw release that builds against it.
