@@ -10,9 +10,7 @@
 #   ARM 1  the spec's Version and the top of debian/changelog equal the header's version;
 #   ARM 2  the spec's %global abi, and the libreac<N> package of debian/control, equal LIBREAC_ABI;
 #   ARM 3  the spec's %global tabi, debian/rules' TABI and the libreac-transport<N> package of
-#          debian/control agree (libreac-transport's soname is its own);
-#   ARM 4  CHANGELOG.md's newest entry is the header's version (the shared changelog check, in CI,
-#          holds the generated spec and debian/changelog to CHANGELOG.md).
+#          debian/control agree (libreac-transport's soname is its own).
 # It walks files, not `git ls-files`, so it also runs from the source tarball (%check). It carries a
 # planted good/bad pair, so it cannot pass (or fail) vacuously.
 #
@@ -38,7 +36,6 @@ check() {
 	deb_abi=$(sed -n 's/^Package: libreac\([0-9][0-9]*\)$/\1/p' "$t/debian/control")
 	deb_tabi=$(sed -n 's/^Package: libreac-transport\([0-9][0-9]*\)$/\1/p' "$t/debian/control")
 	rules_tabi=$(sed -n 's/^TABI *= *//p' "$t/debian/rules")
-	top=$(sed -n 's/^## \([0-9][0-9.]*\)\(-[0-9]*\)\{0,1\} - .*/\1/p' "$t/CHANGELOG.md" | head -1)
 
 	[ "$spec_ver" = "$ver" ] || { echo "  ARM 1: the spec says Version $spec_ver, reac.h says $ver"; bad=1; }
 	[ "$deb_ver" = "$ver" ] || { echo "  ARM 1: debian/changelog says $deb_ver, reac.h says $ver"; bad=1; }
@@ -46,7 +43,6 @@ check() {
 	[ "$deb_abi" = "$abi" ] || { echo "  ARM 2: debian/control names libreac$deb_abi, reac.h says LIBREAC_ABI $abi"; bad=1; }
 	[ -n "$spec_tabi" ] && [ "$spec_tabi" = "$deb_tabi" ] && [ "$spec_tabi" = "$rules_tabi" ] ||
 		{ echo "  ARM 3: libreac-transport's soname: spec '$spec_tabi', debian/control '$deb_tabi', debian/rules '$rules_tabi'"; bad=1; }
-	[ "$top" = "$ver" ] || { echo "  ARM 4: CHANGELOG.md's newest entry is $top, reac.h says $ver"; bad=1; }
 	return $bad
 }
 
@@ -65,7 +61,6 @@ plant() { # <name>: a copy of the files the arms read
 	cp "$ROOT/include/reac/reac.h" "$P/$1/include/reac/"
 	cp "$ROOT/packaging/libreac.spec" "$P/$1/packaging/"
 	cp "$ROOT/debian/changelog" "$ROOT/debian/control" "$ROOT/debian/rules" "$P/$1/debian/"
-	cp "$ROOT/CHANGELOG.md" "$P/$1/"
 }
 plant good
 plant bad
@@ -81,4 +76,4 @@ for arm in 1 2 3; do
 	echo "$out" | grep -q "ARM $arm" || { echo "NOT A RESULT: the planted tree did not trip ARM $arm"; exit 2; }
 done
 
-echo "conformance-packaging: PASS (version and sonames agree across reac.h, the spec, debian/ and CHANGELOG.md)"
+echo "conformance-packaging: PASS (version and sonames agree across reac.h, the spec and debian/)"
