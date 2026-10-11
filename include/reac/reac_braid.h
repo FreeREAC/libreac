@@ -21,7 +21,7 @@
  *   - obs-h8819 (norihiro): convert_to_pcm24lep, developed and LISTENING-
  *     validated against a real Roland M-200i downstream at 48 kHz;
  *   - the FreeREAC rig: the S-1608/S-0808/S-4000 upstream returns decode real
- *     microphones under the braid (reac-pw task #108, upstream fixtures here);
+ *     microphones under the braid;
  *   - zoneA/zoneB goldens (a real M-5000's two REAC ports, program audio)
  *     decode at coherence 0.99 / spectral flatness 0.002 under the braid at
  *     audio offset exactly 50, and as noise under every other layout x offset

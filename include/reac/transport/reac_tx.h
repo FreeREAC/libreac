@@ -48,7 +48,7 @@ struct reac_tx {
  * `len` bytes. Verification vector: reac_eth_crc32("123456789", 9) == 0xCBF43926
  * (the standard CRC-32 check value).
  *
- * This is NOT a REAC field and no builder or emitter calls it — see task #156's
+ * This is NOT a REAC field and no builder or emitter calls it — see the
  * RE writeup (docs/MASTER-HARDWARE-VERIFY.md, "downstream OHRCA trailer") and
  * the earlier, already-committed finding for the box-UPSTREAM direction
  * (docs/SLAVE-EMULATION-SCOPE.md W4(a)). The "2-byte OHRCA trailer" some M-5000

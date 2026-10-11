@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* reac_ifname — a segment's STABLE, PHYSICAL-ADDRESS-DERIVED name: "pci<N>" / "usb<N>",
- * ported from openmixer's classifyBus (packages/server/src/net-interfaces.ts) with one
+ * derived from the sysfs bus of the interface, with one
  * correction forced by measurement (see reac_ifname.c's header comment): a raw kernel
  * interface NAME (enp128s20f0u2, eth0, ...) is assigned by udev from bus topology or plain
  * enumeration order, and BOTH can change under the operator with the physical NIC untouched

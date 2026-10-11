@@ -266,7 +266,7 @@ int reac_disco_table_observe(struct reac_disco_table *t,
 		e->last_seen_ns = now_ns;        /* liveness always advances… */
 		int changed = 0;
 		/* …but only a real upgrade is a CHANGE. A re-sighting that bumped seq would
-		 * have openmixer re-reading an identical list at wire rate. Facts only ever
+		 * have a consumer re-reading an identical list at wire rate. Facts only ever
 		 * sharpen: an ambiguous role or an unidentified model is replaced once it is
 		 * known, never downgraded back by a later ambiguous frame.
 		 *

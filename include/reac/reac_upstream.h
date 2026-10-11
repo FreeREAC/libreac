@@ -15,7 +15,7 @@
  * reac_decode(): it uses the channel-pair byte BRAID — the REAC wire layout,
  * see <reac/reac_braid.h> for the byte map and the full evidence trail.
  *
- * Resolved 2026-07-10 (reac-pw task #108) against the rig captures in
+ * Resolved 2026-07-10 against the rig captures in
  * reac-captures: under the braid the loud wired capture's music channel decodes
  * at lag1 autocorrelation +0.998 and every idle channel collapses to the mic
  * noise floor; under plain LE every channel reads sign-extension garbage (the

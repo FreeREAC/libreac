@@ -242,7 +242,7 @@ int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6]);
  * a constant that is not settled. Sensitivity is the input level that reaches
  * full scale, so it runs the OTHER WAY from gain: the hottest setting is the
  * most negative number. Against a 0 dBu reference this library's curve is
- * equivalent to gain_dB = 10 + value, and openmixer publishes the same control
+ * equivalent to gain_dB = 10 + value, and a console may publish the same control
  * as 0..55 dB, a different zero by 10 dB.
  *
  * NEITHER IS SILENTLY CONVERTIBLE INTO THE OTHER. The loopback that measured the

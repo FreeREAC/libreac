@@ -78,7 +78,7 @@ int  reac_frame_ring_push(struct reac_frame_ring *r, const uint8_t *frame, uint1
 uint16_t reac_frame_ring_pop(struct reac_frame_ring *r, uint8_t *out);
 uint32_t reac_frame_ring_readable(const struct reac_frame_ring *r);
 
-/* ---- drain-to-target depth guard (task #152) ----------------------------- *
+/* ---- drain-to-target depth guard ----------------------------- *
  * The graph pushes whole encoded frames into the ring; the pacer drains exactly
  * one per slot. If the graph clock runs marginally fast versus the wire clock,
  * the ring depth walks up over long uptime toward the ~250 ms ring cap — silently
@@ -89,7 +89,7 @@ uint32_t reac_frame_ring_readable(const struct reac_frame_ring *r);
  * The band is derived from the ACTUAL producer burst, NOT a guessed steady state.
  * The graph delivers up to one quantum of audio per process() callback, i.e.
  * quantum/12 frames pushed at once, so the ring depth SAWTOOTHS by that much
- * every drive cycle — measured LIVE at ~38..113 frames (peak 113) with openmixer
+ * every drive cycle — measured LIVE at ~38..113 frames (peak 113) with a console
  * feeding playback_08 at the deployed quantum (an earlier guessed HIGH of 128
  * sat one bigger burst away from trimming healthy audio). HIGH must clear several
  * such bursts: HIGH = max(FLOOR, MULT * quantum_frames), TARGET = HIGH/2. FLOOR
@@ -228,7 +228,7 @@ struct reac_pacer_event {
 
 #define REAC_PACER_EVRING 128    /* power of two */
 
-/* Live head-amp control command ring (task #203). A controller (openmixer) sets a
+/* Live head-amp control command ring. A controller sets a
  * per-channel phantom/pad/sens prop on the master node; the PipeWire main-loop
  * prop handler enqueues the change here and the RT pacer thread drains + applies
  * it. SPSC, opposite direction from the event ring: PRODUCER = main loop,
@@ -252,7 +252,7 @@ struct reac_pacer_cfg {
 	const uint8_t *src_mac;   /* our master MAC (Roland OUI); NULL -> a stand-in */
 	struct reac_console_cfg console;  /* box I/O advertised downstream; a zero
 	                                   * out_channels -> the S-1608 default */
-	/* Optional MASTER head-amp send table (task #155): the operator's per-channel
+	/* Optional MASTER head-amp send table: the operator's per-channel
 	 * phantom/pad/sens, loaded into the DMX re-assert scheduler at open. NULL/0 ->
 	 * the head-amp overlay is entirely off and the downstream is unchanged. */
 	const struct reac_headamp_setting *headamps;
@@ -429,7 +429,7 @@ struct reac_pacer {
 	uint64_t health_slots_dropped;
 	uint64_t health_slots_catchup;
 
-	/* frame-ring depth guard telemetry (task #152). ring_depth_{min,peak} bound the
+	/* frame-ring depth guard telemetry. ring_depth_{min,peak} bound the
 	 * depth SAWTOOTH seen since the last EMITTED depth line (read-and-reset there),
 	 * so a heartbeat surfaces the interval's real min/max; the trim counters are
 	 * cumulative. Written by the pacer thread, read+reset by the non-RT drain.
@@ -489,14 +489,13 @@ struct reac_pacer {
 	_Atomic uint64_t grant_attempts; /* grant windows opened */
 	_Atomic uint64_t drops[8];       /* backward drops by reac_master_drop_reason */
 
-	/* Passive discovery (task #178). Two halves, deliberately on opposite sides of the
+	/* Passive discovery. Two halves, deliberately on opposite sides of the
 	 * event ring so no new cross-thread primitive is needed:
 	 *   disco_gate — PACER-THREAD-ONLY. Decides which sightings earn a ring slot.
 	 *   disco      — MAIN-THREAD-ONLY. Built by reac_pacer_log_drain from the ring and
 	 *                read by the sink node's property poll. The pacer thread must never
 	 *                touch it.
-	 * See reac_disco.h; the seam it feeds is documented in openmixer's
-	 * 2026-07-16-reac-discovery-via-reac-pw.
+	 * See reac_disco.h.
 	 *
 	 * disco_peer_lock — PACER-THREAD-ONLY, like disco_gate. One reac_pacer is one segment
 	 * (embedded in the segment's sink node), so its lifetime matches the segment's: a
@@ -512,7 +511,7 @@ struct reac_pacer {
 	_Atomic uint32_t ev_head, ev_tail;   /* free-running u32 indices */
 	_Atomic uint64_t ev_drops;           /* events dropped (ring full) */
 
-	/* Live head-amp command ring (task #203): producer = PipeWire main loop
+	/* Live head-amp command ring: producer = PipeWire main loop
 	 * (reac_pacer_headamp_set), consumer = the RT pacer thread
 	 * (reac_pacer_headamp_drain). Each cell is a reac_headamp_pack()'d
 	 * (ch,param,value) — one atomic word, no torn triple. The pacer thread
@@ -667,7 +666,7 @@ uint64_t reac_pacer_box_mac48(const struct reac_pacer *p);
  * number of events drained. */
 int  reac_pacer_log_drain(struct reac_pacer *p, FILE *out);
 
-/* LIVE head-amp control (task #203). PRODUCER side — call from the PipeWire main
+/* LIVE head-amp control. PRODUCER side — call from the PipeWire main
  * loop (the node's prop handler). Enqueues one per-channel (ch,param,value)
  * change for the RT pacer thread to apply to the head-amp send table, so an
  * external controller can drive the box preamps at runtime (mixer knob -> prop ->

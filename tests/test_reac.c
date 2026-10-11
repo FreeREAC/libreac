@@ -79,7 +79,7 @@ int main(void)
 	 * has not stopped anyone converting one into the other. What libreac
 	 * publishes is SENSITIVITY in dBu and it runs the other way from gain:
 	 * against a 0 dBu reference the same control reads gain = 10 + value, where
-	 * openmixer publishes 0..55 dB. That is a 10 dB offset between two live
+	 * a console may publish 0..55 dB. That is a 10 dB offset between two live
 	 * consumers, and ground truth is the M-200's own SENS display, unread. These
 	 * two assertions go red the moment libreac's own zero moves, whichever way
 	 * the dispute is closed - which is the point: it gets closed on both sides

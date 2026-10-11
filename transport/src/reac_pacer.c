@@ -536,7 +536,7 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 	 * door — here — and in no parser. */
 	len = reac_frame_clean_len(len);
 
-	/* PASSIVE DISCOVERY first, and independently (task #178). The socket is already
+	/* PASSIVE DISCOVERY first, and independently. The socket is already
 	 * promiscuous (see the PACKET_ADD_MEMBERSHIP rationale below), so every 0x8819
 	 * frame on this segment arrives here — including the ones the master classifier
 	 * is about to discard as none of its business: another master's broadcast
@@ -1165,8 +1165,8 @@ int reac_pacer_health_poll(struct reac_pacer *p, uint64_t now_ns,
 	return 1;
 }
 
-/* ---- live head-amp control handoff (task #203) --------------------------- *
- * A controller (openmixer) sets a per-channel phantom/pad/sens prop on the
+/* ---- live head-amp control handoff --------------------------- *
+ * A controller sets a per-channel phantom/pad/sens prop on the
  * master node; the change must reach the box preamps at runtime. The head-amp
  * send TABLE (reac_headamp_tx) is read AND advanced by the RT pacer thread every
  * emit (reac_headamp_tx_next clears dirty flags + walks the re-assert sweep), so
@@ -1640,7 +1640,7 @@ static void *pacer_loop(void *arg)
 			reac_pacer_rx_ingest(p, rxbuf, (size_t)rn);
 		}
 
-		/* Bound the graph->wire buffering (task #152). The graph clock can run
+		/* Bound the graph->wire buffering. The graph clock can run
 		 * marginally fast vs. the fixed wire clock, walking the ring depth up over
 		 * long uptime toward the ~250 ms cap. As the ring's consumer (we own tail)
 		 * drop the OLDEST excess back to TARGET once depth exceeds HIGH — latency
@@ -1700,14 +1700,14 @@ static void *pacer_loop(void *arg)
 			p->last_chanmap_ns = mono_ns();     /* hb-after-walk latency base */
 
 		/* Absorb any LIVE head-amp control changes a controller pushed since the
-		 * last slot (task #203). Drained on THIS thread so the head-amp table stays
+		 * last slot. Drained on THIS thread so the head-amp table stays
 		 * single-writer here: reac_pacer_headamp_set only enqueues; we apply. Run
 		 * every slot regardless of FSM state so a change is already in the table the
 		 * instant we reach an ESTABLISHED FILLER slot below — cheap when the ring is
 		 * empty (two atomic loads). */
 		reac_pacer_headamp_drain(p);
 
-		/* MASTER head-amp overlay (task #155), STRICTLY GUARDED so it can never
+		/* MASTER head-amp overlay, STRICTLY GUARDED so it can never
 		 * touch establishment: it only ever OVERWRITES a FILLER slot, and only once
 		 * ESTABLISHED. It never replaces a PROBE/GRANT/CHANMAP/CFEA/ENROLL frame, so
 		 * the verified grant/chanmap/announce cadence (reac_master_next) is
@@ -2034,7 +2034,7 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 	ccfg_buf.console_field = reac_pace_code(cfg->fps);
 	reac_master_init(&p->master, p->src, &ccfg_buf, cfg->fps);
 
-	/* MASTER head-amp DMX send table (task #155). Off unless the caller passes at
+	/* MASTER head-amp DMX send table. Off unless the caller passes at
 	 * least one setting: an all-unset table's next() always returns 0, so the
 	 * downstream stays byte-identical to a no-head-amp master. Loaded here (before
 	 * the pacer thread starts) so the table is single-writer from the RT thread on

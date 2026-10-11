@@ -3,8 +3,7 @@
 
 /* reac_segment_ident — WHAT A SEGMENT IS, in whichever role it is running, so a
  * console addresses the SEGMENT and never a node kind
- * (2026-08-20-reac-master-arbitration §1 and §8, in the
- * openmixer tree; docs/SLAVE-EMULATION-SCOPE.md W1).
+ * (docs/SLAVE-EMULATION-SCOPE.md W1).
  *
  * THE DEFECT THIS CLOSES. A segment's identity was only ever recoverable by
  * PARSING a node name — `reac-playback.<inst>` minus the prefix. That works for

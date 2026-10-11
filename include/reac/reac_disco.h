@@ -13,7 +13,7 @@
  * ownership-blind, and its verdict never reaches the FSM.
  *
  * Presence is NEVER a heuristic. A sighting requires a 0x8819 frame and (for non-FILLER) a
- * verified checksum. A packet COUNT is not evidence — openmixer #161 announced any NIC over
+ * verified checksum. A packet COUNT is not evidence — a consumer that announced any NIC over
  * ~62 pkt/s (ordinary Wi-Fi) as a REAC master because an rx_packets delta was fed in as a
  * device.
  *
@@ -50,8 +50,7 @@
  * alloc, no stdio) — the pacer thread calls them, one `reac_disco_peer_lock` per segment's own
  * pacer (so its lifetime matches the segment's: a drop/reopen gets a fresh, unlocked lock).
  * The TABLE is main-thread-only: sightings cross threads on the pacer's existing lock-free
- * event ring, so there is no new cross-thread primitive here. See
- * 2026-07-16-reac-discovery-via-reac-pw (openmixer) for the seam. */
+ * event ring, so there is no new cross-thread primitive here. */
 #ifndef REAC_DISCO_H
 #define REAC_DISCO_H
 

@@ -17,7 +17,7 @@
  *
  *   1. THE COMMAND LINE            --rate, --live, ...
  *      Handled by main.c, not here: an explicit argument is not a lookup. It is
- *      the layer openmixer uses — the console owns the desk's configuration and
+ *      the layer a console uses — the console owns the desk's configuration and
  *      hands it over when it launches us, which is what "omx needs to override"
  *      means in practice.
  *
@@ -31,8 +31,8 @@
  *      boxes, different NICs, potentially different rates. A per-segment fact
  *      is the key SUFFIXED with the segment's name — REAC_ROLE_enp131s0 — in
  *      any of the layers below, and it outranks the bare key in every one of
- *      them. Segments are discovered, not declared (openmixer's
- *      2026-08-23-reac-trunk-vlan-daemon, amendment 2026-09-02), so there
+ *      them. Segments are discovered, not declared (every linked wired
+ *      interface is listened on), so there
  *      is no per-segment FILE to create: a segment's name is its interface's,
  *      and the console generates the key into reac-pw.env.
  *
@@ -41,7 +41,7 @@
  *
  *   5. ~/.config/openmixer/reac.env        LAST RESORT
  *      The bottom layer. It is what makes a STANDALONE install work with no
- *      console present, and openmixer overrides it and surfaces the value to the
+ *      console present, and a console overrides it and surfaces the value to the
  *      user. It is NOT a stray duplicate and it is NOT to be deleted; it is the
  *      floor of the stack, and a floor is the thing you land on when nothing
  *      above answered.

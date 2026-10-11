@@ -905,7 +905,7 @@ static void *slave_loop(void *arg)
 	fprintf(stderr, "reac_slave: %sSTATE %s\n", s->tag, st_name[prev_state]);
 
 	while (atomic_load_explicit(&s->running, memory_order_acquire)) {
-		/* State-transition trace (task #130): the FSM's phase is the ground truth
+		/* State-transition trace: the FSM's phase is the ground truth
 		 * for establishment — log every change so a live run shows FLOOD ->
 		 * COLDCONNECT -> (grant) TX_MUTE -> ESTABLISHED and any DROP/re-flood flap. */
 		if (s->fsm.state != prev_state) {
@@ -959,7 +959,7 @@ static void *slave_loop(void *arg)
 				fprintf(stderr, "reac_slave: head-amp record (ch %u param %u) "
 				        "DROPPED — inner checksum bad\n", p.ch, p.param);
 			} else {
-				/* APPLY it as our INPUT GAIN (task #202): a virtual box has no
+				/* APPLY it as our INPUT GAIN: a virtual box has no
 				 * preamp, so the console's SENS/PAD must scale the audio we send
 				 * upstream, or the master's head-amp is inert. Updates per-input
 				 * state + precomputes the linear gain off the RT path; returns our

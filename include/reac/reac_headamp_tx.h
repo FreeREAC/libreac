@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* reac_headamp_tx — the MASTER-role head-amp SEND model (task #155 reac-pw half).
+/* reac_headamp_tx — the MASTER-role head-amp SEND model.
  *
  * The protocol, as the committed captures show it (HEADAMP-PROTOCOL-AUDIT-2026-07-22
  * in reac-firmware-re; pcaps m200-s1608-BIDIR-reboot, matrix-m200-s1608 and
@@ -71,7 +71,7 @@
  * the box's own panel within one cadence; that authority over 48 V belongs to the
  * operator, and the mechanism is rig-unproven — no capture in this repo shows a
  * box receiving a redundant head-amp record, because no master here ever sent
- * one. Until it is accepted and capture-gated, openmixer's scene watch
+ * one. Until it is accepted and capture-gated, a controller's scene watch
  * (REAC_SCENE_SETTLE_REPLAY_MS) remains the writer that re-applies a recorded
  * scene, and this master asserts once, as a real M-200 does.
  *
@@ -97,7 +97,7 @@ struct reac_headamp_setting {
 
 /* Pack/unpack a (ch, param, value) head-amp command into ONE 32-bit word.
  *
- * This is the atomicity primitive for the LIVE control path (task #203): a
+ * This is the atomicity primitive for the LIVE control path: a
  * controller's per-channel phantom/pad/sens change travels from the PipeWire
  * main-loop thread (the prop handler) to the RT pacer thread through a lock-free
  * SPSC queue of these words. Because the whole triple lives in a single 32-bit
