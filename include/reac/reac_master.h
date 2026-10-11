@@ -10,7 +10,7 @@
  * the real cdea/cfea control block into the 32-byte block [18:50] of the
  * downstream broadcast frame that libreac's reac_downstream_build builds.
  *
- * EVENT-DRIVEN (task #130): a real M-5000 never advances the establishment on a
+ * EVENT-DRIVEN: a real M-5000 never advances the establishment on a
  * timer — it PROBES until the box's cold-connect (cdea 04 03) arrives, ECHOES
  * that block back as the grant burst, and settles the instant the box switches
  * to unicast. The earlier cut auto-advanced PROBING->GRANTING after ~1 s blind
@@ -247,8 +247,8 @@ const struct reac_mixer_profile *reac_mixer_profile_by_name(const char *name);
 const struct reac_mixer_profile *reac_mixer_profile_at(int i);
 
 /* Resolve the master's EMISSION rate for a requested --rate against the
- * impersonated mixer profile (task #156, "96k is not anything different, same
- * state diagram, doubled frequency" — parameterizing the existing 48k path by
+ * impersonated mixer profile (96k uses the same
+ * state diagram at a doubled frequency: parameterizing the existing 48k path by
  * mixer profile rather than re-engineering the FSM).
  *
  * THE RATE IS INDEPENDENT OF WHICH DESK WE IMPERSONATE (operator, 2026-08-21).

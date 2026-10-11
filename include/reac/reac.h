@@ -305,7 +305,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        not a patch, because reac_cfg.h's PUBLIC vocabulary moves: REAC_CFG_REFUSED_NONE is
  *        "none" (was ""), REAC_ROLE_PROP and REAC_CFG_ROLE_STATE_HUNTING are ADDED, and
  *        REAC_CFG_RATE_COUNT / REAC_CFG_RATE_LIST_INIT, which nothing read, are REMOVED. A
- *        consumer pinned to the old header (openmixer's TS mirror) must move with it.
+ *        consumer pinned to the old header (a mirror of it in another language) must move with it.
  *        Behaviour: reac_detect_rate_fd measures one stream; a new clock reference is
  *        LOCKING until measured; reac_ctrl_identity_reply requires both checksums;
  *        reac_decode_plain_le refuses an oversize geometry; reac_boxreg refuses an

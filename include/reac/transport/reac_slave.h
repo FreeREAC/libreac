@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
-/* reac_slave — the SLAVE-role engine: openmixer slaved to an EXTERNAL REAC master
+/* reac_slave — the SLAVE-role engine: a console slaved to an EXTERNAL REAC master
  * (a desk, or another box configured as master). It is the inverse of reac_pacer:
  *
  *   - reac_pacer (MASTER role): WE drive the cdea/cfea establishment + WE own the

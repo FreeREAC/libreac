@@ -2,7 +2,6 @@
  * Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
  *
  * reac_topo — is this NIC an access port or a TRUNK, and which VLANs carry REAC on it.
- * (openmixer's 2026-08-23-reac-trunk-vlan-daemon §3, §4, §5.)
  *
  * OBSERVE ONCE TO LEARN THE TOPOLOGY; NEVER PARSE A TAG IN THE AUDIO PATH. Learning that
  * tagged 0x8819 frames arrive, and which VIDs they carry, is a read-only discovery act;
@@ -12,8 +11,7 @@
  * hearing path then serves like any other interface. Nothing here touches audio.
  *
  * THE TAG IS METADATA, NOT BYTES, AND THAT DECIDES THE SOCKET. Measured on this kernel
- * (7.2.4-200.fc44, 2026-09-09, openmixer's tools/probe-vlan-8819.py in a private netns,
- * matching the spec's §3 table taken on 6.x):
+ * (7.2.4-200.fc44, 2026-09-09, a probe in a private netns):
  *
  *   - a socket bound to 0x8819 ON THE PARENT receives every tagged frame as well, with the
  *     802.1Q header ABSENT from the buffer and `vlan_tci = none` — indistinguishable from

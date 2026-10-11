@@ -13,9 +13,8 @@
  * down for any of it: a role a normal box needs hand-set is a defect in the defaults,
  * exactly as a hand-set rate would be.
  *
- * (openmixer's REAC master-arbitration and trunk-VLAN daemon notes describe the same
- * three outcomes from the CONSOLE's side, which is what its `auto` role projects. They
- * are a useful cross-reference and they are not this repo's law; DESIGN.md is.)
+ * (A console describes the same three outcomes from its side, which is what an `auto`
+ * role projects. DESIGN.md is this repo's law.)
  *
  * IT DECIDES NOTHING BY ITSELF THAT reac_arbitration HAS NOT ALREADY OBSERVED.
  * reac_arbitration stays passive — it publishes who drives the segment — and this

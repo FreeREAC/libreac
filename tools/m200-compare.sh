@@ -43,8 +43,8 @@
 #
 # Fixture test (proves the pipeline before rig day, no hardware needed):
 #   tools/m200-compare.sh diff \
-#     --m200  ~/Devel/audio/reac-captures/captures/m200i-s1608-48k-mirror__real-m200-s1608-coldboot-2026-07-11.pcap \
-#     --ours  ~/Devel/audio/reac-captures/captures/m200i-s1608-48k-clean__reacpw-s1608-establish-2026-07-18.pcap \
+#     --m200  captures/m200i-s1608-48k-mirror__real-m200-s1608-coldboot-2026-07-11.pcap \
+#     --ours  captures/m200i-s1608-48k-clean__reacpw-s1608-establish-2026-07-18.pcap \
 #     --out /tmp/m200-vs-reac-pw.md
 set -u
 SELF=$(cd "$(dirname "$0")" && pwd)

@@ -100,7 +100,7 @@ static enum reac_conf_layer lookup_bare(const char *key, const char *home,
 
 	/* Layer 5 — the last resort, and the reason this function exists rather than
 	 * a getenv. It is what makes a standalone install work with no console
-	 * present; openmixer overrides it from above and shows the user the result.
+	 * present; a console overrides it from above and shows the user the result.
 	 * It is the FLOOR of the stack, not a stray duplicate. */
 	snprintf(path, sizeof path, "%s/.config/openmixer/reac.env", home);
 	if (reac_conf_read_file(path, key, out, cap))

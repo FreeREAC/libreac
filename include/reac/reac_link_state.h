@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* reac_link_state — the PURE mapping from the MASTER FSM (reac_master_state)
- * onto the small badge vocabulary a PipeWire consumer (openmixer's stagebox
+ * onto the small badge vocabulary a PipeWire consumer (a stagebox
  * card) reads off the reac-capture / reac-playback node properties, so it can
  * show "no box / probing / connected" without inferring it from wire traffic.
  *
@@ -77,10 +77,9 @@
  *
  * IT IS PUBLISHED BECAUSE reac.master.mac IS NOT IT AND CANNOT BE. That key names
  * whoever drives the segment, which in the master role is THIS machine's NIC. A
- * consumer that keys a stagebox registry by box address — openmixer keys its
- * `reac:<box mac>` patch names exactly that way — read reac.master.mac, matched
+ * consumer that keys a stagebox registry by box address — for example by
+ * `reac:<box mac>` patch names — read reac.master.mac, matched
  * our own NIC against a registry of Roland addresses, and missed on every rig
- * (openmixer 2026-09-06-rig-headamp-and-clip-findings §5).
  * The alternative was for every consumer to re-derive the peer from a discovery
  * sighting list, which is a second implementation of a fact only the master
  * actually holds. */
@@ -98,7 +97,7 @@
  * REAC_PROP_HEADAMP_BASE is the head-amp WIRE CHANNEL the box's input 1 sits at —
  * `base` in `CH = base + (input - 1)`. It is published because the alternative is
  * every consumer re-deriving it from the width against its own copy of the
- * placement table (openmixer does exactly that today), which is a second
+ * placement table (a consumer may do exactly that), which is a second
  * implementation of a policy only reac-pw can actually observe, and it is wrong
  * the moment the placement rule gains a case. Decimal; REAC_BOX_SOURCE_NONE when
  * no box is known, so a numeric parse fails rather than reading as base 0. */
@@ -109,11 +108,10 @@
 #define REAC_BOX_SOURCE_WIRE "wire"   /* the box declared itself; we matched it */
 #define REAC_BOX_SOURCE_NONE "none"   /* no box on this wire — a normal state   */
 
-/* reac.discovery.* — passive discovery (task #178): what is ON THE SEGMENT, as opposed
+/* reac.discovery.* — passive discovery: what is ON THE SEGMENT, as opposed
  * to the reac.link-state/box-* keys above, which describe only the peer THIS master
  * joined. Same seam, same node, same 200 ms poll; see reac_disco.h for the rules that
- * keep the device list honest, and openmixer's
- * 2026-07-16-reac-discovery-via-reac-pw for the contract.
+ * keep the device list honest.
  *
  * A reader that finds reac-playback WITHOUT these keys is talking to a reac-pw that
  * predates discovery — which is "could not scan", never "scanned and found nothing". */
@@ -155,9 +153,8 @@
  * live. Adding a socket, a file or an HTTP endpoint would be a second ledger for
  * the same facts, with neither door announcing the other. One store, one writer.
  *
- * The console side is NOT built here (another lane owns that repo). openmixer's
- * telemetry is a settled design — its own SSE, latest-wins, skip when late, never
- * accumulate — and these rows are shaped to drop straight into it: every one is a
+ * The console side is NOT built here. A console's telemetry is expected to be latest-wins,
+ * skip when late, never accumulate, and these rows are shaped to drop straight into it: every one is a
  * scalar over the window that just closed, so a consumer that misses three
  * updates has lost nothing but resolution.
  *

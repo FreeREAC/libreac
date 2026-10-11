@@ -174,7 +174,7 @@ const char *reac_clock_quality_name(enum reac_clock_quality q);
 /* ELIGIBILITY (issue #77 item 5). Is this tier fit to own a REAC segment's pace?
  * Reporting-only and PURE: this module never yanks a reference out from under a
  * running segment on its own opinion — that decision belongs to whoever offers
- * the master/follower control (the Setup -> Clock panel, openmixer). What we owe
+ * the master/follower control (a console's clock panel). What we owe
  * them is an unambiguous answer, and MARGINAL answering "no" is the whole point:
  * free-running while owning a segment is a legitimate emergency configuration,
  * not something to slide into by accident. */

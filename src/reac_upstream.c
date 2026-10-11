@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 // Braid layout per norihiro/obs-h8819-source convert_to_pcm24lep (GPL-3.0-or-later),
-// confirmed for the S-1608/S-0808 upstream against rig captures (reac-pw task #108).
+// confirmed for the S-1608/S-0808 upstream against rig captures.
 
 #include "reac/reac_upstream.h"
 

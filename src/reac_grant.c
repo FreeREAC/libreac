@@ -47,8 +47,8 @@
  * SO: we keep pinning the OBSERVED base per width. Reasons, in order: (a) it predicts
  * all 42 rows and is the only placement each real box is known to have accepted;
  * (b) the S-1608's 0x20 origin is already baked into the rest of the stack as that
- * model's head-amp CH base (reac_ctrl.h's head-amp block comment, openmixer's
- * channel mapping), so choosing differently here would silently desync them;
+ * model's head-amp CH base (reac_ctrl.h's head-amp block comment, and the
+ * consumers' channel mapping), so choosing differently here would silently desync them;
  * (c) a wrong-but-self-consistent allocation is exactly the failure we are fixing —
  * being consistent with the REST OF THE WORLD is the whole point.
  *

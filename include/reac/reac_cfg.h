@@ -7,9 +7,9 @@
  *
  * ONE DECLARATION, BOTH SIDES (spec §2). reac-pw's `param_changed` reads these
  * keys off a segment's `reac-playback[.<inst>]` node and answers on them;
- * openmixer's TS mirror (`@openmixer/core`'s `reac-cfg.ts`) is conformance-
- * pinned against this file byte-for-byte, so a knob cannot exist as a string
- * literal in one repo and silently drift from the other.
+ * a console that mirrors these names is expected to pin them against this file
+ * byte-for-byte, so a knob cannot exist as a string literal in two places and
+ * silently drift.
  *
  * THE CHANNEL IS PROPS, NOT A FILE. A config file holds STARTUP values and
  * fixed site facts, read once and never watched; every LIVE reconfiguration —

@@ -3,18 +3,17 @@
 
 /* reac_ifname — see reac_ifname.h.
  *
- * WHY realpath(), NOT A SINGLE readlink() — openmixer's classifyBus (this module's starting
- * point) does the latter (`readlinkSync(devicePath)`, checking the result for "/usb"/"/pci").
+ * WHY realpath(), NOT A SINGLE readlink() — a single readlink() of the device link, checking
+ * the result for "/usb"/"/pci", is the obvious approach, and it fails.
  * Measured on a real box, 2026-09-03: `readlink("/sys/class/net/enp128s20f0u2/device")`
  * returns `../../../4-2:1.0` — a string that contains NEITHER substring. `/sys/class/net/
  * <ifname>` is ITSELF a symlink (to `.../devices/<bus-path>/net/<ifname>`), so a single
- * readlink() on the `device` entry inside it only ever sees the LAST hop, never the bus path
- * classifyBus greps for; the same measurement on `enp131s0` (PCI) and `wlp128s20f3` (PCI,
- * wireless) gave `../../../0000:83:00.0` and `../../../0000:80:14.3` — same shape, same
- * miss. openmixer's own test fixtures fabricate the symlink TARGET string directly
- * (`symlinkSync('/some/usb/path', ...)`), which never exercises a real kernel one-hop link
- * and so could not have caught this (false-signals #2: a self-consistent suite proves the
- * suite, not the filesystem). realpath() asks the kernel to walk the WHOLE chain and hands
+ * readlink() on the `device` entry inside it only ever sees the LAST hop, never the bus path;
+ * the same measurement on `enp131s0` (PCI) and `wlp128s20f3` (PCI, wireless) gave
+ * `../../../0000:83:00.0` and `../../../0000:80:14.3` — same shape, same miss. A test that
+ * fabricates the symlink TARGET string directly never exercises a real kernel one-hop link
+ * and so cannot catch this (a self-consistent suite proves the suite, not the filesystem).
+ * realpath() asks the kernel to walk the WHOLE chain and hands
  * back the canonical absolute path, which does carry the bus path
  * ("/sys/devices/pci0000:80/0000:80:14.0/usb4/4-2/4-2:1.0") — confirmed against this box's
  * real NICs; see tests/test_reac_ifname.c. */

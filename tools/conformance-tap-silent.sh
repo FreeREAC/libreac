@@ -3,8 +3,7 @@
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 #
 # THE TAP ROLE NEVER TRANSMITS. No announce, no join, no grant, no seglock, no
-# TX socket opened at all — openmixer's master-arbitration spec, eighth
-# amendment (2026-09-13), and the courtship trials of 2026-09-12 that forced it:
+# TX socket opened at all — the courtship trials of 2026-09-12 forced it:
 # a courting slave of ours kept a real desk's S-1608 from enrolling for 180 s,
 # and a granted one blocked it outright.
 #

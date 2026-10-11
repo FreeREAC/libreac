@@ -5,7 +5,7 @@
  * parse + validation contract is unit-testable without PipeWire/sockets.
  *
  * REAC has no fixed master: any box can be the master and the rest slave to it
- * (REAC-PROTOCOL-AND-TESTS.md §2/§4). openmixer must fit either role:
+ * (REAC-PROTOCOL-AND-TESTS.md §2/§4). a console must fit either role:
  *   - master (default): WE drive the cdea/cfea establishment and WE GENERATE THE
  *     PACE (the SCHED_FIFO pacer's cadence); a stagebox slaves to us.
  *   - slave: an EXTERNAL master drives; we RESPOND and lock to its cadence (frame
@@ -55,7 +55,7 @@ static inline const char *reac_role_name(enum reac_role r)
  *          slave to it; a STAGEBOX masters it, we refuse and say so. reac_hunt.h
  *          resolves it from what the wire actually says.
  *
- * A console face may speak its own words for the same two ends (openmixer's shows
+ * A console face may speak its own words for the same two ends (one may show
  * `mixer`/`recorder`); REAC_ROLE and this parser stay on the WIRE's words, and the
  * translation is the console's to do. */
 enum reac_role_intent {
@@ -66,8 +66,7 @@ enum reac_role_intent {
 	 * all: no announce, no join, no grant, no seglock, no TX socket. It is the only
 	 * intent that has no wire role even after the wire has answered, which is why it
 	 * cannot be spelled as a value of `enum reac_role` above. See
-	 * <reac/transport/reac_tap.h>, and openmixer's master-arbitration spec, eighth
-	 * amendment (2026-09-13): beside a real desk, a courting slave of ours kept that
+	 * <reac/transport/reac_tap.h>: beside a real desk, a courting slave of ours kept that
 	 * desk's own box from enrolling for 180 s and a granted one blocked it outright.
 	 * EXPLICIT ONLY — `auto` never resolves to it. */
 	REAC_ROLE_INTENT_TAP,

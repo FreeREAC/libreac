@@ -392,7 +392,7 @@ size_t reac_ctrl_box_frame_len(int n_ch)
  * The loop itself moved to libreac on 2026-07-29 as reac_braid_encode()
  * (<reac/reac_encode.h>): it was byte-for-byte the same loop as the downstream
  * encoder's, which is the point — the braid is the REAC wire format in BOTH
- * directions (task #108, the ex-"FPGA scramble" of task #61), and it is the
+ * directions, and it is the
  * exact inverse of reac_upstream_decode(). What stayed here is everything the
  * layout is not: the 32-byte control block, its two nested checksums, the
  * box-model matrix and the frame envelope, all of which are handshake state
@@ -997,7 +997,7 @@ static const struct ctrl_frame CTRL_FRAMES[CTRL_FRAME_COUNT] = {
 		.cksum = CKSUM_BLOCK, .len = LEN_ARG_WIDTH },
 	/* The established unicast upstream: the 32-byte descriptor [18:50] = 00 7a per
 	 * slot (16 slots), as the real box, over audio in the BRAIDED layout (resolved
-	 * 2026-07-10, task #108). FILLER (type 00 00) is checksum-exempt. */
+	 * 2026-07-10). FILLER (type 00 00) is checksum-exempt. */
 	[CTRL_UPSTREAM_FILLER] = {
 		.type0 = 0x00, .type1 = 0x00, .block = BLOCK_DESC,
 		.cksum = CKSUM_NONE, .len = LEN_ARG_WIDTH, .audio = 1 },
