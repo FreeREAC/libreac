@@ -15,3 +15,31 @@ jobs:
       # verdict either way, and every test in it carries tests/run-test.sh's timeout.
       - name: Transport tests
         run: make test-transport REACPW_INCLUDE=packaging/vendor/reac-pw-headers
+
+  # The package that carries fake_box for the programs that test against it (reac-pw): built the way the release
+  # builds it, and its file list is exactly the one binary, which needs no libreac package to run.
+  tests-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: fedora:44
+    steps:
+      - name: Install the build tools
+        run: dnf install -y --setopt=install_weak_deps=False git rpm-build dnf5-plugins gcc make tar gzip
+      - uses: actions/checkout@v4
+      - name: Build the RPMs
+        run: |
+          set -euo pipefail
+          dnf builddep -y packaging/libreac.spec
+          version=$(sed -n 's/^Version: *//p' packaging/libreac.spec)
+          mkdir -p ~/rpmbuild/SOURCES
+          tar --exclude=.git -czf ~/rpmbuild/SOURCES/libreac-$version.tar.gz --transform "s,^\.,libreac-$version," .
+          rpmbuild -ba packaging/libreac.spec
+      - name: libreac-tests carries fake_box and nothing else, and needs only libc
+        run: |
+          set -euo pipefail
+          rpm=$(ls ~/rpmbuild/RPMS/*/libreac-tests-[0-9]*.rpm)
+          rpm -qlp "$rpm" | grep -v -e '/\.build-id' -e '^/usr/lib$' | sort | tee files.txt
+          printf '%s\n' /usr/libexec/libreac/tests/fake_box /usr/share/licenses/libreac-tests /usr/share/licenses/libreac-tests/LICENSE | sort > expected.txt
+          diff -u expected.txt files.txt
+          rpm -qp --requires "$rpm" | tee requires.txt
+          ! grep -q '^libreac' requires.txt
