@@ -64,6 +64,15 @@ Requires:       pkgconfig(libreac) >= 1.1.0
 %description -n libreac-transport-devel
 Headers and pkg-config for building against libreac-transport.
 
+%package tests
+Summary:        A software REAC stagebox, to test a program that talks to one
+
+%description tests
+fake_box answers on the wire the way a REAC stagebox does, so a program that
+enrols and plays to a box can be tested without one. It is built from libreac's
+own objects and needs no other package. It is installed in
+%{_libexecdir}/libreac/tests and is of no use to anyone else.
+
 %prep
 %autosetup -n %{name}-%{version}
 
@@ -107,6 +116,9 @@ done
 cc %{build_ldflags} -shared -Wl,-soname,libreac-transport.so.%{tabi} -Wl,--no-undefined \
   -o libreac-transport.so.%{version} transport-obj/*.o -L. -lreac -lm -lpthread
 
+# fake_box links the objects of libreac itself, not the shared library, so the package that carries it needs nothing
+cc %{optflags} -D_GNU_SOURCE -Iinclude tools/fake_box.c $(ls *.o) %{build_ldflags} -lm -o fake_box
+
 %install
 install -Dm0755 libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{version}
 ln -s libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{abi}
@@ -130,6 +142,8 @@ for h in include/reac/transport/*.h; do
 done
 sed -e 's|@LIB@|%{_lib}|' -e 's|@VERSION@|%{version}|' packaging/libreac-transport.pc.in \
   > %{buildroot}%{_libdir}/pkgconfig/libreac-transport.pc
+
+install -Dm0755 fake_box %{buildroot}%{_libexecdir}/libreac/tests/fake_box
 
 %check
 # libreac's own suite, against the very objects %%build produced (the Makefile
@@ -161,6 +175,10 @@ make test
 %{_includedir}/reac/transport/*.h
 %{_libdir}/libreac-transport.so
 %{_libdir}/pkgconfig/libreac-transport.pc
+
+%files tests
+%license LICENSE
+%{_libexecdir}/libreac/tests/fake_box
 
 %changelog
 * Thu Oct 08 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.1-1
