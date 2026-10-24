@@ -143,7 +143,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c libreac.a $(FACTS_ASSERT_H)
 	@mkdir -p $(BUILD_DIR); rm -f $(SKIP_LOG)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	$(RUN_TEST) ./test_reac
@@ -172,6 +172,10 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# 40 in / 0 out declaration is granted 40 wide, a 24 / 16 one 24 wide.
 	$(CC) $(CFLAGS) $(INC) tests/test_grant_width.c libreac.a -lm -o test_grant_width
 	$(RUN_TEST) ./test_grant_width
+	# A SCENE REPLAY STAYS INSIDE THE HEAD-AMP TABLE: armed at or past its end it emits
+	# nothing, where the clamp used to wrap onto channels 0..47.
+	$(CC) $(CFLAGS) $(INC) tests/test_headamp_replay.c libreac.a -lm -o test_headamp_replay
+	$(RUN_TEST) ./test_headamp_replay
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_box_0832.c libreac.a -lm -o test_box_0832
 	$(RUN_TEST) ./test_box_0832
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_ctrl.c libreac.a -lm -o test_ctrl
@@ -457,9 +461,102 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	    -lm -lpthread -o test_etf_qdisc_stats
 	$(RUN_TEST) ./test_etf_qdisc_stats
 
+# --- fuzzing: libFuzzer harnesses for every parser of wire bytes ---
+# One harness per parser in fuzz/, each a plain C LLVMFuzzerTestOneInput, linked
+# against a libreac.a of its own: the same sources compiled with clang, ASan, UBSan
+# and libFuzzer's coverage hooks into build/fuzz/obj, so the ordinary build above is
+# never touched. fuzz/README.md says what each harness feeds and how to reproduce a
+# finding. None of these targets is part of `make test`.
+#
+#   make fuzz                   build every harness
+#   make fuzz-run FUZZ_TIME=60  run each for the budget; red on any crash, the
+#                               crashing input left in fuzz/findings/
+#   make fuzz-sabotage          plant each harness's one-line mutant, require a crash
+#   make fuzz-cov               line coverage of each parser over its seed corpus,
+#                               red below fuzz/coverage-floor.txt
+#   make fuzz-corpus            regenerate fuzz/corpus/ from the test fixtures
+FUZZ_CC        ?= clang
+FUZZ_TIME      ?= 60
+FUZZ_BUILD     := $(BUILD_DIR)/fuzz
+FUZZ_HARNESSES := decode ctrl identity disco scene boxreg knock grant pcap
+FUZZ_SAN       := -fsanitize=address,undefined -fno-sanitize-recover=all
+FUZZ_CFLAGS    := -O1 -g -std=c11 -Wall -Wextra -fno-omit-frame-pointer $(FUZZ_SAN)
+FUZZ_BINS      := $(FUZZ_HARNESSES:%=$(FUZZ_BUILD)/fuzz_%)
+FUZZ_LIB_OBJS  := $(OBJS:%.o=$(FUZZ_BUILD)/obj/%.o)
+# pcap_source_open() takes a path; the pcap harness hands it the input instead
+# (fuzz/fuzz_pcap.c explains the wrap).
+FUZZ_LDFLAGS_pcap := -Wl,--wrap=fopen
+
+$(FUZZ_BUILD)/obj/%.o: src/%.c
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(FUZZ_CFLAGS) -fsanitize=fuzzer-no-link -MMD -MP $(INC) -c $< -o $@
+
+-include $(FUZZ_LIB_OBJS:.o=.d)
+
+$(FUZZ_BUILD)/libreac.a: $(FUZZ_LIB_OBJS)
+	$(AR) rcs $@ $(FUZZ_LIB_OBJS)
+
+$(FUZZ_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h $(FUZZ_BUILD)/libreac.a
+	$(FUZZ_CC) $(FUZZ_CFLAGS) -fsanitize=fuzzer -MMD -MP -MF $@.d $(INC) $< \
+	    $(FUZZ_BUILD)/libreac.a -lm $(FUZZ_LDFLAGS_$*) -o $@
+
+-include $(FUZZ_BINS:=.d)
+
+fuzz: $(FUZZ_BUILD)/libreac.a $(FUZZ_BINS)
+
+fuzz-run: fuzz
+	FUZZ_BUILD=$(FUZZ_BUILD) FUZZ_TIME=$(FUZZ_TIME) fuzz/run.sh $(FUZZ_HARNESSES)
+
+fuzz-sabotage:
+	FUZZ_BUILD=$(FUZZ_BUILD) MAKE="$(MAKE)" fuzz/sabotage.sh $(FUZZ_HARNESSES)
+
+# The coverage witness: the same harnesses without sanitizers, instrumented for
+# llvm-cov, each run once over its seed corpus (-runs=0 executes the corpus and
+# nothing else).
+FUZZ_COV_BUILD := $(FUZZ_BUILD)/cov
+FUZZ_COV_FLAGS := -O0 -g -std=c11 -fprofile-instr-generate -fcoverage-mapping
+# The llvm-cov and llvm-profdata of FUZZ_CC's own LLVM (a distro may version them).
+LLVM_COV       ?= llvm-cov
+LLVM_PROFDATA  ?= llvm-profdata
+FUZZ_COV_OBJS  := $(OBJS:%.o=$(FUZZ_COV_BUILD)/obj/%.o)
+
+$(FUZZ_COV_BUILD)/obj/%.o: src/%.c
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(FUZZ_COV_FLAGS) -MMD -MP $(INC) -c $< -o $@
+
+-include $(FUZZ_COV_OBJS:.o=.d)
+
+$(FUZZ_COV_BUILD)/libreac.a: $(FUZZ_COV_OBJS)
+	$(AR) rcs $@ $(FUZZ_COV_OBJS)
+
+$(FUZZ_COV_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h $(FUZZ_COV_BUILD)/libreac.a
+	$(FUZZ_CC) $(FUZZ_COV_FLAGS) -fsanitize=fuzzer $(INC) $< $(FUZZ_COV_BUILD)/libreac.a -lm \
+	    $(FUZZ_LDFLAGS_$*) -o $@
+
+fuzz-cov: $(FUZZ_HARNESSES:%=$(FUZZ_COV_BUILD)/fuzz_%)
+	@set -e; for h in $(FUZZ_HARNESSES); do \
+	  rm -f $(FUZZ_COV_BUILD)/$$h.profraw; \
+	  LLVM_PROFILE_FILE=$(FUZZ_COV_BUILD)/$$h.profraw $(FUZZ_COV_BUILD)/fuzz_$$h -runs=0 \
+	      fuzz/corpus/$$h/ >$(FUZZ_COV_BUILD)/$$h.log 2>&1 || \
+	    { cat $(FUZZ_COV_BUILD)/$$h.log; echo "fuzz-cov: fuzz_$$h failed on its own corpus"; exit 1; }; \
+	  $(LLVM_PROFDATA) merge -sparse $(FUZZ_COV_BUILD)/$$h.profraw -o $(FUZZ_COV_BUILD)/$$h.profdata; \
+	done
+	@LLVM_COV=$(LLVM_COV) fuzz/coverage.sh $(FUZZ_COV_BUILD) $(FUZZ_HARNESSES)
+
+# The seed corpus is generated from the test fixtures and the library's own
+# builders, never from a network or a private capture, and committed.
+FUZZ_GEN := $(BUILD_DIR)/fuzz-gen-corpus
+$(FUZZ_GEN): fuzz/gen-corpus.c libreac.a
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -D_POSIX_C_SOURCE=200809L -Itests $(INC) $< libreac.a -lm -o $@
+
+fuzz-corpus: $(FUZZ_GEN)
+	$(FUZZ_GEN) fuzz/corpus
+
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans test_etf_qdisc_stats
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
-.PHONY: all test test-transport conformance corpus wire-tools clean transport
+.PHONY: all test test-transport conformance corpus wire-tools clean transport \
+        fuzz fuzz-run fuzz-sabotage fuzz-cov fuzz-corpus

@@ -176,7 +176,8 @@ uint8_t reac_headamp_tx_effective(const struct reac_headamp_tx *t,
  * ESTABLISHED — that is what a real M-200 does, and it is the only mechanism
  * that restores a power-cycled box's pins (48V included): the box reboots blank,
  * re-courts, and the scene rides the new establishment. Re-arming restarts the
- * cursor; width 0 is a no-op. Single-writer: call on the pacer thread only. */
+ * cursor; width 0, or a base at or past REAC_HEADAMP_MAX_CH, is a no-op. Single-writer:
+ * call on the pacer thread only. */
 void reac_headamp_tx_arm_scene(struct reac_headamp_tx *t, uint8_t base,
                                uint8_t width);
 

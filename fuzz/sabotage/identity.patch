@@ -1,0 +1,9 @@
+diff --git a/src/reac_identity.c b/src/reac_identity.c
+index db668df..7ef099f 100644
+--- a/src/reac_identity.c
++++ b/src/reac_identity.c
+@@ -41,3 +41,3 @@ static int store_model_name(struct reac_identity *id, const uint8_t *p, size_t l
+ 		return 0;
+-	size_t n = len - 1;               /* drop the name_kind byte */
++	size_t n = len;                   /* drop the name_kind byte */
+ 	if (n > REAC_IDENTITY_NAME_CAP - 1)
