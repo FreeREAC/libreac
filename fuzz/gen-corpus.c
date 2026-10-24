@@ -737,17 +737,17 @@ static void gen_boxreg(void)
 static void gen_knock(void)
 {
 	struct seed s = { 0 };
-	/* a silent wire: steps every ~65 ms until the licence */
+	/* a silent wire: steps of ~1 ms, ~77 us and ~8.4 ms until the licence */
 	put32(&s, 1000);
 	for (int i = 0; i < 10; i++) {
 		put8(&s, 0x02 | 4 << 4); put16(&s, 0xffff);   /* 65535 << 4 ns ~ 1 ms */
 	}
 	for (int i = 0; i < 10; i++) {
-		put8(&s, 0x02 | 7 << 4); put16(&s, 600);      /* 600 << 7 ~ 77 us .. */
+		put8(&s, 0x02 | 7 << 4); put16(&s, 600);      /* 600 << 7 ns ~ 77 us */
 	}
 	put8(&s, 0x02 | 7 << 4); put16(&s, 0xffff);
 	for (int i = 0; i < 64; i++) {
-		put8(&s, 0x02 | 7 << 4); put16(&s, 0xffff);   /* ~8.4 ms each */
+		put8(&s, 0x02 | 7 << 4); put16(&s, 0xffff);   /* 65535 << 7 ns ~ 8.4 ms each */
 	}
 	emit("knock", "silent-wire", &s);
 	/* a stray frame cancels, the wire re-opens from it, and drives later */

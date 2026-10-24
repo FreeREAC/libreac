@@ -11,7 +11,8 @@
  *
  * Input:  [0..3] u32 LE: the start time in units of 2^20 ns
  *         then events, at most 4096, each [ev][u16 LE dt]: the clock advances by
- *         dt << (ev >> 4 & 7) ns (so steps run from nanoseconds to seconds), then
+ *         dt << (ev >> 4 & 7) ns (one step runs from 1 ns to 65535 << 7 ns, about
+ *         8.4 ms, so a 500 ms window takes some 60 steps or more), then
  *           ev & 1   a frame is heard (reac_knock_heard)
  *           ev & 2   the caller steps the knock (reac_knock_step)
  *         The clock is monotonic, like the CLOCK_MONOTONIC the daemon passes in.
