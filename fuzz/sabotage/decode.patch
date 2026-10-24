@@ -1,0 +1,9 @@
+diff --git a/src/reac_decode.c b/src/reac_decode.c
+index b777327..e1cf815 100644
+--- a/src/reac_decode.c
++++ b/src/reac_decode.c
+@@ -70,3 +70,3 @@ int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
+ 	if (nch <= 0 || (nch & 1) || ns <= 0 ||
+-	    (size_t)nch * (size_t)ns * REAC_RESOLUTION > (size_t)REAC_AUDIO_BYTES)
++	    0)
+ 		return -1;

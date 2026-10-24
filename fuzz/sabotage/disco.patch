@@ -1,0 +1,9 @@
+diff --git a/src/reac_disco.c b/src/reac_disco.c
+index 8cb7387..065fac6 100644
+--- a/src/reac_disco.c
++++ b/src/reac_disco.c
+@@ -328,3 +328,3 @@ int reac_disco_table_observe(struct reac_disco_table *t,
+ 
+-	if (t->n >= REAC_DISCO_MAX) {
++	if (t->n > REAC_DISCO_MAX) {
+ 		/* Saturate rather than evict, and record that we did: a full table is a

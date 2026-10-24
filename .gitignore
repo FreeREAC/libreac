@@ -18,6 +18,7 @@ test_encode
 test_decode
 test_ports
 test_grant_width
+test_headamp_replay
 *.o
 *.a
 test_facts
@@ -74,3 +75,6 @@ __pycache__/
 *.py[co]
 test_box_facts
 .git-push-failures.log
+
+# fuzzing: crashing inputs and logs from make fuzz-run
+/fuzz/findings/

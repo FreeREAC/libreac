@@ -1,0 +1,9 @@
+diff --git a/src/reac_grant.c b/src/reac_grant.c
+index 8350fe6..5e1372a 100644
+--- a/src/reac_grant.c
++++ b/src/reac_grant.c
+@@ -95,3 +95,3 @@ int reac_grant_alloc_fits(int base, int width)
+ 	 * because it is NOT an audio-fabric index. */
+-	return (base + width - 1) <= REAC_HEADAMP_CEILING;
++	return (base + width - 1) <= REAC_HEADAMP_CEILING + 1;
+ }
