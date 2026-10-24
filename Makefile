@@ -466,6 +466,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 #   make fuzz                   build every harness
 #   make fuzz-run FUZZ_TIME=60  run each for the budget; red on any crash, the
 #                               crashing input left in fuzz/findings/
+#   make fuzz-corpus            regenerate fuzz/corpus/ from the test fixtures
 FUZZ_CC        ?= clang
 FUZZ_TIME      ?= 60
 FUZZ_BUILD     := $(BUILD_DIR)/fuzz
@@ -495,10 +496,20 @@ fuzz: $(FUZZ_BUILD)/libreac.a $(FUZZ_BINS)
 fuzz-run: fuzz
 	FUZZ_BUILD=$(FUZZ_BUILD) FUZZ_TIME=$(FUZZ_TIME) fuzz/run.sh $(FUZZ_HARNESSES)
 
+# The seed corpus is generated from the test fixtures and the library's own
+# builders, never from a network or a private capture, and committed.
+FUZZ_GEN := $(BUILD_DIR)/fuzz-gen-corpus
+$(FUZZ_GEN): fuzz/gen-corpus.c libreac.a
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -D_POSIX_C_SOURCE=200809L -Itests $(INC) $< libreac.a -lm -o $@
+
+fuzz-corpus: $(FUZZ_GEN)
+	$(FUZZ_GEN) fuzz/corpus
+
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans test_etf_qdisc_stats
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \
-        fuzz fuzz-run
+        fuzz fuzz-run fuzz-corpus
