@@ -466,6 +466,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 #   make fuzz                   build every harness
 #   make fuzz-run FUZZ_TIME=60  run each for the budget; red on any crash, the
 #                               crashing input left in fuzz/findings/
+#   make fuzz-cov               line coverage of each parser over its seed corpus
 #   make fuzz-corpus            regenerate fuzz/corpus/ from the test fixtures
 FUZZ_CC        ?= clang
 FUZZ_TIME      ?= 60
@@ -499,6 +500,36 @@ fuzz: $(FUZZ_BUILD)/libreac.a $(FUZZ_BINS)
 fuzz-run: fuzz
 	FUZZ_BUILD=$(FUZZ_BUILD) FUZZ_TIME=$(FUZZ_TIME) fuzz/run.sh $(FUZZ_HARNESSES)
 
+# The coverage witness: the same harnesses without sanitizers, instrumented for
+# llvm-cov, each run once over its seed corpus (-runs=0 executes the corpus and
+# nothing else).
+FUZZ_COV_BUILD := $(FUZZ_BUILD)/cov
+FUZZ_COV_FLAGS := -O0 -g -std=c11 -fprofile-instr-generate -fcoverage-mapping
+FUZZ_COV_OBJS  := $(OBJS:%.o=$(FUZZ_COV_BUILD)/obj/%.o)
+
+$(FUZZ_COV_BUILD)/obj/%.o: src/%.c
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(FUZZ_COV_FLAGS) -MMD -MP $(INC) -c $< -o $@
+
+-include $(FUZZ_COV_OBJS:.o=.d)
+
+$(FUZZ_COV_BUILD)/libreac.a: $(FUZZ_COV_OBJS)
+	$(AR) rcs $@ $(FUZZ_COV_OBJS)
+
+$(FUZZ_COV_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h $(FUZZ_COV_BUILD)/libreac.a
+	$(FUZZ_CC) $(FUZZ_COV_FLAGS) -fsanitize=fuzzer $(INC) $< $(FUZZ_COV_BUILD)/libreac.a -lm \
+	    $(FUZZ_LDFLAGS_$*) -o $@
+
+fuzz-cov: $(FUZZ_HARNESSES:%=$(FUZZ_COV_BUILD)/fuzz_%)
+	@set -e; for h in $(FUZZ_HARNESSES); do \
+	  rm -f $(FUZZ_COV_BUILD)/$$h.profraw; \
+	  LLVM_PROFILE_FILE=$(FUZZ_COV_BUILD)/$$h.profraw $(FUZZ_COV_BUILD)/fuzz_$$h -runs=0 \
+	      fuzz/corpus/$$h/ >$(FUZZ_COV_BUILD)/$$h.log 2>&1 || \
+	    { cat $(FUZZ_COV_BUILD)/$$h.log; echo "fuzz-cov: fuzz_$$h failed on its own corpus"; exit 1; }; \
+	  llvm-profdata merge -sparse $(FUZZ_COV_BUILD)/$$h.profraw -o $(FUZZ_COV_BUILD)/$$h.profdata; \
+	done
+	@fuzz/coverage.sh $(FUZZ_COV_BUILD) $(FUZZ_HARNESSES)
+
 # The seed corpus is generated from the test fixtures and the library's own
 # builders, never from a network or a private capture, and committed.
 FUZZ_GEN := $(BUILD_DIR)/fuzz-gen-corpus
@@ -515,4 +546,4 @@ clean:
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \
-        fuzz fuzz-run fuzz-corpus
+        fuzz fuzz-run fuzz-cov fuzz-corpus
