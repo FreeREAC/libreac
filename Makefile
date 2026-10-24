@@ -457,9 +457,48 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	    -lm -lpthread -o test_etf_qdisc_stats
 	$(RUN_TEST) ./test_etf_qdisc_stats
 
+# --- fuzzing: libFuzzer harnesses for every parser of wire bytes ---
+# One harness per parser in fuzz/, each a plain C LLVMFuzzerTestOneInput, linked
+# against a libreac.a of its own: the same sources compiled with clang, ASan, UBSan
+# and libFuzzer's coverage hooks into build/fuzz/obj, so the ordinary build above is
+# never touched. None of these targets is part of `make test`.
+#
+#   make fuzz                   build every harness
+#   make fuzz-run FUZZ_TIME=60  run each for the budget; red on any crash, the
+#                               crashing input left in fuzz/findings/
+FUZZ_CC        ?= clang
+FUZZ_TIME      ?= 60
+FUZZ_BUILD     := $(BUILD_DIR)/fuzz
+FUZZ_HARNESSES :=
+FUZZ_SAN       := -fsanitize=address,undefined -fno-sanitize-recover=all
+FUZZ_CFLAGS    := -O1 -g -std=c11 -Wall -Wextra -fno-omit-frame-pointer $(FUZZ_SAN)
+FUZZ_BINS      := $(FUZZ_HARNESSES:%=$(FUZZ_BUILD)/fuzz_%)
+FUZZ_LIB_OBJS  := $(OBJS:%.o=$(FUZZ_BUILD)/obj/%.o)
+
+$(FUZZ_BUILD)/obj/%.o: src/%.c
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(FUZZ_CFLAGS) -fsanitize=fuzzer-no-link -MMD -MP $(INC) -c $< -o $@
+
+-include $(FUZZ_LIB_OBJS:.o=.d)
+
+$(FUZZ_BUILD)/libreac.a: $(FUZZ_LIB_OBJS)
+	$(AR) rcs $@ $(FUZZ_LIB_OBJS)
+
+$(FUZZ_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h $(FUZZ_BUILD)/libreac.a
+	$(FUZZ_CC) $(FUZZ_CFLAGS) -fsanitize=fuzzer -MMD -MP -MF $@.d $(INC) $< \
+	    $(FUZZ_BUILD)/libreac.a -lm $(FUZZ_LDFLAGS_$*) -o $@
+
+-include $(FUZZ_BINS:=.d)
+
+fuzz: $(FUZZ_BUILD)/libreac.a $(FUZZ_BINS)
+
+fuzz-run: fuzz
+	FUZZ_BUILD=$(FUZZ_BUILD) FUZZ_TIME=$(FUZZ_TIME) fuzz/run.sh $(FUZZ_HARNESSES)
+
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans test_etf_qdisc_stats
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
-.PHONY: all test test-transport conformance corpus wire-tools clean transport
+.PHONY: all test test-transport conformance corpus wire-tools clean transport \
+        fuzz fuzz-run

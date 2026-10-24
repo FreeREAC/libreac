@@ -74,3 +74,6 @@ __pycache__/
 *.py[co]
 test_box_facts
 .git-push-failures.log
+
+# fuzzing: crashing inputs and logs from make fuzz-run
+/fuzz/findings/
