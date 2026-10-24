@@ -14,6 +14,12 @@
 # that grew lines its corpus never reaches. Raise a floor when coverage rises; lower one
 # only together with the change that removed the lines.
 #
+# THE HARNESS FLOOR. Every property check of the harness itself, each abort() in
+# fuzz/fuzz_<harness>.c and the statement that guards it (fuzz/checks.awk), must be
+# executed by at least one seed. A check no seed reaches is a property nobody tests,
+# and the library's line count cannot see it; this names the harness file and the
+# line of every such check and turns red.
+#
 # Usage: coverage.sh <cov build dir> <harness>...   (LLVM_COV names llvm-cov)
 set -eu
 B=$1
@@ -22,6 +28,7 @@ LLVM_COV=${LLVM_COV:-llvm-cov}
 FLOOR=fuzz/coverage-floor.txt
 [ -f "$FLOOR" ] || { echo "coverage.sh: no $FLOOR" >&2; exit 2; }
 low=
+dead=
 
 # The functions each harness covers: what "every parser line the harness means to
 # cover" means, one list per harness. Static functions are matched by bare name.
@@ -94,6 +101,21 @@ for h in "$@"; do
 		awk -v f="$f" -F'|' '$2 ~ /^ *0$/ {
 			sub(/^ */, "", $1); printf "    unreached %s:%s %s\n", f, $1, $3 }'
 	done
+	src=fuzz/fuzz_$h.c
+	"$LLVM_COV" show "$bin" -instr-profile="$prof" "$src" |
+		awk -v file="$src" -f fuzz/checks.awk >"$B/$h.checks"
+	nchk=$(wc -l <"$B/$h.checks")
+	if [ "$nchk" -eq 0 ]; then
+		echo "  CHECKS: no property check found in $src"
+		dead="$dead $h"
+	elif awk -F: '$4 == "0" { n++ } END { exit !n }' "$B/$h.checks"; then
+		awk -F: '$4 == "0" { t = $0; sub(/^([^:]*:){4}/, "", t)
+			printf "  CHECK: %s:%d no seed reaches (abort at line %d): %s\n", $1, $2, $3, t }' \
+			"$B/$h.checks"
+		dead="$dead $h"
+	else
+		echo "  checks: all $nchk property checks of $src reached"
+	fi
 	covered=$(cat "$tot")
 	floor=$(awk -v h="$h" '$1 == h { print $2 }' "$FLOOR")
 	if [ -z "$floor" ]; then
@@ -107,8 +129,7 @@ for h in "$@"; do
 	fi
 done
 
-if [ -n "$low" ]; then
-	echo "make fuzz-cov: RED -- below the coverage floor:$low"
-	exit 1
-fi
-echo "make fuzz-cov: every harness at or above its coverage floor"
+[ -z "$low" ] || echo "make fuzz-cov: RED -- below the coverage floor:$low"
+[ -z "$dead" ] || echo "make fuzz-cov: RED -- harness checks no seed reaches:$dead"
+[ -z "$low$dead" ] || exit 1
+echo "make fuzz-cov: every harness at or above its coverage floor, every check reached"

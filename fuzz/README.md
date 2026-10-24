@@ -102,6 +102,20 @@ a parser's and are not counted. `fuzz/coverage-floor.txt` holds the number of co
 each harness reaches today, and `make fuzz-cov` is red when a harness falls below it, so a lost
 seed or a parser that grows lines its corpus never reaches cannot pass unnoticed; CI runs it.
 
+The harnesses are held to a floor of their own. Every property check in `fuzz/fuzz_*.c`, an
+`abort()` and the statement that guards it, must be executed by at least one seed:
+`fuzz/checks.awk` finds each check in the `llvm-cov show` of the harness file, and `make
+fuzz-cov` is red on any check whose guard no seed executed, naming the file and the line:
+
+```
+  CHECK: fuzz/fuzz_ctrl.c:136 no seed reaches (abort at line 137): if (reac_identity_ingest(id, addr, pl, pll) < 0)
+make fuzz-cov: RED -- harness checks no seed reaches: ctrl
+```
+
+A check no input reaches is a property nobody tests, and the library's line count cannot see
+it: a seed that was the only one to drive a harness branch can go without a parser line
+falling. A check that needs a new kind of input gets a seed from `fuzz/gen-corpus.c`.
+
 | Harness | Parser lines | Covered | Lines no input can reach |
 | --- | ---: | ---: | --- |
 | decode | 104 | 100.00% | |
