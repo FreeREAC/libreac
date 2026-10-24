@@ -36,6 +36,21 @@ or name one target (`make corpus_check`, `make headamp_trace`, ...). `make corpu
 FreeREAC capture corpus and diffs it against `tests/corpus-baseline.txt`; the corpus is private,
 so this target is for maintainers who have it.
 
+## Fuzzing
+
+Every parser of wire bytes has a libFuzzer harness under `fuzz/`, built with clang under
+AddressSanitizer and UndefinedBehaviorSanitizer against a `libreac.a` of its own:
+
+```
+make fuzz                    # build the harnesses
+make fuzz-run FUZZ_TIME=60   # fuzz each one; red on any crash
+make fuzz-sabotage           # each planted one-line bug must be found
+make fuzz-cov                # line coverage of each parser over its seed corpus
+```
+
+CI runs the first three on every push and pull request. `fuzz/README.md` says what each
+harness feeds and checks, where its corpus comes from, and how to reproduce a finding.
+
 ## Packages
 
 One source builds two libraries, `libreac` and `libreac-transport`, as four binary packages:

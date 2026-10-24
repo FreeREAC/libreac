@@ -461,7 +461,8 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 # One harness per parser in fuzz/, each a plain C LLVMFuzzerTestOneInput, linked
 # against a libreac.a of its own: the same sources compiled with clang, ASan, UBSan
 # and libFuzzer's coverage hooks into build/fuzz/obj, so the ordinary build above is
-# never touched. None of these targets is part of `make test`.
+# never touched. fuzz/README.md says what each harness feeds and how to reproduce a
+# finding. None of these targets is part of `make test`.
 #
 #   make fuzz                   build every harness
 #   make fuzz-run FUZZ_TIME=60  run each for the budget; red on any crash, the
