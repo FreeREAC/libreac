@@ -98,7 +98,9 @@ from the same seeds.
 `-fprofile-instr-generate -fcoverage-mapping`), runs it once over its corpus (`-runs=0`) and
 prints the line coverage of the parser functions it covers, then every line of them no seed
 reached. The function lists are in `fuzz/coverage.sh`; a file's builders and socket code are not
-a parser's and are not counted.
+a parser's and are not counted. `fuzz/coverage-floor.txt` holds the number of covered lines
+each harness reaches today, and `make fuzz-cov` is red when a harness falls below it, so a lost
+seed or a parser that grows lines its corpus never reaches cannot pass unnoticed; CI runs it.
 
 | Harness | Parser lines | Covered | Lines no input can reach |
 | --- | ---: | ---: | --- |

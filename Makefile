@@ -472,7 +472,8 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 #   make fuzz-run FUZZ_TIME=60  run each for the budget; red on any crash, the
 #                               crashing input left in fuzz/findings/
 #   make fuzz-sabotage          plant each harness's one-line mutant, require a crash
-#   make fuzz-cov               line coverage of each parser over its seed corpus
+#   make fuzz-cov               line coverage of each parser over its seed corpus,
+#                               red below fuzz/coverage-floor.txt
 #   make fuzz-corpus            regenerate fuzz/corpus/ from the test fixtures
 FUZZ_CC        ?= clang
 FUZZ_TIME      ?= 60
@@ -514,6 +515,9 @@ fuzz-sabotage:
 # nothing else).
 FUZZ_COV_BUILD := $(FUZZ_BUILD)/cov
 FUZZ_COV_FLAGS := -O0 -g -std=c11 -fprofile-instr-generate -fcoverage-mapping
+# The llvm-cov and llvm-profdata of FUZZ_CC's own LLVM (a distro may version them).
+LLVM_COV       ?= llvm-cov
+LLVM_PROFDATA  ?= llvm-profdata
 FUZZ_COV_OBJS  := $(OBJS:%.o=$(FUZZ_COV_BUILD)/obj/%.o)
 
 $(FUZZ_COV_BUILD)/obj/%.o: src/%.c
@@ -535,9 +539,9 @@ fuzz-cov: $(FUZZ_HARNESSES:%=$(FUZZ_COV_BUILD)/fuzz_%)
 	  LLVM_PROFILE_FILE=$(FUZZ_COV_BUILD)/$$h.profraw $(FUZZ_COV_BUILD)/fuzz_$$h -runs=0 \
 	      fuzz/corpus/$$h/ >$(FUZZ_COV_BUILD)/$$h.log 2>&1 || \
 	    { cat $(FUZZ_COV_BUILD)/$$h.log; echo "fuzz-cov: fuzz_$$h failed on its own corpus"; exit 1; }; \
-	  llvm-profdata merge -sparse $(FUZZ_COV_BUILD)/$$h.profraw -o $(FUZZ_COV_BUILD)/$$h.profdata; \
+	  $(LLVM_PROFDATA) merge -sparse $(FUZZ_COV_BUILD)/$$h.profraw -o $(FUZZ_COV_BUILD)/$$h.profdata; \
 	done
-	@fuzz/coverage.sh $(FUZZ_COV_BUILD) $(FUZZ_HARNESSES)
+	@LLVM_COV=$(LLVM_COV) fuzz/coverage.sh $(FUZZ_COV_BUILD) $(FUZZ_HARNESSES)
 
 # The seed corpus is generated from the test fixtures and the library's own
 # builders, never from a network or a private capture, and committed.

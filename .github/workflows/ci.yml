@@ -31,6 +31,14 @@ jobs:
       # in fuzz/sabotage/ must crash its harness.
       - name: Find every planted mutant
         run: make fuzz-sabotage
+      # The seed corpus must keep reaching the parser lines it reaches today
+      # (fuzz/coverage-floor.txt). llvm-cov and llvm-profdata must be clang's own LLVM.
+      - name: Hold the coverage floor
+        run: |
+          v=$(clang -dumpversion | cut -d. -f1)
+          cov=$(command -v llvm-cov-$v || command -v llvm-cov)
+          prof=$(command -v llvm-profdata-$v || command -v llvm-profdata)
+          make fuzz-cov LLVM_COV="$cov" LLVM_PROFDATA="$prof"
       - name: Upload the crashing inputs
         if: failure()
         uses: actions/upload-artifact@v4

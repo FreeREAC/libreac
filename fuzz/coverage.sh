@@ -8,10 +8,20 @@
 # drive, and every line of them the corpus never reached. A file's other functions
 # (builders, socket code) are not the harness's job and are not counted.
 #
-# Usage: coverage.sh <cov build dir> <harness>...
+# THE FLOOR. fuzz/coverage-floor.txt holds, per harness, the number of covered parser
+# lines the committed corpus reaches. A harness whose covered lines fall below its floor
+# turns this red: a seed lost, a harness that stopped driving a function, or a parser
+# that grew lines its corpus never reaches. Raise a floor when coverage rises; lower one
+# only together with the change that removed the lines.
+#
+# Usage: coverage.sh <cov build dir> <harness>...   (LLVM_COV names llvm-cov)
 set -eu
 B=$1
 shift
+LLVM_COV=${LLVM_COV:-llvm-cov}
+FLOOR=fuzz/coverage-floor.txt
+[ -f "$FLOOR" ] || { echo "coverage.sh: no $FLOOR" >&2; exit 2; }
+low=
 
 # The functions each harness covers: what "every parser line the harness means to
 # cover" means, one list per harness. Static functions are matched by bare name.
@@ -63,8 +73,9 @@ for h in "$@"; do
 	bin=$B/fuzz_$h prof=$B/$h.profdata
 	echo "== fuzz_$h: $(ls fuzz/corpus/$h | wc -l) seed inputs"
 	# Name Regions Miss Cover Lines Miss Cover ...: keep the listed functions.
-	llvm-cov report -show-functions "$bin" -instr-profile="$prof" $files |
-	awk -v want="$*" '
+	tot=$B/$h.covered
+	"$LLVM_COV" report -show-functions "$bin" -instr-profile="$prof" $files |
+	awk -v want="$*" -v tot="$tot" '
 		BEGIN { n = split(want, w, " "); for (i = 1; i <= n; i++) keep[w[i]] = 1 }
 		{ name = $1; sub(/^.*:/, "", name) }
 		(name in keep) && NF >= 10 {
@@ -75,9 +86,29 @@ for h in "$@"; do
 			for (k in keep) if (!(k in seen)) printf "  %-34s NOT FOUND in the report\n", k
 			printf "  %-34s lines %4d  missed %3d  %.2f%%\n", "TOTAL", lines, missed,
 			       lines ? 100 * (lines - missed) / lines : 0
+			print lines - missed > tot
 		}'
 	for f in "$@"; do
-		llvm-cov show "$bin" -instr-profile="$prof" -name-regex="^(.*:)?$f\$" $files 2>/dev/null |
-		awk -v f="$f" -F'|' '$2 ~ /^ *0$/ { sub(/^ */, "", $1); printf "    unreached %s:%s %s\n", f, $1, $3 }'
+		"$LLVM_COV" show "$bin" -instr-profile="$prof" -name-regex="^(.*:)?$f\$" $files \
+			2>/dev/null |
+		awk -v f="$f" -F'|' '$2 ~ /^ *0$/ {
+			sub(/^ */, "", $1); printf "    unreached %s:%s %s\n", f, $1, $3 }'
 	done
+	covered=$(cat "$tot")
+	floor=$(awk -v h="$h" '$1 == h { print $2 }' "$FLOOR")
+	if [ -z "$floor" ]; then
+		echo "  FLOOR: fuzz_$h has no line in $FLOOR"
+		low="$low $h"
+	elif [ "$covered" -lt "$floor" ]; then
+		echo "  FLOOR: fuzz_$h covers $covered parser lines, below its floor of $floor"
+		low="$low $h"
+	else
+		echo "  floor $floor: held ($covered covered)"
+	fi
 done
+
+if [ -n "$low" ]; then
+	echo "make fuzz-cov: RED -- below the coverage floor:$low"
+	exit 1
+fi
+echo "make fuzz-cov: every harness at or above its coverage floor"
