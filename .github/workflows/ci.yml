@@ -61,7 +61,8 @@ jobs:
       - name: Find every planted mutant
         run: make fuzz-sabotage
       # The seed corpus must keep reaching the parser lines it reaches today
-      # (fuzz/coverage-floor.txt). llvm-cov and llvm-profdata must be clang's own LLVM.
+      # (fuzz/coverage-floor.txt) and every property check of every harness.
+      # llvm-cov and llvm-profdata must be clang's own LLVM.
       - name: Hold the coverage floor
         run: |
           v=$(clang -dumpversion | cut -d. -f1)

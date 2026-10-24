@@ -473,7 +473,8 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 #                               crashing input left in fuzz/findings/
 #   make fuzz-sabotage          plant each harness's one-line mutant, require a crash
 #   make fuzz-cov               line coverage of each parser over its seed corpus,
-#                               red below fuzz/coverage-floor.txt
+#                               red below fuzz/coverage-floor.txt or on a harness
+#                               check no seed reaches
 #   make fuzz-corpus            regenerate fuzz/corpus/ from the test fixtures
 FUZZ_CC        ?= clang
 FUZZ_TIME      ?= 60
