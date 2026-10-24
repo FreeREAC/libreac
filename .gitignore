@@ -18,6 +18,7 @@ test_encode
 test_decode
 test_ports
 test_grant_width
+test_headamp_replay
 *.o
 *.a
 test_facts
