@@ -470,11 +470,14 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 FUZZ_CC        ?= clang
 FUZZ_TIME      ?= 60
 FUZZ_BUILD     := $(BUILD_DIR)/fuzz
-FUZZ_HARNESSES := decode ctrl identity disco scene boxreg knock grant
+FUZZ_HARNESSES := decode ctrl identity disco scene boxreg knock grant pcap
 FUZZ_SAN       := -fsanitize=address,undefined -fno-sanitize-recover=all
 FUZZ_CFLAGS    := -O1 -g -std=c11 -Wall -Wextra -fno-omit-frame-pointer $(FUZZ_SAN)
 FUZZ_BINS      := $(FUZZ_HARNESSES:%=$(FUZZ_BUILD)/fuzz_%)
 FUZZ_LIB_OBJS  := $(OBJS:%.o=$(FUZZ_BUILD)/obj/%.o)
+# pcap_source_open() takes a path; the pcap harness hands it the input instead
+# (fuzz/fuzz_pcap.c explains the wrap).
+FUZZ_LDFLAGS_pcap := -Wl,--wrap=fopen
 
 $(FUZZ_BUILD)/obj/%.o: src/%.c
 	@mkdir -p $(dir $@)
