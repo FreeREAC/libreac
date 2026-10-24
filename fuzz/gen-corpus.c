@@ -804,6 +804,14 @@ static void gen_grant(void)
 	put8(&s, 0); put8(&s, 8); put8(&s, 0); put8(&s, 8);
 	put32(&s, 0); put16(&s, 64);
 	emit("grant", "refused-cells", &s);
+	/* a scene replay armed past the end of the head-amp table, the input that
+	 * found its clamp wrapping onto channels 0..47 */
+	static const uint8_t PAST_TABLE[24] = {
+		0xff, 0xff, 0x00, 0x00, 0x00, 0x28, 0xf9, 0xf9, 0xf9, 0xf9, 0xf9, 0xf9,
+		0xf9, 0xf9, 0xf9, 0x10, 0x28, 0x10, 0x03, 0x00, 0x00, 0x00, 0xc8, 0x00,
+	};
+	put(&s, PAST_TABLE, sizeof PAST_TABLE);
+	emit("grant", "replay-base-past-table", &s);
 	/* a buffer one row too small */
 	put16(&s, 0); put8(&s, 8); put8(&s, REAC_GRANT_SWEEP_LEN(8) - 1); put8(&s, 0);
 	emit("grant", "buffer-short", &s);

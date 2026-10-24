@@ -77,7 +77,9 @@ uint8_t reac_headamp_tx_effective(const struct reac_headamp_tx *t,
 void reac_headamp_tx_arm_scene(struct reac_headamp_tx *t, uint8_t base,
                                uint8_t width)
 {
-	if (width == 0)
+	/* A base past the table arms nothing, like width 0: clamping it would wrap the
+	 * width and replay every channel from 0. */
+	if (width == 0 || base >= REAC_HEADAMP_MAX_CH)
 		return;
 	if ((int)base + (int)width > REAC_HEADAMP_MAX_CH)
 		width = (uint8_t)(REAC_HEADAMP_MAX_CH - base);

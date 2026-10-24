@@ -173,3 +173,5 @@ build/fuzz/fuzz_<harness> fuzz/findings/<harness>-crash-<sha1>
 prints the sanitizer report or the aborted property with its stack. Once the bug is fixed, copy
 the input into `fuzz/corpus/<harness>/` under a name that says what it is, so every later run
 replays it first and the fix stays pinned.
+`fuzz/corpus/grant/replay-base-past-table` is one: the input with which `fuzz_grant` found
+`reac_headamp_tx_arm_scene` wrapping its clamp for a base past the head-amp table.
