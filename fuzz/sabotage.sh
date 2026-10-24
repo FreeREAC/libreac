@@ -17,6 +17,8 @@ B=${FUZZ_BUILD:-build/fuzz}
 MAKE=${MAKE:-make}
 T=${SABOTAGE_TIME:-30}
 OUT=$B/sabotage
+# The build logs land beside the build: make it exist even where `make fuzz` never ran.
+mkdir -p "$B" "$OUT"
 
 patched=
 restore() {
