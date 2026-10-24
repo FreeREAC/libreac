@@ -134,8 +134,10 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	reac_identity_init(&id);
 	if (reac_identity_ingest(NULL, 0, NULL, 0) != -1 ||
 	    reac_identity_ingest(&id, 0, NULL, 4) != -1 ||
-	    reac_identity_fw_str(0, NULL, 8) >= 0 || reac_identity_reac_ver_str(0, 0, 0, NULL, 20) >= 0 ||
-	    reac_box_catalogue_defect(NULL, 8, 8, "x") != 0 || reac_box_family_of(NULL) != REAC_BOX_FAMILY_UNKNOWN)
+	    reac_identity_fw_str(0, NULL, 8) >= 0 ||
+	    reac_identity_reac_ver_str(0, 0, 0, NULL, 20) >= 0 ||
+	    reac_box_catalogue_defect(NULL, 8, 8, "x") != 0 ||
+	    reac_box_family_of(NULL) != REAC_BOX_FAMILY_UNKNOWN)
 		abort();
 
 	int nrec = fuzz_u8(&in) % (MAX_RECORDS + 1);
