@@ -53,3 +53,12 @@ Depends: libreac-transport7 (= ${binary:Version}), libreac-dev (= ${binary:Versi
 Description: Roland REAC transport layer, development files
  Headers and the pkg-config file for building programs against libreac-
  transport.
+
+Package: libreac-tests
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: software REAC stagebox, to test a program that talks to one
+ fake_box answers on the wire the way a REAC stagebox does, so a program that
+ enrols and plays to a box can be tested without one. It is built from
+ libreac's own objects and needs no other package. It is installed in
+ /usr/libexec/libreac/tests and is of no use to anyone else.
