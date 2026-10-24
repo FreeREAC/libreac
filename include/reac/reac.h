@@ -384,7 +384,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
 #define LIBREAC_VERSION_MINOR 7
-#define LIBREAC_VERSION_PATCH 2
+#define LIBREAC_VERSION_PATCH 3
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what

@@ -2,7 +2,7 @@
 # libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.7.2
+Version:        1.7.3
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -181,6 +181,16 @@ make test
 %{_libexecdir}/libreac/tests/fake_box
 
 %changelog
+* Sat Oct 24 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.3-1
+- libreac-tests (RPM and DEB) ships fake_box in /usr/libexec/libreac/tests/fake_box,
+  needing only libc and libm, so a consumer's tests install it from the
+  channel instead of building libreac from source (#10; serves
+  FreeREAC/reac-pw#23).
+- fuzz_ctrl's corpus gains the two single-record identity replies (firmware
+  CC0016, REAC version CC001A), and fuzz/checks.awk holds every harness
+  property check to the seed corpus in `make fuzz-cov` (168 checks; #24,
+  issue #22).
+
 * Sat Oct 24 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.2-1
 - A scene replay armed past the end of the head-amp table now arms nothing.
   Its width clamp wrapped for a base of 49 or more and replayed head-amp
