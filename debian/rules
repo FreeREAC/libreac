@@ -32,6 +32,7 @@ override_dh_auto_build:
 	done
 	$(CC) $(LDFLAGS) -shared -Wl,-soname,libreac-transport.so.$(TABI) -Wl,--no-undefined \
 	  -o libreac-transport.so.$(VERSION) transport-obj/*.o -L. -lreac -lm -lpthread
+	$(CC) $(CPPFLAGS) $(CFLAGS) -D_GNU_SOURCE -Iinclude tools/fake_box.c $$(ls *.o) $(LDFLAGS) -lm -o fake_box
 
 override_dh_auto_install:
 	install -Dm0755 libreac.so.$(VERSION) $(TMP)/$(LIBDIR)/libreac.so.$(VERSION)
@@ -43,6 +44,7 @@ override_dh_auto_install:
 	for h in include/reac/*.h include/reac/transport/*.h; do \
 	  install -Dm0644 $$h $(TMP)/usr/$${h}; \
 	done
+	install -Dm0755 fake_box $(TMP)/usr/libexec/libreac/tests/fake_box
 	install -d $(TMP)/$(LIBDIR)/pkgconfig
 	sed -e 's|@LIB@|lib/$(MULTIARCH)|' -e 's|@VERSION@|$(VERSION)|' packaging/libreac.pc.in \
 	  > $(TMP)/$(LIBDIR)/pkgconfig/libreac.pc
@@ -55,4 +57,4 @@ override_dh_auto_test:
 
 override_dh_auto_clean:
 	dh_auto_clean
-	rm -rf transport-obj libreac.so libreac.so.* libreac-transport.so.*
+	rm -rf transport-obj libreac.so libreac.so.* libreac-transport.so.* fake_box
