@@ -466,6 +466,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 #   make fuzz                   build every harness
 #   make fuzz-run FUZZ_TIME=60  run each for the budget; red on any crash, the
 #                               crashing input left in fuzz/findings/
+#   make fuzz-sabotage          plant each harness's one-line mutant, require a crash
 #   make fuzz-cov               line coverage of each parser over its seed corpus
 #   make fuzz-corpus            regenerate fuzz/corpus/ from the test fixtures
 FUZZ_CC        ?= clang
@@ -499,6 +500,9 @@ fuzz: $(FUZZ_BUILD)/libreac.a $(FUZZ_BINS)
 
 fuzz-run: fuzz
 	FUZZ_BUILD=$(FUZZ_BUILD) FUZZ_TIME=$(FUZZ_TIME) fuzz/run.sh $(FUZZ_HARNESSES)
+
+fuzz-sabotage:
+	FUZZ_BUILD=$(FUZZ_BUILD) MAKE="$(MAKE)" fuzz/sabotage.sh $(FUZZ_HARNESSES)
 
 # The coverage witness: the same harnesses without sanitizers, instrumented for
 # llvm-cov, each run once over its seed corpus (-runs=0 executes the corpus and
@@ -546,4 +550,4 @@ clean:
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \
-        fuzz fuzz-run fuzz-cov fuzz-corpus
+        fuzz fuzz-run fuzz-sabotage fuzz-cov fuzz-corpus

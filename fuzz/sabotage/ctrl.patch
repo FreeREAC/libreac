@@ -1,0 +1,9 @@
+diff --git a/src/reac_ctrlblk.c b/src/reac_ctrlblk.c
+index 9c90459..04999dd 100644
+--- a/src/reac_ctrlblk.c
++++ b/src/reac_ctrlblk.c
+@@ -261,3 +261,3 @@ enum reac_ctrl_kind reac_ctrl_parse(const uint8_t *frame, size_t len,
+ 	memset(out, 0, sizeof *out);
+-	if (len < AUDIO_OFF || frame[12] != 0x88 || frame[13] != 0x19) {
++	if (len < TYPE_OFF || frame[12] != 0x88 || frame[13] != 0x19) {
+ 		out->kind = REAC_CTRL_NONE;

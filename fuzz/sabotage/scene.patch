@@ -1,0 +1,9 @@
+diff --git a/src/reac_ctrlblk.c b/src/reac_ctrlblk.c
+index 9c90459..dfc6d9c 100644
+--- a/src/reac_ctrlblk.c
++++ b/src/reac_ctrlblk.c
+@@ -100,3 +100,3 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
+ {
+-	if (!blk || !body || n != REAC_SCENE_BYTES)
++	if (!blk || !body || n < REAC_SCENE_HEAD_BYTES)
+ 		return -1;

@@ -1,0 +1,9 @@
+diff --git a/src/reac_knock.c b/src/reac_knock.c
+index ddb54c2..ddea0b5 100644
+--- a/src/reac_knock.c
++++ b/src/reac_knock.c
+@@ -48,3 +48,3 @@ enum reac_knock_act reac_knock_step(struct reac_knock *k, uint64_t now_ns)
+ 		return REAC_KNOCK_ACT_NONE;
+-	if (now_ns < k->due_ns)
++	if (now_ns < k->opened_ns)
+ 		return REAC_KNOCK_ACT_NONE;

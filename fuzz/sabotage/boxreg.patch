@@ -1,0 +1,9 @@
+diff --git a/src/reac_boxreg.c b/src/reac_boxreg.c
+index c908a12..590f948 100644
+--- a/src/reac_boxreg.c
++++ b/src/reac_boxreg.c
+@@ -61,3 +61,3 @@ int reac_boxreg_declare(struct reac_boxreg *r, int nch, const char *name, int ba
+ {
+-	if (!width_ok(r, nch) || r->n >= REAC_BOXREG_MAX_BOXES)
++	if (!width_ok(r, nch))
+ 		return -1;
