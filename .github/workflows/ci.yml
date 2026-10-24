@@ -15,3 +15,26 @@ jobs:
       # verdict either way, and every test in it carries tests/run-test.sh's timeout.
       - name: Transport tests
         run: make test-transport REACPW_INCLUDE=packaging/vendor/reac-pw-headers
+  fuzz:
+    runs-on: ubuntu-latest
+    # A backstop: fuzz-run spends FUZZ_TIME on each harness and fuzz-sabotage at most
+    # 30 s on each mutant, so the job ends on its own well inside this.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the fuzz harnesses (clang, libFuzzer, ASan, UBSan)
+        run: make fuzz
+      # Every parser of wire bytes, fuzzed from its seed corpus; red on any crash.
+      - name: Fuzz each harness for 60 s
+        run: make fuzz-run FUZZ_TIME=60
+      # A harness that cannot find a planted bug finds nothing: each one-line mutant
+      # in fuzz/sabotage/ must crash its harness.
+      - name: Find every planted mutant
+        run: make fuzz-sabotage
+      - name: Upload the crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-findings
+          path: fuzz/findings/
+          if-no-files-found: ignore
