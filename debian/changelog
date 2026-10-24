@@ -1,3 +1,15 @@
+libreac (1.7.2) unstable; urgency=medium
+
+  * A scene replay armed past the end of the head-amp table now arms nothing.
+    Its width clamp wrapped for a base of 49 or more and replayed head-amp
+    records onto channels 0..47, other boxes' included (#15).
+  * Every parser of wire bytes has a libFuzzer harness under fuzz/, run under
+    ASan and UBSan with a generated seed corpus, a coverage floor and one
+    planted mutant per harness; CI fuzzes each for 60 s on every push and pull
+    request (#13).
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Sat, 24 Oct 2026 16:19:17 +0200
+
 libreac (1.7.1) unstable; urgency=medium
 
   * libreac and libreac-transport are now installed from the FreeMixer package

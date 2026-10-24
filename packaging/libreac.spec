@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# libreac — the Roland REAC protocol library — and libreac-transport, the sockets and threads that
+# libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.7.1
+Version:        1.7.2
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -26,13 +26,13 @@ BuildRequires:  make
 %description
 libreac speaks Roland REAC, the protocol between Roland digital consoles and their
 stageboxes, so a Linux machine can sit on a REAC network as an equal: hear a
-stagebox, enrol it, and read what it is straight from its own frames — its inputs
+stagebox, enrol it, and read what it is straight from its own frames: its inputs
 and outputs, its model, its firmware.
 
 libreac is the REAC protocol library: it recognises a REAC frame (EtherType 0x8819),
 reads its sequence counter, detects the sample rate, and decodes and encodes the
-24-bit braided audio region in both directions — the 40-channel master broadcast
-and the box's upstream return — plus a legacy plain-LE diagnostic path. It also
+24-bit braided audio region in both directions (the 40-channel master broadcast
+and the box's upstream return), plus a legacy plain-LE diagnostic path. It also
 implements the REAC control plane: control-block layout and checksums, head-amp
 records, box identity, and the master/slave establishment state machines, and it
 reads frames from a live AF_PACKET capture or an offline pcap.
@@ -45,7 +45,7 @@ Requires:       %{name}%{?_isa} = %{version}-%{release}
 Headers and pkg-config for building against libreac.
 
 %package -n libreac-transport
-Summary:        The REAC transport layer — sockets, pacer, RT threads, VLAN scan (userspace backend)
+Summary:        The REAC transport layer: sockets, pacer, RT threads, VLAN scan (userspace backend)
 Requires:       libreac%{?_isa} >= 1.1.0
 
 %description -n libreac-transport
@@ -163,6 +163,15 @@ make test
 %{_libdir}/pkgconfig/libreac-transport.pc
 
 %changelog
+* Sat Oct 24 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.2-1
+- A scene replay armed past the end of the head-amp table now arms nothing.
+  Its width clamp wrapped for a base of 49 or more and replayed head-amp
+  records onto channels 0..47, other boxes' included (#15).
+- Every parser of wire bytes has a libFuzzer harness under fuzz/, run under
+  ASan and UBSan with a generated seed corpus, a coverage floor and one
+  planted mutant per harness; CI fuzzes each for 60 s on every push and pull
+  request (#13).
+
 * Thu Oct 08 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.1-1
 - libreac and libreac-transport are now installed from the FreeMixer package
   channel: signed RPMs for Fedora 44 (x86_64, aarch64) and DEBs for Debian
