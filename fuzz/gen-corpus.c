@@ -375,6 +375,27 @@ static void gen_ctrl(void)
 		snprintf(name, sizeof name, "round-trip-%s", cat[i].token);
 		emit("ctrl", name, &s);
 	}
+	/* the two single-record identity replies a box answers a cold connect with, whole:
+	 * its firmware (address 0x0000) and its REAC version (0x0600), each its own seed */
+	static const struct { const char *name; enum reac_box_block block; } REPLIES[] = {
+		{ "reply-firmware",     REAC_BOX_BLOCK_CC0016 },
+		{ "reply-reac-version", REAC_BOX_BLOCK_CC001A },
+	};
+	for (size_t i = 0; i < sizeof REPLIES / sizeof REPLIES[0]; i++) {
+		uint16_t addr;
+		const uint8_t *pl;
+		size_t pll;
+		size_t n = reac_ctrl_build_as(g_frame, reac_box_catalogue_by_token("s1608"),
+		                              REPLIES[i].block, OUR, BOX, 9, NULL, 0);
+		if (n == 0 || reac_ctrl_identity_reply(g_frame, n, &addr, &pl, &pll) != 1) {
+			fprintf(stderr, "gen-corpus: %s is not a single-record identity reply\n",
+			        REPLIES[i].name);
+			exit(1);
+		}
+		put(&s, OUR, 6); put8(&s, 0);
+		put_rec(&s, g_frame, n);
+		emit("ctrl", REPLIES[i].name, &s);
+	}
 	/* every refusal the parsers make, one breakage per frame */
 	put(&s, OUR, 6); put8(&s, 0);
 	for (const struct breakage *b = BREAKAGES; b->name; b++) {
