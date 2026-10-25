@@ -280,6 +280,11 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.8.0: 0 MEANS THE END OF THE FILE AND NOTHING ELSE (#23). pcap_source_next skips a
+ *        record of 0 bytes, as it skips one larger than the buffer, where it returned
+ *        the record's length, 0, and ended the walk on it. What a public function
+ *        returns for an input it accepted before changes, so this is a minor; no struct
+ *        or symbol moves or changes size, and LIBREAC_ABI stays 4.
  * 1.7.0: EVERY FACT ABOUT A CONNECTED BOX COMES FROM ITS FRAMES (operator ruling
  *        2026-10-07; FreeREAC/reac-pw#5). reac_box_facts.h is ADDED: the family off the
  *        identity page's hw block (reac_box_family_of), the model name from the family and
@@ -383,8 +388,8 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 7
-#define LIBREAC_VERSION_PATCH 3
+#define LIBREAC_VERSION_MINOR 8
+#define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
  * digits alone only stop a BUILD against the wrong headers; the soname is what
