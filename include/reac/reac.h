@@ -284,7 +284,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        record of 0 bytes, as it skips one larger than the buffer, where it returned
  *        the record's length, 0, and ended the walk on it. What a public function
  *        returns for an input it accepted before changes, so this is a minor; no struct
- *        or symbol moves or changes size, and LIBREAC_ABI stays 4.
+ *        or symbol moves or changes size, and LIBREAC_ABI stays 6.
  * 1.7.0: EVERY FACT ABOUT A CONNECTED BOX COMES FROM ITS FRAMES (operator ruling
  *        2026-10-07; FreeREAC/reac-pw#5). reac_box_facts.h is ADDED: the family off the
  *        identity page's hw block (reac_box_family_of), the model name from the family and
