@@ -1,4 +1,4 @@
-Breaks the check of fuzz/fuzz_grant.c:243 (a box fits exactly when its slots lie inside the head-amp space 0x00..0x2f).
+Breaks the check of fuzz/fuzz_grant.c:267 (a box fits exactly when its slots lie inside the head-amp space 0x00..0x2f).
 Caught by the seed input "box-base48-w1" of fuzz_grant.
 
 diff --git a/src/reac_grant.c b/src/reac_grant.c

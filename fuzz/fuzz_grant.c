@@ -114,7 +114,7 @@ static void check_row(const uint8_t row[34])
 
 /* One group-A row, framed as a master stamps it and read back by the parser. */
 static void check_groupa(const uint8_t row[34], uint8_t ch, uint8_t param,
-                         const struct reac_headamp_tx *tx)
+                         const struct reac_headamp_tx *tx, uint8_t want)
 {
 	uint8_t frame[50] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x40, 0xab, 0, 0, 1,
 	                      0x88, 0x19 };
@@ -156,6 +156,25 @@ static void check_groupa(const uint8_t row[34], uint8_t ch, uint8_t param,
 	 * input: box-base0-w8 */
 	if ((s & 0x7f) != 0)
 		abort();
+	/* The row carries the value that the input last set for this cell, or, for a
+	 * cell the input never set, the header's default. The harness keeps the
+	 * value itself; the check above asks reac_headamp_tx_effective, which the
+	 * sweep builder calls too.
+	 * contract: include/reac/reac_grant.h:100-103 (the value is the cell's when
+	 * set, else the default), include/reac/reac_headamp_tx.h:171-172 (the table
+	 * gives back the value set)
+	 * mutant: src/reac_headamp_tx.c:32 `t->value[ch][param] = value;` -> `memset(t->value, 0, sizeof t->value); t->value[ch][param] = value;`
+	 * input: box-base0-w8 */
+	if (p.value != want)
+		abort();
+}
+
+/* The value a cell must carry: the one the input last set, else the default. The
+ * check of the unset cells below holds the default to the header. */
+static uint8_t want_of(uint8_t was_set[][REAC_HEADAMP_NPARAMS],
+                       uint8_t set_to[][REAC_HEADAMP_NPARAMS], uint8_t ch, uint8_t param)
+{
+	return was_set[ch][param] ? set_to[ch][param] : reac_headamp_default(param);
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
@@ -175,6 +194,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	/* The cells the input set: the scheduler may emit these at any time. */
 	uint8_t was_set[REAC_HEADAMP_MAX_CH][REAC_HEADAMP_NPARAMS];
 	memset(was_set, 0, sizeof was_set);
+	/* The value the input last set for each cell, kept by the harness. */
+	uint8_t set_to[REAC_HEADAMP_MAX_CH][REAC_HEADAMP_NPARAMS];
+	memset(set_to, 0, sizeof set_to);
 	int nset = fuzz_u8(&in);
 	for (int i = 0; i < nset; i++) {
 		uint8_t ch = fuzz_u8(&in), param = fuzz_u8(&in), value = fuzz_u8(&in);
@@ -201,8 +223,10 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		 * input: box-base0-w8 */
 		if (r == 0 && reac_headamp_tx_effective(tx, ch, param) != value)
 			abort();
-		if (r == 0)
+		if (r == 0) {
 			was_set[ch][param] = 1;
+			set_to[ch][param] = value;
+		}
 	}
 
 	for (int c = 0; c < REAC_HEADAMP_MAX_CH; c++)
@@ -299,11 +323,13 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			/* HEAD_ACK | A[base].0..2 | HEAD_MARK | B x6 | A[base+1..].0..2
 			 * contract: include/reac/reac_ctrlblk.h:908-914 (the sweep's order) */
 			for (uint8_t p = 0; p < REAC_HEADAMP_NPARAMS; p++)
-				check_groupa(sweep[1 + p], a.base, p, tx);
+				check_groupa(sweep[1 + p], a.base, p, tx,
+				             want_of(was_set, set_to, a.base, p));
 			for (int c = 1; c < a.width; c++)
 				for (uint8_t p = 0; p < REAC_HEADAMP_NPARAMS; p++)
 					check_groupa(sweep[11 + (c - 1) * 3 + p],
-					             (uint8_t)(a.base + c), p, tx);
+					             (uint8_t)(a.base + c), p, tx,
+					             want_of(was_set, set_to, (uint8_t)(a.base + c), p));
 			for (int i = 0; i < REAC_GRANT_GROUPB_LEN; i++) {
 				uint8_t poll[34];
 				/* Group B is the identity poll, byte for byte.
@@ -388,6 +414,17 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		 * input: replay-past-ceiling */
 		if (e == 1 && (ch >= REAC_HEADAMP_MAX_CH || !value_ok(param, value) ||
 		               value != reac_headamp_tx_effective(tx, ch, param)))
+			abort();
+		/* The emitted value is the one that the input last set for the cell, or,
+		 * for a cell the input never set, the header's default. The harness keeps
+		 * the value itself; the check above asks reac_headamp_tx_effective, which
+		 * the scheduler's replay calls too. On box-base-1-w8 the box is refused, so
+		 * no sweep runs and the scheduler alone sends the set cells.
+		 * contract: include/reac/reac_headamp_tx.h:171-174, :196-201
+		 * mutant: src/reac_headamp_tx.c:32 `t->value[ch][param] = value;` -> `memset(t->value, 0, sizeof t->value); t->value[ch][param] = value;`
+		 * input: box-base-1-w8 */
+		if (e == 1 && param < REAC_HEADAMP_NPARAMS &&
+		    value != want_of(was_set, set_to, ch, param))
 			abort();
 		/* An emitted cell is one the input set (an edge or a re-assert), or one
 		 * inside the scene armed above, clamped to the table.
