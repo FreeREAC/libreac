@@ -61,7 +61,8 @@ int reac_upstream_channels(size_t len);
  *
  * raw/len is the full ethernet frame. Validates the 0x8819 ethertype, the
  * frame shape and the end marker. Returns the samples written per channel
- * (12), or -1 on a malformed frame. */
+ * (12), or -1 on a malformed frame or a NULL raw or out. On -1, out is
+ * untouched: every refusal comes before the first byte is written. */
 int reac_upstream_decode(const uint8_t *raw, size_t len, uint8_t *out);
 
 #ifdef __cplusplus

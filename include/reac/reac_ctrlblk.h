@@ -174,11 +174,13 @@ int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
 
 /* Build one step of the transfer into a 34-byte [type|block] template (the shape
  * a master stamps into frame [16:50]), checksum applied. `n` must be
- * REAC_SCENE_BYTES. Returns 0, or -1 on a bad step index or a partial body. */
+ * REAC_SCENE_BYTES. Returns 0, or -1 on a bad step index or a partial body.
+ * On -1, blk is untouched. */
 int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
                                int step);
 
-/* Substitute `mac` into a mutable body at REAC_SCENE_MAC_OFF. 0, or -1. */
+/* Substitute `mac` into a mutable body at REAC_SCENE_MAC_OFF. 0, or -1 on a NULL
+ * argument or when `n` is not REAC_SCENE_BYTES; on -1, body is untouched. */
 int reac_ctrl_scene_set_mac(uint8_t *body, size_t n, const uint8_t mac[6]);
 
 /* Build a body from zeros, the three validated tags and `mac`.
@@ -190,7 +192,8 @@ int reac_ctrl_scene_set_mac(uint8_t *body, size_t n, const uint8_t mac[6]);
  * its own configuration comes out of here too. The firmware sweep that suggested
  * otherwise zeroed one 128-byte window AT A TIME, which shows each window is
  * individually unvalidated BY THE COMMIT and nothing more. Generating a usable
- * scene means reproducing that structure. Returns 0, or -1. */
+ * scene means reproducing that structure. Returns 0, or -1 on a NULL argument or
+ * when `n` is not REAC_SCENE_BYTES; on -1, body is untouched. */
 int reac_ctrl_scene_build(uint8_t *body, size_t n, const uint8_t mac[6]);
 
 /* ---- HEAD-AMP SENSITIVITY: the box's step -> sensitivity curve -------------
