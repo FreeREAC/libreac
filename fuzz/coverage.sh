@@ -20,6 +20,10 @@
 # and the library's line count cannot see it; this names the harness file and the
 # line of every such check and turns red.
 #
+# THE RECORD RATCHET. Every check names in its comment a breakage that it catches
+# (`mutant:` and `input:`), or says in one `not a property: <reason>` line why it is
+# none; a check with neither turns this red. fuzz/records.sh proves the records.
+#
 # Usage: coverage.sh <cov build dir> <harness>...   (LLVM_COV names llvm-cov)
 set -eu
 B=$1
@@ -29,6 +33,7 @@ FLOOR=fuzz/coverage-floor.txt
 [ -f "$FLOOR" ] || { echo "coverage.sh: no $FLOOR" >&2; exit 2; }
 low=
 dead=
+norec=
 
 # The functions each harness covers: what "every parser line the harness means to
 # cover" means, one list per harness. Static functions are matched by bare name.
@@ -109,12 +114,18 @@ for h in "$@"; do
 		echo "  CHECKS: no property check found in $src"
 		dead="$dead $h"
 	elif awk -F: '$4 == "0" { n++ } END { exit !n }' "$B/$h.checks"; then
-		awk -F: '$4 == "0" { t = $0; sub(/^([^:]*:){4}/, "", t)
+		awk -F: '$4 == "0" { t = $0; sub(/^([^:]*:){5}/, "", t)
 			printf "  CHECK: %s:%d no seed reaches (abort at line %d): %s\n", $1, $2, $3, t }' \
 			"$B/$h.checks"
 		dead="$dead $h"
 	else
 		echo "  checks: all $nchk property checks of $src reached"
+	fi
+	if awk -F: '$5 == "0" || $5 == "bad" { n++ } END { exit !n }' "$B/$h.checks"; then
+		awk -F: '$5 == "0" || $5 == "bad" { t = $0; sub(/^([^:]*:){5}/, "", t)
+			printf "  RECORD: %s:%d (abort at line %d) names no breakage and is not marked not a property: %s\n",
+			       $1, $2, $3, t }' "$B/$h.checks"
+		norec="$norec $h"
 	fi
 	covered=$(cat "$tot")
 	floor=$(awk -v h="$h" '$1 == h { print $2 }' "$FLOOR")
@@ -131,5 +142,6 @@ done
 
 [ -z "$low" ] || echo "make fuzz-cov: RED -- below the coverage floor:$low"
 [ -z "$dead" ] || echo "make fuzz-cov: RED -- harness checks no seed reaches:$dead"
-[ -z "$low$dead" ] || exit 1
-echo "make fuzz-cov: every harness at or above its coverage floor, every check reached"
+[ -z "$norec" ] || echo "make fuzz-cov: RED -- harness checks with no mutant record:$norec"
+[ -z "$low$dead$norec" ] || exit 1
+echo "make fuzz-cov: every harness at or above its coverage floor, every check reached and recorded"
