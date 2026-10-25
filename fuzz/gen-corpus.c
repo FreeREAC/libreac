@@ -492,6 +492,16 @@ static void gen_ctrl(void)
 	put(&s, BOX, 6); put8(&s, 0);
 	put_rec(&s, g_frame, fixture_frame(g_frame, &FIXTURES[12], 12));
 	emit("ctrl", "own-echo-join", &s);
+	/* the head-amp record under link byte 0: block[0] 04 becomes 00 and the check
+	 * byte 02 becomes 06, so the block still sums to 0 */
+	{
+		size_t n = fixture_frame(g_frame, &FIXTURES[13], 13);
+		g_frame[BLK(0)] = 0x00;
+		g_frame[BLK(31)] = (uint8_t)(g_frame[BLK(31)] + REAC_LINK_RECORD);
+		put(&s, OUR, 6); put8(&s, 0);
+		put_rec(&s, g_frame, n);
+		emit("ctrl", "headamp-link-0", &s);
+	}
 	free(s.p);
 }
 

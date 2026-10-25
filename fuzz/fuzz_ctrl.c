@@ -321,12 +321,20 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		 * input: fixture-l1-box-hb */
 		if (reac_ctrl_checksum_verify(frame) != (sum_ok ? 0 : -1))
 			abort();
-		/* A head-amp record is only ever a link-4 SINGLE.
+		/* A head-amp record is only ever a link-4 SINGLE. The harness reads the
+		 * link and the segment from the frame, block[0] and block[1], and not from
+		 * the parser's fields.
+		 * contract: include/reac/reac_ctrlblk.h:88, :93 (REAC_LINK_RECORD,
+		 * REAC_SEG_SINGLE), :312-313 (HEADAMP is link 4, SINGLE), :348-349 (link is
+		 * block[0], seg is block[1])
 		 * mutant: src/reac_ctrlblk.c:306 `REAC_CTRL_LINK2` -> `REAC_CTRL_HEADAMP`
 		 * input: breakages
 		 * mutant: src/reac_ctrlblk.c:314 `REAC_CTRL_RECORD_FRAGMENT` -> `REAC_CTRL_HEADAMP`
-		 * input: fixture-frag-first */
-		if (k == REAC_CTRL_HEADAMP && (p.link != REAC_LINK_RECORD || p.seg != REAC_SEG_SINGLE))
+		 * input: fixture-frag-first
+		 * mutant: src/reac_ctrlblk.c:272 `block[0];` -> `block[0] ? block[0] : REAC_LINK_RECORD;`
+		 * input: headamp-link-0 */
+		if (k == REAC_CTRL_HEADAMP && (frame[REAC_CTRL_BLOCK_OFF] != REAC_LINK_RECORD ||
+		                               frame[REAC_CTRL_BLOCK_OFF + 1] != REAC_SEG_SINGLE))
 			abort();
 		int want_v = -1;
 		if (frame[18] == REAC_LINK_RECORD && frame[19] == REAC_SEG_SINGLE)
