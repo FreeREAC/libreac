@@ -1,3 +1,6 @@
+Breaks the check of fuzz/fuzz_scene.c:242 (the scene step builder accepts exactly an 8904-byte body and a step in range).
+Caught by the seed input "short-body-8903" of fuzz_scene.
+
 diff --git a/src/reac_ctrlblk.c b/src/reac_ctrlblk.c
 index 9c90459..dfc6d9c 100644
 --- a/src/reac_ctrlblk.c

@@ -18,6 +18,11 @@
 # seed no longer reaches the check, or whose breakage another check catches first is
 # red, with what happened instead.
 #
+# THE SABOTAGE PATCHES too: each fuzz/sabotage/<harness>.patch names above its
+# `diff --git` line the check it breaks (`Breaks the check of <file>:<line>`) and the
+# seed that catches it (`Caught by the seed input "<seed>"`); the patch alone must
+# make that seed stop that check, the same way.
+#
 # THE RATCHET. A check whose comment has no record and no `not a property: <reason>`
 # line is refused here, before anything is built (fuzz/checks.awk reads the comments;
 # fuzz/coverage.sh refuses it too).
@@ -34,11 +39,14 @@ mkdir -p "$B"
 
 backup=
 target=
+pfiles=
 restore() {
 	if [ -n "$target" ]; then
 		cp "$backup" "$target"
 		target=
 	fi
+	for f in $pfiles; do cp "$B/patch-backup.$(echo "$f" | tr / _)" "$f"; done
+	pfiles=
 }
 trap 'restore' EXIT
 trap 'restore; exit 130' INT TERM
@@ -141,12 +149,55 @@ while IFS="$SEP" read -r file abort path line old new input; do
 	fi
 done <"$B/records.txt"
 
+# Each sabotage patch, alone, the same way: above its `diff --git` line it names the
+# check it breaks and the seed that catches it (OSS Verify's `mutants` directory), and
+# that seed must stop THAT check, on the plain harness.
+pmet=0
+ptotal=0
+for h in "$@"; do
+	p=fuzz/sabotage/$h.patch
+	[ -f "$p" ] || continue
+	ptotal=$((ptotal + 1))
+	at=$(sed -n 's/^Breaks the check of \(fuzz\/[^:]*:[0-9]*\) .*/\1/p' "$p")
+	seed=$(sed -n 's/^Caught by the seed input "\([^"]*\)" of fuzz_.*/\1/p' "$p")
+	if [ -z "$at" ] || [ -z "$seed" ]; then
+		fail "$p: no \`Breaks the check of <file>:<line>\` and \`Caught by the seed input\` lines"
+		continue
+	fi
+	abort=$(awk -F: -v f="${at%:*}" -v l="${at##*:}" '$1 == f && $2 == l { print $3 }' "$B/checks.txt")
+	if [ -z "$abort" ]; then
+		fail "$p: $at is not the first line of a check"
+		continue
+	fi
+	files=$(git apply --numstat "$p" | awk '{ print $3 }')
+	for f in $files; do cp "$f" "$B/patch-backup.$(echo "$f" | tr / _)"; done
+	if ! git apply "$p"; then
+		fail "$p: does not apply"
+		continue
+	fi
+	pfiles=$files
+	built=1
+	$MAKE --no-print-directory -j"$JOBS" "$B/fuzz_$h" >"$B/mutant.log" 2>&1 || built=0
+	rc=0
+	[ $built -eq 1 ] && { timeout 120 "$B/fuzz_$h" "fuzz/corpus/$h/$seed" >/dev/null 2>"$B/run.err"; rc=$?; }
+	restore
+	fired=$(sed -n 's/^records: abort at //p' "$B/run.err" | tail -1)
+	if [ $built -eq 0 ]; then
+		fail "$p: the patched library does not build"
+	elif [ $rc -eq 134 ] && [ "$fired" = "${at%:*}:$abort" ]; then
+		pmet=$((pmet + 1))
+	else
+		fail "$p: seed $seed exits $rc${fired:+, abort at $fired}, not at the check of $at"
+	fi
+done
+
 # Leave the plain build as the tree is, not as the last mutant was.
 $MAKE --no-print-directory -j"$JOBS" $(for h in "$@"; do echo "$B/fuzz_$h"; done) \
 	>"$B/build.log" 2>&1 || { cat "$B/build.log"; exit 1; }
 
 echo "fuzz-records: $met/$total records met, on $nchk checks ($nnp more marked not a property)"
-if [ $failed -ne 0 ] || [ $met -ne "$total" ]; then
+echo "fuzz-records: $pmet/$ptotal sabotage patches caught by their named seed at their named check"
+if [ $failed -ne 0 ] || [ $met -ne "$total" ] || [ $pmet -ne $ptotal ]; then
 	echo "make fuzz-records: RED -- $failed failures"
 	exit 1
 fi

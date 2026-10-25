@@ -1,3 +1,6 @@
+Breaks the check of fuzz/fuzz_boxreg.c:237 (a declared box takes the next row of the registry, at most REAC_BOXREG_MAX_BOXES of them).
+Caught by the seed input "no-room" of fuzz_boxreg.
+
 diff --git a/src/reac_boxreg.c b/src/reac_boxreg.c
 index c908a12..590f948 100644
 --- a/src/reac_boxreg.c

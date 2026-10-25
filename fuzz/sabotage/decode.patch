@@ -1,3 +1,6 @@
+Breaks the check of fuzz/fuzz_decode.c:187 (reac_decode decodes a frame exactly when it is well formed, its geometry fits the 1440-byte region and its width is even).
+Caught by the seed input "downstream-program-custom-42x12" of fuzz_decode.
+
 diff --git a/src/reac_decode.c b/src/reac_decode.c
 index b777327..e1cf815 100644
 --- a/src/reac_decode.c

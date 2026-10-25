@@ -1,3 +1,6 @@
+Breaks the check of fuzz/fuzz_disco.c:117 (the discovery table holds at most REAC_DISCO_MAX entries).
+Caught by the seed input "nine-peers" of fuzz_disco.
+
 diff --git a/src/reac_disco.c b/src/reac_disco.c
 index 8cb7387..065fac6 100644
 --- a/src/reac_disco.c
