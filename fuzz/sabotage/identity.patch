@@ -1,4 +1,4 @@
-Breaks the check of fuzz/fuzz_identity.c:182 (the identity decode reads no byte past the length it is given).
+Breaks the check of fuzz/fuzz_identity.c:212 (the identity decode reads no byte past the length it is given).
 Caught by the seed input "name-no-nul-sabotage" of fuzz_identity.
 
 diff --git a/src/reac_identity.c b/src/reac_identity.c

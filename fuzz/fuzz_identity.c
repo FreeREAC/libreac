@@ -121,6 +121,35 @@ static const char *stem_of(int f)
 	}
 }
 
+/* The family each hw block names: the 0x0600 record's eight bytes, four u16be
+ * (reserved, major, minor, patch). Any other hw block names no family.
+ * contract: include/reac/reac_box_facts.h:29-35 (the table), :37-40 (the one
+ * recognition rule: any other value, or no 0x0600 reply, is UNKNOWN) */
+static const struct {
+	enum reac_box_family f;
+	uint8_t hw[REAC_IDENTITY_REAC_VER_LEN];
+} HW_TABLE[] = {
+	{ REAC_BOX_FAMILY_S0808,  { 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00 } },
+	{ REAC_BOX_FAMILY_S1608,  { 0x00, 0x00, 0x00, 0x02, 0x00, 0x03, 0x00, 0x02 } },
+	{ REAC_BOX_FAMILY_S4000S, { 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x02 } },
+};
+
+/* The last 0x0600 payload that ingest accepted, its first eight bytes. */
+struct last_hw {
+	int have;
+	uint8_t hw[REAC_IDENTITY_REAC_VER_LEN];
+};
+
+static enum reac_box_family family_of_hw(const struct last_hw *h)
+{
+	if (!h->have)
+		return REAC_BOX_FAMILY_UNKNOWN;
+	for (size_t i = 0; i < sizeof HW_TABLE / sizeof HW_TABLE[0]; i++)
+		if (memcmp(h->hw, HW_TABLE[i].hw, sizeof h->hw) == 0)
+			return HW_TABLE[i].f;
+	return REAC_BOX_FAMILY_UNKNOWN;
+}
+
 /* Two identities are equal field by field. */
 static int same_id(const struct reac_identity *a, const struct reac_identity *b)
 {
@@ -145,7 +174,8 @@ static void check_str(int r, const char *out, size_t cap)
 		abort();
 }
 
-static void ingest(struct reac_identity *id, uint16_t addr, const uint8_t *pl, size_t n)
+static void ingest(struct reac_identity *id, struct last_hw *hw, uint16_t addr,
+                   const uint8_t *pl, size_t n)
 {
 	struct reac_identity before = *id;
 	int r = reac_identity_ingest(id, addr, pl, n);
@@ -290,6 +320,8 @@ static void ingest(struct reac_identity *id, uint16_t addr, const uint8_t *pl, s
 		 * input: header-example-1 */
 		if (w < 0 || (size_t)w != en || memcmp(v, ev, en + 1) != 0)
 			abort();
+		hw->have = 1;
+		memcpy(hw->hw, pl, sizeof hw->hw);
 		break;
 	}
 	default:
@@ -322,15 +354,24 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	    reac_box_family_of(NULL) != REAC_BOX_FAMILY_UNKNOWN)
 		abort();
 
+	struct last_hw hw = { 0, { 0 } };
 	int nrec = fuzz_u8(&in) % (MAX_RECORDS + 1);
 	for (int i = 0; i < nrec; i++) {
 		uint16_t addr = pick_addr(fuzz_u16(&in));
 		const uint8_t *body;
 		size_t n = fuzz_take(&in, fuzz_u8(&in), &body);
 		uint8_t *pl = fuzz_dup(body, n);
-		ingest(&id, addr, pl, n);
+		ingest(&id, &hw, addr, pl, n);
 		free(pl);
 	}
+	/* The family is the one that the harness's hw table gives for the last 0x0600
+	 * payload that ingest accepted, and UNKNOWN with no such payload or with a
+	 * payload that no row names.
+	 * contract: include/reac/reac_box_facts.h:29-35, :37-40
+	 * mutant: src/reac_box_facts.c:17 `REAC_BOX_FAMILY_S1608` -> `REAC_BOX_FAMILY_S4000S`
+	 * input: catalogue-s1608 */
+	if (reac_box_family_of(&id) != family_of_hw(&hw))
+		abort();
 
 	uint8_t fam_raw = fuzz_u8(&in);
 	int in_ch = fuzz_u8(&in), out_ch = fuzz_u8(&in);
