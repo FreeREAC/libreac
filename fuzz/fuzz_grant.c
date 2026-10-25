@@ -32,6 +32,9 @@
  *     allocated channel per parameter, each parsed back by reac_ctrl_parse as
  *     HEADAMP for that channel, parameter and the table's effective value, with
  *     its inner record checksum closed;
+ *   - its group-B rows are the identity poll, byte for byte, and each is the RQ1
+ *     (marker 12 11, TAG 05 00) for the address and size reac_ctrlblk.h names, in
+ *     its order;
  *   - an unset cell carries the enrolling default that reac_headamp_tx.h states:
  *     phantom off, pad off, and a SENS that is not zero;
  *   - the head-amp scheduler only ever emits a channel, parameter and value the
@@ -69,6 +72,14 @@ static const uint8_t HEAD_MARK[34] = {
 	0xcd, 0xea, 0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe, 0x0f, 0xf0,
 	0x41, 0x0a, 0x00, 0x00, 0x12, 0x12, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
 	0x7d, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+/* Group B's six identity-page RQ1s, each the address (high, low) and the size it
+ * asks for, in the header's order.
+ * contract: include/reac/reac_ctrlblk.h:602-604 */
+static const uint8_t POLL[REAC_GRANT_GROUPB_LEN][3] = {
+	{ 0x00, 0x00, 4 }, { 0x06, 0x00, 8 }, { 0x10, 0x00, 17 },
+	{ 0x10, 0x11, 9 }, { 0x11, 0x00, 17 }, { 0x11, 0x11, 9 },
 };
 
 /* A legal head-amp value: SENS 0..REAC_HEADAMP_SENS_MAX, phantom and pad 0 or 1.
@@ -132,6 +143,18 @@ static void check_groupa(const uint8_t row[34], uint8_t ch, uint8_t param,
 	if (reac_ctrl_parse(frame, sizeof frame, &p) != REAC_CTRL_HEADAMP || p.ch != ch ||
 	    p.param != param || p.value != reac_headamp_tx_effective(tx, ch, param) ||
 	    reac_ctrl_headamp_record_verify(frame) != 0 || reac_ctrl_checksum_verify(frame) != 0)
+		abort();
+	unsigned s = 0;
+	for (int i = 34; i < 40; i++)
+		s += frame[i];
+	/* The record TAG..CKSUM, frame[34..39], sums to 0 mod 128, added here: the
+	 * check above asks reac_ctrl_headamp_record_verify, the library's own reading.
+	 * contract: include/reac/reac_ctrlblk.h:53-55 (the 7-bit DT1 sum), :105-108 (the
+	 * record runs frame[34..39]). A record window that the builder and the verifier
+	 * both read wrong keeps the check above true.
+	 * mutant: src/reac_ctrlblk.c:808 `HEADAMP_REC_LEN  6` -> `HEADAMP_REC_LEN  7`
+	 * input: box-base0-w8 */
+	if ((s & 0x7f) != 0)
 		abort();
 }
 
@@ -290,6 +313,21 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				 * input: box-base0-w8 */
 				if (reac_ctrl_identity_poll_block(i, poll) != 0 ||
 				    memcmp(poll, sweep[5 + i], 34) != 0)
+					abort();
+				/* And it polls the identity page the header names. The check above
+				 * compares the sweep with reac_ctrl_identity_poll_block, which copies
+				 * the same table, so a wrong table keeps it true: each group-B row is
+				 * an RQ1 (marker 12 11) on TAG 05 00 for the i-th address and size,
+				 * written out here.
+				 * contract: include/reac/reac_ctrlblk.h:602-604 (0x0000 (4),
+				 * 0x0600 (8), 0x1000 (17), 0x1011 (9), 0x1100 (17), 0x1111 (9)),
+				 * include/reac/reac_grant.h:17 (marker 12 11, TAG 05 00)
+				 * mutant: src/reac_ctrlblk.c:1333 `0x00, 0x00, 0x04, 0x77` -> `0x04, 0x00, 0x00, 0x77`
+				 * input: box-base0-w8
+				 * mutant: src/reac_ctrlblk.c:1335 `0x10, 0x00, 0x11, 0x5a` -> `0x10, 0x01, 0x10, 0x5a`
+				 * input: box-base0-w8 */
+				if (memcmp(sweep[5 + i] + 16, (const uint8_t[]){ 0x12, 0x11, 0x05, 0x00 }, 4) != 0 ||
+				    memcmp(sweep[5 + i] + 20, POLL[i], 3) != 0)
 					abort();
 			}
 		}
