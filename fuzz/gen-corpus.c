@@ -1146,6 +1146,13 @@ static void gen_pcap(void)
 	pcap_record(&s, 0, 1, 2, (const uint8_t *)"A", 1, 1);
 	pcap_record(&s, 0, 1, 2, (const uint8_t *)"A", 1, 1);
 	emit("pcap", "two-equal-records", &s);
+	/* a record of 0 bytes, then a 1-byte record: the empty one is skipped, so the
+	 * walk hands back the second and ends at the end of the file */
+	put8(&s, 1);
+	pcap_header(&s, 0);
+	pcap_record(&s, 0, 1, 2, (const uint8_t *)"", 0, 0);
+	pcap_record(&s, 0, 1, 3, (const uint8_t *)"\x42", 1, 1);
+	emit("pcap", "empty-record-then-frame", &s);
 	free(s.p);
 }
 

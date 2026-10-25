@@ -26,10 +26,10 @@
  *   - a record handed back fits the caller's buffer, and reading stops (EOF or
  *     error) within one record per 16 bytes of the file after its header;
  *   - the reader hands back each record of the file that fits the buffer, in file
- *     order, and skips the others; the walk ends with 0 exactly at the end of the
- *     file and with -1 on a cut record. Two cases that the reader has today are
- *     accepted: a record of 0 bytes ends the walk with 0, and with a buffer of 0
- *     bytes a record with a body gives -1;
+ *     order, and skips the others and every record of 0 bytes; the walk ends with
+ *     0 exactly at the end of the file (pcap_source.h: 0 means the end of the file
+ *     and nothing else) and with -1 on a cut record. One case that the reader has
+ *     today is accepted: with a buffer of 0 bytes a record with a body gives -1;
  *   - an 802.1Q tag is stripped exactly when the record carried one: the frame
  *     comes back four bytes shorter with the tag's VID on the source;
  *   - the timestamp of each record handed back is the record header's seconds and
@@ -132,7 +132,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	while ((n = pcap_source_next(&ps, buf, cap, &ts)) > 0) {
 		/* Each record handed back takes at least its 16-byte header from the file
 		 * after the 24-byte global header (open succeeded, so the file has it).
-		 * mutant: src/pcap_source.c:100 `return (long)incl;` -> `return (fseek(ps->f, -16 - (long)incl, SEEK_CUR), (long)incl);`
+		 * mutant: src/pcap_source.c:105 `return (long)incl;` -> `return (fseek(ps->f, -16 - (long)incl, SEEK_CUR), (long)incl);`
 		 * input: two-equal-records */
 		if (++calls > (g_file_len - 24) / 16)
 			abort();
@@ -141,52 +141,53 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		/* A record handed back fits the caller's buffer. The record is the change
 		 * of fuzz/sabotage/pcap.patch (a record of cap + 1 bytes is read, not
 		 * skipped). The ASan builds can report the one-byte write in fread first.
-		 * mutant: src/pcap_source.c:63 `incl > cap` -> `incl > cap + 1`
+		 * mutant: src/pcap_source.c:68 `incl > cap` -> `incl > cap + 1`
 		 * input: record-one-byte-over-cap */
 		if ((size_t)n > cap)
 			abort();
-		/* Skip the records the reader skipped: those larger than the buffer. */
+		/* Skip the records the reader skipped: those larger than the buffer, and
+		 * those of 0 bytes. */
 		uint32_t incl;
 		for (;;) {
 			/* The reader returned a record the file holds.
-			 * mutant: src/pcap_source.c:100 `return (long)incl;` -> `return (fseek(ps->f, -16 - (long)incl, SEEK_CUR), (long)incl);`
+			 * mutant: src/pcap_source.c:105 `return (long)incl;` -> `return (fseek(ps->f, -16 - (long)incl, SEEK_CUR), (long)incl);`
 			 * input: skipped-then-small */
 			if (at + 16 > g_file_len)
 				abort();
 			incl = rd32(file + at + 8, ps.swapped);
-			if (incl <= cap)
+			if (incl != 0 && incl <= cap)
 				break;
 			at += 16 + (size_t)incl;
 		}
 		const uint8_t *rec = file + at + 16;
 		/* The record handed back has its whole body in the file.
-		 * mutant: src/pcap_source.c:82 `fread(buf, 1, incl, ps->f) != incl` -> `fread(buf, 1, incl, ps->f) == 0`
+		 * mutant: src/pcap_source.c:87 `fread(buf, 1, incl, ps->f) != incl` -> `fread(buf, 1, incl, ps->f) == 0`
 		 * input: snaplen-oversized-truncated */
 		if (at + 16 + incl > g_file_len)
 			abort();
 		/* The source keeps the record header's original length.
-		 * mutant: src/pcap_source.c:62 `ph + 12` -> `ph + 8`
+		 * mutant: src/pcap_source.c:67 `ph + 12` -> `ph + 8`
 		 * input: snaplen-oversized-truncated */
 		if (ps.last_orig_len != rd32(file + at + 12, ps.swapped))
 			abort();
 		int tagged = incl >= 18 && rec[12] == 0x81 && rec[13] == 0x00;
 		/* The source says tagged exactly when the record carried an 802.1Q tag.
-		 * mutant: src/pcap_source.c:93 `ps->last_vlan_tagged = 1;` -> `ps->last_vlan_tagged = 0;`
+		 * mutant: src/pcap_source.c:98 `ps->last_vlan_tagged = 1;` -> `ps->last_vlan_tagged = 0;`
 		 * input: box-0832-vlan13
-		 * mutant: src/pcap_source.c:90 `ps->last_vlan_tagged = 0;` -> `ps->last_vlan_tagged = 1;`
+		 * mutant: src/pcap_source.c:95 `ps->last_vlan_tagged = 0;` -> `ps->last_vlan_tagged = 1;`
 		 * input: fixtures */
 		if (ps.last_vlan_tagged != tagged)
 			abort();
 		if (tagged) {
 			/* A tagged record comes back four bytes shorter: the MAC addresses, then
 			 * the rest of the frame after the tag, and the tag's VID on the source.
-			 * mutant: src/pcap_source.c:96 `incl -= 4;` -> `incl -= 3;`
+			 * mutant: src/pcap_source.c:101 `incl -= 4;` -> `incl -= 3;`
 			 * input: box-0832-vlan13
-			 * mutant: src/pcap_source.c:95 `memmove(buf + 12,` -> `memmove(buf + 8,`
+			 * mutant: src/pcap_source.c:100 `memmove(buf + 12,` -> `memmove(buf + 8,`
 			 * input: box-0832-vlan13
-			 * mutant: src/pcap_source.c:95 `incl - 16` -> `incl - 17`
+			 * mutant: src/pcap_source.c:100 `incl - 16` -> `incl - 17`
 			 * input: box-0832-vlan13
-			 * mutant: src/pcap_source.c:94 `| buf[15]` -> `| buf[14]`
+			 * mutant: src/pcap_source.c:99 `| buf[15]` -> `| buf[14]`
 			 * input: box-0832-vlan13 */
 			if ((size_t)n != incl - 4 || memcmp(buf, rec, 12) != 0 ||
 			    memcmp(buf + 12, rec + 16, incl - 16) != 0 ||
@@ -194,16 +195,16 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				abort();
 		} else {
 			/* An untagged record comes back as it is in the file.
-			 * mutant: src/pcap_source.c:100 `return (long)incl;` -> `return (long)incl - 1;`
+			 * mutant: src/pcap_source.c:105 `return (long)incl;` -> `return (long)incl - 1;`
 			 * input: fixtures
-			 * mutant: src/pcap_source.c:82 `fread(buf, 1, incl, ps->f) != incl` -> `fread(buf, 1, incl, ps->f) != incl || (buf[0] ^= 1, 0)`
+			 * mutant: src/pcap_source.c:87 `fread(buf, 1, incl, ps->f) != incl` -> `fread(buf, 1, incl, ps->f) != incl || (buf[0] ^= 1, 0)`
 			 * input: fixtures */
 			if ((size_t)n != incl || memcmp(buf, rec, incl) != 0)
 				abort();
 		}
 		/* The timestamp of each record handed back is the record header's seconds
 		 * times 10^6 plus its microseconds.
-		 * mutant: src/pcap_source.c:99 `+ usec;` -> `+ usec + (ftell(ps->f) > 4096);`
+		 * mutant: src/pcap_source.c:104 `+ usec;` -> `+ usec + (ftell(ps->f) > 4096);`
 		 * input: fixtures
 		 * mutant: src/pcap_source.c:60 `rd_u32(ph + 4, ps->swapped)` -> `rd_u32(ph + 4, 0)`
 		 * input: fixtures-swapped */
@@ -233,6 +234,10 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				break;
 			}
 			uint32_t len = rd32(file + e + 8, ps.swapped);
+			if (len == 0) {
+				e += 16;
+				continue;
+			}
 			if (len <= cap) {
 				want = e + 16 + (size_t)len <= g_file_len ? (long)len : -1;
 				break;
@@ -247,15 +252,19 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		 * that do not fit the buffer, as the reader does. At the end of the file, the answer is 0.
 		 * A part of a record header, or a body that the file cuts, gives -1. The
 		 * reader cannot skip a record with a buffer of 0 bytes, so that gives -1. A
-		 * record of 0 bytes that fits gives 0, because its length is 0. A complete
-		 * record of more bytes that fits must have come back, so then no answer is
-		 * correct (want is its length, and n is not more than 0).
+		 * record of 0 bytes is skipped, as pcap_source.h says: 0 is the end of the
+		 * file only. A complete record of more bytes that fits must have come back,
+		 * so then no answer is correct (want is its length, and n is not more than 0).
+		 * contract: include/reac/pcap_source.h, pcap_source_next ("0 means the end of
+		 * the file and nothing else").
 		 * mutant: src/pcap_source.c:55 `got == 0` -> `got <= 16`
 		 * input: fixtures
-		 * mutant: src/pcap_source.c:83 `return -1;` -> `return 0;`
+		 * mutant: src/pcap_source.c:88 `return -1;` -> `return 0;`
 		 * input: snaplen-oversized-truncated
-		 * mutant: src/pcap_source.c:77 `return -1;` -> `return 0;`
-		 * input: oversized-cut */
+		 * mutant: src/pcap_source.c:82 `return -1;` -> `return 0;`
+		 * input: oversized-cut
+		 * mutant: src/pcap_source.c:65 `incl == 0` -> `0`
+		 * input: empty-record-then-frame */
 		if (n != want)
 			abort();
 	}
@@ -263,7 +272,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	/* Once more from the top, with no timestamp asked for. */
 	pcap_source_close(&ps);
 	/* A closed reader holds no stream.
-	 * mutant: src/pcap_source.c:108 `ps->f = NULL;` -> ``
+	 * mutant: src/pcap_source.c:113 `ps->f = NULL;` -> ``
 	 * input: fixtures */
 	if (ps.f != NULL)
 		abort();
@@ -274,7 +283,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		abort();
 	/* The reopened reader, asked for no timestamp, gives the same first answer as
 	 * the first walk gave.
-	 * mutant: src/pcap_source.c:100 `return (long)incl;` -> `return (long)incl - !ts_usec;`
+	 * mutant: src/pcap_source.c:105 `return (long)incl;` -> `return (long)incl - !ts_usec;`
 	 * input: fixtures */
 	if (pcap_source_next(&ps, buf, cap, NULL) != first)
 		abort();
