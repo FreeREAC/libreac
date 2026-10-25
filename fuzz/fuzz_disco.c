@@ -70,7 +70,9 @@
 
 /* The geometry of a clean frame, from the protocol and not from the library:
  * 52 bytes (50 header + 2 end marker) plus 36 bytes (12 samples x 3 B) for each
- * channel. Any other length has no geometry (0). */
+ * channel. Any other length has no geometry (0).
+ * contract: include/reac/reac.h:65-66; include/reac/reac_disco.h:101-105 (the
+ * sighting's width, from the frame length alone, 0 for no legal 52 + n*36) */
 static unsigned frame_channels(size_t len)
 {
 	if (len < 52 || (len - 52) % 36 != 0)
@@ -79,7 +81,8 @@ static unsigned frame_channels(size_t len)
 }
 
 /* A capture can keep the 2 FCS bytes after the end marker. A length of 52 + n*36 + 2
- * is such a frame, and its clean length is 2 less. */
+ * is such a frame, and its clean length is 2 less.
+ * contract: include/reac/reac.h:175-182 */
 static size_t frame_clean_len(size_t len)
 {
 	if (len >= 54 && (len - 52) % 36 == 2)
@@ -87,7 +90,8 @@ static size_t frame_clean_len(size_t len)
 	return len;
 }
 
-/* The role names that the JSON uses. */
+/* The role names that the JSON uses.
+ * contract: include/reac/reac_disco.h:83 */
 static const char *role_text(int role)
 {
 	switch (role) {
@@ -176,7 +180,9 @@ static void check_sighting(const struct reac_disco_sighting *s, const uint8_t *f
 {
 	/* A sighting comes from a frame of at least 50 bytes (header and control block),
 	 * names the frame's source (bytes 6..11), and is never our own MAC.
-	 * mutant: src/reac_ctrlblk.c:262 `len < AUDIO_OFF` -> `len < 14`
+	 * contract: include/reac/reac_disco.h:87 (the frame's own source), :109-110
+	 * (never our own echo); include/reac/reac_ctrlblk.h:38 (the block at [18:50])
+	 * mutant: src/reac_ctrlblk.c:259 `len < AUDIO_OFF` -> `len < 14`
 	 * input: short-filler-49
 	 * mutant: src/reac_disco.c:142 `p.src, 6` -> `p.src, 5`
 	 * input: fixture-l1-box-hb
@@ -212,12 +218,16 @@ static void check_sighting(const struct reac_disco_sighting *s, const uint8_t *f
 	/* Outside FILLER (type 00 00 at bytes 16..17), the 32 bytes of the control block
 	 * (18..49) sum to 0 mod 256. The harness adds them: a corrupt frame is not
 	 * evidence of a peer (reac_disco.c classify_core).
+	 * contract: include/reac/reac_disco.h:109-110 (a corrupt control block is no
+	 * sighting); include/reac/reac_ctrlblk.h:37-46 (the block, its sum, FILLER
+	 * exempt); reac.ksy `frame_type` (0x0000: filler)
 	 * mutant: src/reac_ctrlblk.c:51 `(s & 0xff) == 0 ? 0 : -1` -> `0`
 	 * input: lock-and-gate
 	 */
 	if (!filler && (sum & 0xff) != 0)
 		abort();
 	/* A declared width is at most REAC_MAX_CHANNELS.
+	 * contract: include/reac/reac_disco.h:89-91
 	 * mutant: src/reac_disco.c:161 `(uint8_t)ports.in_ch` -> `41`
 	 * input: fixture-l1-decl-82
 	 * mutant: src/reac_disco.c:162 `(uint8_t)ports.out_ch` -> `41`
@@ -248,6 +258,7 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 	uint32_t refused = at < 0 && n >= REAC_DISCO_MAX && !overflowed;
 	/* seq moves by the return; a refusal for room moves it once more, the first
 	 * time only (the table then says it is partial).
+	 * contract: include/reac/reac_disco.h:207, :210-212
 	 * mutant: src/reac_disco.c:325 `t->seq++;` -> `;`
 	 * input: desk-and-box
 	 * mutant: src/reac_disco.c:324 `if (changed)` -> `if (1)`
@@ -256,6 +267,7 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 	if (t->seq != seq + (uint32_t)changed + refused)
 		abort();
 	/* A BOX DOES NOT UN-PROVE ITSELF.
+	 * contract: include/reac/reac_disco.h:202-204
 	 * mutant: src/reac_disco.c:291 `e->role == REAC_DISCO_ROLE_BOX` -> `0`
 	 * input: box-then-bye-table
 	 */
@@ -266,7 +278,8 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 		/* What the known entry must hold now: facts only sharpen. A known role
 		 * replaces the old one (except BOX to MASTER), a declaration, a slot count
 		 * and a family replace the old ones, the width is the widest, owned stays
-		 * once set, and the time of the last sighting is now. */
+		 * once set, and the time of the last sighting is now.
+		 * contract: include/reac/reac_disco.h:201-207 */
 		struct reac_disco_entry want = old;
 		if (s->role != REAC_DISCO_ROLE_UNKNOWN &&
 		    !(old.role == REAC_DISCO_ROLE_BOX && s->role == REAC_DISCO_ROLE_MASTER))
@@ -318,6 +331,7 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 		const struct reac_disco_entry *e = &t->e[n];
 		/* A new MAC with room gets a new entry at the end, with the sighting's
 		 * facts and now as both times, and the return is 1.
+		 * contract: include/reac/reac_disco.h:209-210
 		 * mutant: src/reac_disco.c:349 `e->channels = s->channels;` -> `;`
 		 * input: fixture-l1-box-hb
 		 * mutant: src/reac_disco.c:350 `owned ? 1 : 0` -> `0`
@@ -333,6 +347,7 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 	} else {
 		/* A new MAC on a full table is refused: no entry is added, the return is
 		 * 0, and the table says it overflowed.
+		 * contract: include/reac/reac_disco.h:210-212, :65 (REAC_DISCO_MAX)
 		 * mutant: src/reac_disco.c:334 `t->overflowed = 1;` -> `;`
 		 * input: nine-peers
 		 */
@@ -526,6 +541,11 @@ static int json_read(const char *b, size_t n, struct jobj *o, int max)
 	return json_ws(b, i, n) == n ? count : -1;
 }
 
+/* Each check below holds the serialisation to the shape the header gives: one
+ * NUL-terminated array, one object per entry, and each object's mac, role, model,
+ * width, owned and age_ms as it says.
+ * contract: include/reac/reac_disco.h:229-230 (a full table always fits
+ * REAC_DISCO_JSON_MAX), :232-244 (the return, the shape and each field) */
 static void serialise(const struct reac_disco_table *t, uint64_t now, size_t cap)
 {
 	char *buf = malloc(cap ? cap : 1);
@@ -683,6 +703,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			/* The age removes exactly the stale entries: those that a forward
 			 * clock shows unheard for more than REAC_DISCO_STALE_NS. A clock that
 			 * stepped back makes no entry stale.
+			 * contract: include/reac/reac_disco.h:217-219, :70
 			 * mutant: src/reac_disco.c:363 `now_ns > t->e[i].last_seen_ns &&` -> ``
 			 * input: box-then-clock-back
 			 * mutant: src/reac_disco.c:364 `REAC_DISCO_STALE_NS` -> `0`
@@ -691,6 +712,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			if (removed != stale || t.n != n - stale || left != 0)
 				abort();
 			/* seq moves once when the age removes any entry, else it stays.
+			 * contract: include/reac/reac_disco.h:219
 			 * mutant: src/reac_disco.c:373 `t->seq++;` -> `;`
 			 * input: desk-and-box
 			 */

@@ -52,6 +52,8 @@
 
 #include "fuzz.h"
 
+/* The 32-byte block of the [type|block] template, blk[2..33], sums to 0 mod 256.
+ * contract: include/reac/reac_ctrlblk.h:46, :70 */
 static int block_sums_to_zero(const uint8_t blk[34])
 {
 	unsigned s = 0;
@@ -60,7 +62,8 @@ static int block_sums_to_zero(const uint8_t blk[34])
 	return (s & 0xff) == 0;
 }
 
-/* Offset and length of the body bytes step `k` carries. */
+/* Offset and length of the body bytes step `k` carries: 24, then 341 x 26, then 14.
+ * contract: include/reac/reac_ctrlblk.h:141-146 */
 static void step_slice(int k, size_t *off, size_t *n)
 {
 	if (k == 0) {
@@ -78,6 +81,10 @@ static void step_slice(int k, size_t *off, size_t *n)
 static void check_step(const uint8_t blk[34], const uint8_t *body, int k)
 {
 	/* type word cd ea, link 1, opcode 0x00 (bulk), block checksum closed
+	 * contract: reac.ksy `frame_type` (0xcdea: control); include/reac/reac_ctrlblk.h:66-70
+	 * (block[0] LINK, block[1] SEGMENT, block[2:4] LENGTH BE, block[4] OPCODE, at
+	 * template offsets 2, 3, 4-5 and 6), :96 (REAC_OP_BULK), :126 (all three are link 1,
+	 * opcode 0x00)
 	 * mutant: src/reac_ctrlblk.c:107 `0xcd` -> `0xce`
 	 * input: placeholder-step-0
 	 * mutant: src/reac_ctrlblk.c:107 `0xea` -> `0xeb`
@@ -86,7 +93,7 @@ static void check_step(const uint8_t blk[34], const uint8_t *body, int k)
 	 * input: placeholder-step-0
 	 * mutant: src/reac_ctrlblk.c:112 `REAC_OP_BULK` -> `REAC_OP_SLOT_MAP`
 	 * input: placeholder-step-0
-	 * mutant: src/reac_ctrlblk.c:150 `reac_ctrl_block_cksum_stamp(blk + 2);` -> ``
+	 * mutant: src/reac_ctrlblk.c:147 `reac_ctrl_block_cksum_stamp(blk + 2);` -> ``
 	 * input: placeholder-step-0 */
 	if (blk[0] != 0xcd || blk[1] != 0xea || blk[2] != REAC_LINK_CTRL ||
 	    blk[6] != REAC_OP_BULK || !block_sums_to_zero(blk))
@@ -96,7 +103,7 @@ static void check_step(const uint8_t blk[34], const uint8_t *body, int k)
 	/* the segment byte is FIRST, MIDDLE or LAST for this step
 	 * mutant: src/reac_ctrlblk.c:111 `REAC_SEG_FIRST` -> `REAC_SEG_MIDDLE`
 	 * input: placeholder-step-0
-	 * mutant: src/reac_ctrlblk.c:141 `REAC_SEG_LAST` -> `REAC_SEG_MIDDLE`
+	 * mutant: src/reac_ctrlblk.c:138 `REAC_SEG_LAST` -> `REAC_SEG_MIDDLE`
 	 * input: placeholder-step-342 */
 	if (blk[3] != seg)
 		abort();
@@ -108,7 +115,10 @@ static void check_step(const uint8_t blk[34], const uint8_t *body, int k)
 	if ((size_t)(blk[4] << 8 | blk[5]) != n)
 		abort();
 	const uint8_t *pay = blk + (k == 0 ? 9 : 7);
-	/* the payload is the body's bytes at this step's offset
+	/* the payload is the body's bytes at this step's offset: block[7] on FIRST,
+	 * after the declared total, block[5] on MIDDLE and LAST
+	 * contract: reac.ksy `scene_header_payload.body_head` (block[7:31]),
+	 * `scene_chunk_payload.chunk` and `scene_final_payload.chunk` (block[5:])
 	 * mutant: src/reac_ctrlblk.c:126 `body + off` -> `body + off + 1`
 	 * input: placeholder-step-1 */
 	if (memcmp(pay, body + off, n) != 0)
@@ -117,10 +127,11 @@ static void check_step(const uint8_t blk[34], const uint8_t *body, int k)
 		static const uint8_t trailer[12] = { 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
 		                                     0x01, 0x00, 0x00, 0x00, 0x00, 0x00 };
 		/* The LAST step fills the same 26-byte slot, and the 12 bytes after its
-		 * 14-byte payload are the fixed trailer that reac_ctrlblk.c reproduces
-		 * from the M-200i and M-300 captures. With this check, every byte of
-		 * every step is fixed by a check.
-		 * mutant: src/reac_ctrlblk.c:136 `0x03` -> `0x00`
+		 * 14-byte payload are the fixed trailer of the M-200i and M-300
+		 * captures. With this check, every byte of every step is fixed by a
+		 * check.
+		 * contract: include/reac/reac_ctrlblk.h:155 (REAC_SCENE_LAST_TRAILER)
+		 * mutant: include/reac/reac_ctrlblk.h:155 `0x03` -> `0x00`
 		 * input: placeholder-step-342 */
 		if (memcmp(blk + 7 + REAC_SCENE_TAIL_BYTES, trailer, sizeof trailer) != 0)
 			abort();
@@ -130,16 +141,19 @@ static void check_step(const uint8_t blk[34], const uint8_t *body, int k)
 	                      0x88, 0x19 };
 	memcpy(frame + 16, blk, 34);
 	struct reac_ctrl_parsed p;
-	/* reac_ctrl_parse reads the step back, framed the way a master stamps it.
-	 * mutant: src/reac_ctrlblk.c:244 `REAC_CTRL_SCENE_TRANSFER` -> `REAC_CTRL_UNKNOWN_CTRL`
+	/* reac_ctrl_parse reads the step back, framed the way a master stamps it: the
+	 * template at [16:50] of an 0x8819 frame, from any source to any address.
+	 * contract: include/reac/reac_ctrlblk.h:38 (the block at [18:50]), :305
+	 * (link 1, opcode 0x00 is SCENE_TRANSFER)
+	 * mutant: src/reac_ctrlblk.c:241 `REAC_CTRL_SCENE_TRANSFER` -> `REAC_CTRL_UNKNOWN_CTRL`
 	 * input: placeholder-step-0
-	 * mutant: src/reac_ctrlblk.c:272 `block[0]` -> `block[2]`
+	 * mutant: src/reac_ctrlblk.c:269 `block[0]` -> `block[2]`
 	 * input: placeholder-step-1
-	 * mutant: src/reac_ctrlblk.c:273 `block[1]` -> `block[0]`
+	 * mutant: src/reac_ctrlblk.c:270 `block[1]` -> `block[0]`
 	 * input: placeholder-step-1
-	 * mutant: src/reac_ctrlblk.c:274 `block[2] << 8` -> `block[3] << 8`
+	 * mutant: src/reac_ctrlblk.c:271 `block[2] << 8` -> `block[3] << 8`
 	 * input: placeholder-step-0
-	 * mutant: src/reac_ctrlblk.c:275 `block[4]` -> `block[3]`
+	 * mutant: src/reac_ctrlblk.c:272 `block[4]` -> `block[3]`
 	 * input: placeholder-step-0
 	 * mutant: src/reac_ctrlblk.c:51 `? 0 : -1` -> `? -1 : -1`
 	 * input: placeholder-step-0 */
@@ -168,7 +182,7 @@ static void whole_transfer(const uint8_t *body)
 			declared = (size_t)(blk[7] << 8 | blk[8]);
 		/* The declared lengths never run past the body. This runs before
 		 * check_step, so a step that declares too much stops here.
-		 * mutant: src/reac_ctrlblk.c:144 `REAC_SCENE_TAIL_BYTES & 0xff` -> `(REAC_SCENE_TAIL_BYTES + 1) & 0xff`
+		 * mutant: src/reac_ctrlblk.c:141 `REAC_SCENE_TAIL_BYTES & 0xff` -> `(REAC_SCENE_TAIL_BYTES + 1) & 0xff`
 		 * input: placeholder-whole-transfer */
 		if (got + n > REAC_SCENE_BYTES)
 			abort();
@@ -179,6 +193,8 @@ static void whole_transfer(const uint8_t *body)
 	/* The FIRST step declares the whole total, the payloads sum to it, and they
 	 * are the body. (check_step already fixes each length and each payload, so
 	 * a library change reaches the first term only.)
+	 * contract: reac.ksy `scene_header_payload.scene_total_len` (block[5:7], BE,
+	 * 0x22c8); include/reac/reac_ctrlblk.h:141
 	 * mutant: src/reac_ctrlblk.c:116 `REAC_SCENE_BYTES & 0xff` -> `(REAC_SCENE_BYTES - 1) & 0xff`
 	 * input: placeholder-whole-transfer */
 	if (declared != REAC_SCENE_BYTES || got != REAC_SCENE_BYTES ||
@@ -248,18 +264,18 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	memcpy(before, body, n);
 	r = reac_ctrl_scene_set_mac(body, n, mac);
 	/* set_mac accepts exactly a whole body.
-	 * mutant: src/reac_ctrlblk.c:156 `n != REAC_SCENE_BYTES` -> `n < REAC_SCENE_BYTES`
+	 * mutant: src/reac_ctrlblk.c:153 `n != REAC_SCENE_BYTES` -> `n < REAC_SCENE_BYTES`
 	 * input: short-body-8905
-	 * mutant: src/reac_ctrlblk.c:159 `return 0;` -> `return 1;`
+	 * mutant: src/reac_ctrlblk.c:156 `return 0;` -> `return 1;`
 	 * input: placeholder-step-0 */
 	if (r != (whole ? 0 : -1))
 		abort();
 	if (r == 0) {
 		/* the MAC is at REAC_SCENE_MAC_OFF, and the bytes before and after it
 		 * did not change
-		 * mutant: src/reac_ctrlblk.c:158 `mac, 6` -> `mac, 4`
+		 * mutant: src/reac_ctrlblk.c:155 `mac, 6` -> `mac, 4`
 		 * input: placeholder-step-0
-		 * mutant: src/reac_ctrlblk.c:158 `body + REAC_SCENE_MAC_OFF` -> `body + REAC_SCENE_MAC_OFF + 1`
+		 * mutant: src/reac_ctrlblk.c:155 `body + REAC_SCENE_MAC_OFF` -> `body + REAC_SCENE_MAC_OFF + 1`
 		 * input: placeholder-step-0 */
 		if (memcmp(body + REAC_SCENE_MAC_OFF, mac, 6) != 0 ||
 		    memcmp(body, before, REAC_SCENE_MAC_OFF) != 0 ||
@@ -268,7 +284,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			abort();
 	} else {
 		/* a refused call writes nothing
-		 * mutant: src/reac_ctrlblk.c:157 `return -1;` -> `return (body && n ? (body[0] = 0) : 0), -1;`
+		 * mutant: src/reac_ctrlblk.c:154 `return -1;` -> `return (body && n ? (body[0] = 0) : 0), -1;`
 		 * input: short-body-24 */
 		if (memcmp(body, before, n) != 0)
 			abort();
@@ -276,7 +292,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
 	r = reac_ctrl_scene_build(body, n, mac);
 	/* scene_build accepts exactly a whole body.
-	 * mutant: src/reac_ctrlblk.c:164 `n != REAC_SCENE_BYTES` -> `n < REAC_SCENE_BYTES`
+	 * mutant: src/reac_ctrlblk.c:161 `n != REAC_SCENE_BYTES` -> `n < REAC_SCENE_BYTES`
 	 * input: short-body-8905 */
 	if (r != (whole ? 0 : -1))
 		abort();
@@ -290,22 +306,24 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		/* The API (reac_ctrlblk.h): "Build a body from zeros, the three validated
 		 * tags and mac". So the whole body is zeros, "1234" at 0x000, "SYSP" at
 		 * 0x368, "SCEN" at 0x37c and the MAC at 0x340, and nothing else.
-		 * mutant: src/reac_ctrlblk.c:167 `memset(body, 0, REAC_SCENE_BYTES);` -> ``
+		 * contract: include/reac/reac_ctrlblk.h:161-163 (the tags and where they
+		 * sit), :167 (the MAC), :195 (zeros, the tags and the MAC)
+		 * mutant: src/reac_ctrlblk.c:164 `memset(body, 0, REAC_SCENE_BYTES);` -> ``
 		 * input: placeholder-step-0
-		 * mutant: src/reac_ctrlblk.c:168 `"1234"` -> `"1235"`
+		 * mutant: src/reac_ctrlblk.c:165 `"1234"` -> `"1235"`
 		 * input: placeholder-step-0
-		 * mutant: src/reac_ctrlblk.c:169 `"SYSP"` -> `"SYSQ"`
+		 * mutant: src/reac_ctrlblk.c:166 `"SYSP"` -> `"SYSQ"`
 		 * input: placeholder-step-0
-		 * mutant: src/reac_ctrlblk.c:170 `"SCEN"` -> `"SCEM"`
+		 * mutant: src/reac_ctrlblk.c:167 `"SCEN"` -> `"SCEM"`
 		 * input: placeholder-step-0
-		 * mutant: src/reac_ctrlblk.c:171 `6);` -> `5);`
+		 * mutant: src/reac_ctrlblk.c:168 `6);` -> `5);`
 		 * input: placeholder-step-0 */
 		if (memcmp(body, expect, REAC_SCENE_BYTES) != 0)
 			abort();
 	} else {
 		/* A refused scene_build writes nothing. The refused set_mac above wrote
 		 * nothing too, so the body is still equal to `before`.
-		 * mutant: src/reac_ctrlblk.c:165 `return -1;` -> `return (body && n ? (body[0] = 0) : 0), -1;`
+		 * mutant: src/reac_ctrlblk.c:162 `return -1;` -> `return (body && n ? (body[0] = 0) : 0), -1;`
 		 * input: short-body-24 */
 		if (memcmp(body, before, n) != 0)
 			abort();

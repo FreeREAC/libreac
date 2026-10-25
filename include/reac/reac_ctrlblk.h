@@ -145,6 +145,15 @@ int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
 #define REAC_SCENE_CHUNKS        341   /* MIDDLE count for a whole body          */
 #define REAC_SCENE_STEPS   (1 + REAC_SCENE_CHUNKS + 1)
 
+/* THE LAST STEP'S TRAILER. The LAST frame fills the same 26-byte payload slot as a
+ * MIDDLE one, block[5:31], and declares only REAC_SCENE_TAIL_BYTES of it as body: the
+ * 12 bytes after the body are a fixed trailer, not desk state, identical in every LAST
+ * frame of both the M-200i and the M-300 establish captures (3/3 each). reac.ksy
+ * (`scene_final_payload.chunk`) calls them padding and gives no value; these are the
+ * captured bytes, which reac_ctrl_build_scene_step writes rather than zeros. */
+#define REAC_SCENE_LAST_TRAILER_BYTES 12
+#define REAC_SCENE_LAST_TRAILER { 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 }
+
 /* WHAT THE BOX VALIDATES. The state-4 commit does three four-byte compares and
  * promotes NOTHING if any one misses, while the transfer still looks complete
  * from outside. "1234" rides the FIRST frame; SYSP and SCEN ride MIDDLE frames
@@ -895,6 +904,30 @@ int reac_headamp_record_carries(uint8_t ch, uint8_t param);
 
 #define REAC_GRANT_GROUPB_LEN   6
 #define REAC_GRANT_SWEEP_LEN(w) (8 + (w) * 3)
+
+/* THE SWEEP'S ORDER, row by row, as the M-200 goldens carry it for a box of width w
+ * based at `base` (the grant sweep's SHAPE, above):
+ *
+ *   row 0               REAC_GRANT_HEAD_ACK
+ *   rows 1 .. 3         group A for channel base: phantom, pad, SENS
+ *   row 4               REAC_GRANT_HEAD_MARK
+ *   rows 5 .. 10        group B, in reac_ctrl_identity_poll_block's order
+ *   rows 11 .. 8+3w-1   group A for channels base+1 .. base+w-1, each phantom, pad, SENS
+ *
+ * The two head rows are fixed cdea 04 03 0014 link-4 SINGLE blocks, as measured:
+ * HEAD_ACK carries record 12 12 01 00 (REAC_DT1_TAG_JOIN) with data 06 00 01 00, the
+ * master's ACK of the box's join (reac.ksy `join_grant_data`: a master only ever sends
+ * 06 00 01 00); HEAD_MARK carries record 12 12 00 00 (REAC_DT1_TAG_HEAD_MARK) with data
+ * 03 00 00 00, the marker that separates the first channel's group-A rows from group
+ * B. Both checksums of each are closed. */
+#define REAC_GRANT_HEAD_ACK { \
+	0xcd, 0xea, 0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe, 0x0f, 0xf0, \
+	0x41, 0x0a, 0x00, 0x00, 0x12, 0x12, 0x01, 0x00, 0x06, 0x00, 0x01, 0x00, \
+	0x78, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+#define REAC_GRANT_HEAD_MARK { \
+	0xcd, 0xea, 0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe, 0x0f, 0xf0, \
+	0x41, 0x0a, 0x00, 0x00, 0x12, 0x12, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, \
+	0x7d, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
 
 int reac_ctrl_build_grant_sweep(uint8_t sweep[][34], int max, uint8_t base,
                                 int width, const uint8_t *values);

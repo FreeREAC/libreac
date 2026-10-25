@@ -56,7 +56,10 @@
 /* The two head frames of the grant sweep, as the M-200 goldens show them
  * (cdea 04 03 0014; record 12 12 01 00 is the ACK of the box's join, record
  * 12 12 00 00 is the marker before group B). Copied from the measured bytes, so
- * the harness does not take them from the library it checks. */
+ * the harness does not take them from the library it checks.
+ * contract: include/reac/reac_ctrlblk.h:908-930 (the sweep's order and
+ * REAC_GRANT_HEAD_ACK, REAC_GRANT_HEAD_MARK); reac.ksy `join_grant_data` (a master
+ * sends 06 00 01 00) */
 static const uint8_t HEAD_ACK[34] = {
 	0xcd, 0xea, 0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe, 0x0f, 0xf0,
 	0x41, 0x0a, 0x00, 0x00, 0x12, 0x12, 0x01, 0x00, 0x06, 0x00, 0x01, 0x00,
@@ -68,6 +71,9 @@ static const uint8_t HEAD_MARK[34] = {
 	0x7d, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+/* A legal head-amp value: SENS 0..REAC_HEADAMP_SENS_MAX, phantom and pad 0 or 1.
+ * contract: include/reac/reac_headamp_tx.h:159-161, include/reac/reac_ctrlblk.h:273
+ * (REAC_HEADAMP_SENS_MAX) */
 static int value_ok(uint8_t param, uint8_t value)
 {
 	return param == REAC_HEADAMP_SENS ? value <= REAC_HEADAMP_SENS_MAX
@@ -80,13 +86,15 @@ static void check_row(const uint8_t row[34])
 	for (int i = 2; i < 34; i++)
 		s += row[i];
 	/* Each sweep row is a cd ea link-4 SINGLE, and its block [2..33] sums to 0.
-	 * mutant: src/reac_ctrlblk.c:1328 `0xcd` -> `0xce`
+	 * contract: reac.ksy `frame_type` (0xcdea: control); include/reac/reac_grant.h:4
+	 * (the cdea 04 03 grant), include/reac/reac_ctrlblk.h:46, :66-70
+	 * mutant: include/reac/reac_ctrlblk.h:924 `0xcd` -> `0xce`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1328 `0xea` -> `0xeb`
+	 * mutant: include/reac/reac_ctrlblk.h:924 `0xea` -> `0xeb`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1336 `0x03` -> `0x02`
+	 * mutant: include/reac/reac_ctrlblk.h:928 `0x03` -> `0x02`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1330 `0x78` -> `0x79`
+	 * mutant: include/reac/reac_ctrlblk.h:926 `0x78` -> `0x79`
 	 * input: box-base0-w8 */
 	if (row[0] != 0xcd || row[1] != 0xea || row[2] != REAC_LINK_RECORD ||
 	    row[3] != REAC_SEG_SINGLE || (s & 0xff) != 0)
@@ -104,11 +112,14 @@ static void check_groupa(const uint8_t row[34], uint8_t ch, uint8_t param,
 	/* The row parses as HEADAMP for this channel, parameter and effective value,
 	 * and its inner record and block checksums close. The value 0 for width 40
 	 * is caught only because rows is a u8: a 40-wide sweep needs 128 rows.
-	 * mutant: src/reac_ctrlblk.c:326 `REAC_CTRL_HEADAMP` -> `REAC_CTRL_GRANT`
+	 * contract: include/reac/reac_ctrlblk.h:819-821 (group A: one head-amp record
+	 * per allocated channel per parameter), include/reac/reac_grant.h:100-103 (the
+	 * value is tx's cell when set, else the default)
+	 * mutant: src/reac_ctrlblk.c:323 `REAC_CTRL_HEADAMP` -> `REAC_CTRL_GRANT`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1477 `base + c` -> `base + c - 1`
+	 * mutant: src/reac_ctrlblk.c:1465 `base + c` -> `base + c - 1`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1471 `base, p, values[p]` -> `base, p ^ (p < 2), values[p]`
+	 * mutant: src/reac_ctrlblk.c:1459 `base, p, values[p]` -> `base, p ^ (p < 2), values[p]`
 	 * input: box-base0-w8
 	 * mutant: src/reac_grant.c:168 `reac_grant_headamp_value(tx, ch, p);` -> `w == REAC_GRANT_MAX_WIDTH ? 0 : reac_grant_headamp_value(tx, ch, p);`
 	 * input: box-base0-w40-rows128
@@ -146,6 +157,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		uint8_t ch = fuzz_u8(&in), param = fuzz_u8(&in), value = fuzz_u8(&in);
 		int r = reac_headamp_tx_set(tx, ch, param, value);
 		/* An unknown parameter has no value and no default.
+		 * contract: include/reac/reac_headamp_tx.h:167-168, :173
 		 * mutant: src/reac_headamp_tx.c:69 `return 0;` -> `return 1;`
 		 * input: refused-cells
 		 * mutant: src/reac_headamp_tx.c:61 `return 0;` -> `return 1;`
@@ -155,11 +167,13 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			abort();
 		/* A set is accepted exactly when the channel is in the table and the value
 		 * is legal for the parameter.
+		 * contract: include/reac/reac_headamp_tx.h:156-161
 		 * mutant: src/reac_headamp_tx.c:19 `value <= 0x01` -> `value <= 0x02`
 		 * input: refused-cells */
 		if (r != ((ch < REAC_HEADAMP_MAX_CH && value_ok(param, value)) ? 0 : -1))
 			abort();
 		/* After an accepted set, the table gives back the value that was set.
+		 * contract: include/reac/reac_headamp_tx.h:171-172
 		 * mutant: src/reac_headamp_tx.c:32 `= value;` -> `= 0;`
 		 * input: box-base0-w8 */
 		if (r == 0 && reac_headamp_tx_effective(tx, ch, param) != value)
@@ -175,10 +189,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			uint8_t v = reac_headamp_tx_effective(tx, (uint8_t)c, p);
 			uint8_t d = reac_headamp_default(p);
 			/* An unset cell carries the enrolling default, and the default is what
-			 * reac_headamp_tx.h:163-166 states: phantom off and pad off (+48 V
+			 * reac_headamp_tx.h:165-168 states: phantom off and pad off (+48 V
 			 * into a ribbon mic can destroy it), SENS not zero (the box enrols
 			 * only a channel armed with a real value). The expected values are
 			 * the header's, not the library's.
+			 * contract: include/reac/reac_headamp_tx.h:165-168, :171-174
 			 * mutant: src/reac_headamp_tx.c:51 `0x00` -> `0x01`
 			 * input: box-base0-w8
 			 * mutant: src/reac_headamp_tx.c:52 `0x00` -> `0x01`
@@ -195,6 +210,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	                 base + in_ch - 1 <= REAC_HEADAMP_CEILING;
 	/* The library's fit test is the admission rule above. The first record is the
 	 * change of fuzz/sabotage/grant.patch (last slot 0x30 admitted).
+	 * contract: include/reac/reac_grant.h:43-47 (the head-amp space 0x00..0x2f, a
+	 * hard ceiling), :60 (REAC_GRANT_MAX_WIDTH), :76-82 (fits = [base, base+width)
+	 * inside that space); include/reac/reac_slots.h:63 (REAC_HEADAMP_CEILING)
 	 * mutant: src/reac_grant.c:96 `REAC_HEADAMP_CEILING` -> `REAC_HEADAMP_CEILING + 1`
 	 * input: box-base48-w1
 	 * mutant: src/reac_grant.c:88 `width > REAC_GRANT_MAX_WIDTH` -> `width >= REAC_GRANT_MAX_WIDTH`
@@ -212,6 +230,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		abort();
 	/* A refused box is not moved: reac_grant.h says that on -1 the allocation is
 	 * not changed, so it keeps the zeros set above.
+	 * contract: include/reac/reac_grant.h:84-85
 	 * mutant: src/reac_grant.c:109 `return -1;` -> `return (out->base = 0, out->width = (uint8_t)in_ch, -1);`
 	 * input: box-base32-w32
 	 * mutant: src/reac_grant.c:109 `return -1;` -> `return (out->base = (uint8_t)base, -1);`
@@ -236,9 +255,10 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		int want = REAC_GRANT_SWEEP_LEN(a.width);
 		/* The sweep has SWEEP_LEN(width) rows, and is refused when the buffer is
 		 * smaller.
-		 * mutant: src/reac_ctrlblk.c:1442 `max < n` -> `max <= n`
+		 * contract: include/reac/reac_grant.h:62-65, :96-98
+		 * mutant: src/reac_ctrlblk.c:1430 `max < n` -> `max <= n`
 		 * input: box-base0-w40-rows128
-		 * mutant: src/reac_ctrlblk.c:1483 `return k;` -> `return k + 1;`
+		 * mutant: src/reac_ctrlblk.c:1471 `return k;` -> `return k + 1;`
 		 * input: box-base0-w8 */
 		if (n != (rows >= want ? want : -1))
 			abort();
@@ -247,13 +267,14 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				check_row(sweep[k]);
 			/* Row 0 is HEAD_ACK and row 4 is HEAD_MARK, byte for byte. Both frames
 			 * pass check_row, so only this check sees them swapped.
-			 * mutant: src/reac_ctrlblk.c:1469 `GRANT_HEAD_ACK` -> `GRANT_HEAD_MARK`
+			 * mutant: src/reac_ctrlblk.c:1457 `GRANT_HEAD_ACK` -> `GRANT_HEAD_MARK`
 			 * input: box-base0-w8
-			 * mutant: src/reac_ctrlblk.c:1473 `GRANT_HEAD_MARK` -> `GRANT_HEAD_ACK`
+			 * mutant: src/reac_ctrlblk.c:1461 `GRANT_HEAD_MARK` -> `GRANT_HEAD_ACK`
 			 * input: box-base0-w8 */
 			if (memcmp(sweep[0], HEAD_ACK, 34) != 0 || memcmp(sweep[4], HEAD_MARK, 34) != 0)
 				abort();
-			/* HEAD_ACK | A[base].0..2 | HEAD_MARK | B x6 | A[base+1..].0..2 */
+			/* HEAD_ACK | A[base].0..2 | HEAD_MARK | B x6 | A[base+1..].0..2
+			 * contract: include/reac/reac_ctrlblk.h:908-914 (the sweep's order) */
 			for (uint8_t p = 0; p < REAC_HEADAMP_NPARAMS; p++)
 				check_groupa(sweep[1 + p], a.base, p, tx);
 			for (int c = 1; c < a.width; c++)
@@ -263,9 +284,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			for (int i = 0; i < REAC_GRANT_GROUPB_LEN; i++) {
 				uint8_t poll[34];
 				/* Group B is the identity poll, byte for byte.
-				 * mutant: src/reac_ctrlblk.c:1475 `GRANT_GROUPB[i]` -> `GRANT_GROUPB[5 - i]`
+				 * mutant: src/reac_ctrlblk.c:1463 `GRANT_GROUPB[i]` -> `GRANT_GROUPB[5 - i]`
 				 * input: box-base0-w8
-				 * mutant: src/reac_ctrlblk.c:1355 `i >= REAC_GRANT_GROUPB_LEN` -> `i >= REAC_GRANT_GROUPB_LEN - 1`
+				 * mutant: src/reac_ctrlblk.c:1343 `i >= REAC_GRANT_GROUPB_LEN` -> `i >= REAC_GRANT_GROUPB_LEN - 1`
 				 * input: box-base0-w8 */
 				if (reac_ctrl_identity_poll_block(i, poll) != 0 ||
 				    memcmp(poll, sweep[5 + i], 34) != 0)
@@ -320,6 +341,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		 * its parameter, and the table's effective value for that cell: the
 		 * operator's value where set, the enrolling default where not. An edged
 		 * cell is a set cell, so its value is the effective value too.
+		 * contract: include/reac/reac_headamp_tx.h:171-174, :196-201
 		 * mutant: src/reac_headamp_tx.c:154 `(uint8_t)c` -> `(uint8_t)(c + 8)`
 		 * input: replay-past-ceiling
 		 * mutant: src/reac_headamp_tx.c:125 `t->value[c][p]` -> `2`
@@ -331,6 +353,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			abort();
 		/* An emitted cell is one the input set (an edge or a re-assert), or one
 		 * inside the scene armed above, clamped to the table.
+		 * contract: include/reac/reac_headamp_tx.h:178-183 (the replay covers
+		 * base..base+width-1, clamped; a base past the table arms nothing),
+		 * :196-201 (changed cells first, then the replay)
 		 * mutant: src/reac_headamp_tx.c:154 `(uint8_t)c` -> `(uint8_t)(c - 8)`
 		 * input: replay-past-ceiling */
 		if (e == 1 && !(ch < REAC_HEADAMP_MAX_CH && param < REAC_HEADAMP_NPARAMS &&
@@ -339,7 +364,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			abort();
 		/* An unset cell goes out only in the one complete replay of the scene armed
 		 * above, so at most once. An edge sends a set cell, and a re-assert sends
-		 * the set cells alone (reac_headamp_tx.h:194-197).
+		 * the set cells alone (reac_headamp_tx.h:196-201).
+		 * contract: include/reac/reac_headamp_tx.h:196-201
 		 * mutant: src/reac_headamp_tx.c:151 `if (t->replay_set_only &&` -> `if (0 &&`
 		 * input: box-base0-w8 */
 		if (e == 1 && ch < REAC_HEADAMP_MAX_CH && param < REAC_HEADAMP_NPARAMS &&

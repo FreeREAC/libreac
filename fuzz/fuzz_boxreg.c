@@ -81,7 +81,10 @@ static char *read_name(struct fuzz_in *in)
 }
 
 /* The width rule, written out here and not taken from the library: a box is an
- * even 2..40 channels wide (reac_boxreg.h, reac.h), and no wider than the fabric. */
+ * even 2..40 channels wide (reac_boxreg.h, reac.h), and no wider than the fabric.
+ * contract: include/reac/reac_facts_box_width.h:43, :51 (2 and 40),
+ * include/reac/reac.h:70-71 (even per direction), include/reac/reac_boxreg.h:56
+ * (`nch` slots, even) */
 static int legal_width(int nch, int fabric)
 {
 	return nch >= 2 && nch <= 40 && nch % 2 == 0 && nch <= fabric;
@@ -99,7 +102,8 @@ static int range_free(const struct reac_boxreg *t, int base, int nch, int fabric
 }
 
 /* The lowest free range of nch slots in t, or -1 (reac_boxreg.h: "the lowest free
- * contiguous range"). */
+ * contiguous range").
+ * contract: include/reac/reac_boxreg.h:57-58, :64 */
 static int lowest_free(const struct reac_boxreg *t, int nch, int fabric)
 {
 	for (int base = 0; base <= fabric - nch; base++)
@@ -192,7 +196,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		abort();
 	int fabric_in = (int8_t)fuzz_u8(&in);
 	reac_boxreg_init(r, fabric_in);
-	int fabric = (fabric_in > 0 && fabric_in <= REAC_BOXREG_FABRIC) ? fabric_in
+	/* contract: include/reac/reac_boxreg.h:50 (0 or more than the fabric -> 40) */
+	int fabric =(fabric_in > 0 && fabric_in <= REAC_BOXREG_FABRIC) ? fabric_in
 	                                                                : REAC_BOXREG_FABRIC;
 	check(r, fabric);
 
@@ -212,7 +217,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			const char *given = (op & 8) ? NULL : name;
 			/* The result reac_boxreg.h gives: a refusal (-1) for a bad width or a
 			 * full table; else the pinned base if that range is free, or the
-			 * lowest free range for base < 0; else a refusal. */
+			 * lowest free range for base < 0; else a refusal.
+			 * contract: include/reac/reac_boxreg.h:56-59, :23 (REAC_BOXREG_MAX_BOXES) */
 			int want = -1;
 			if (legal_width(nch, fabric) && n_before < REAC_BOXREG_MAX_BOXES)
 				want = base >= 0 ? (range_free(&prev, base, nch, fabric) ? base : -1)
@@ -252,6 +258,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			                 (base >= 0 && r->box[idx].base != base)))
 				abort();
 			/* The declared name is stored, cut to 31 characters; a NULL name is "".
+			 * contract: include/reac/reac_boxreg.h:24, :41 (a 32-byte field), :57
+			 * (NULL or "" is none)
 			 * mutant: src/reac_boxreg.c:81 `if (name)` -> `if (0)`
 			 * input: declare-then-join
 			 */
@@ -283,7 +291,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			/* The result reac_boxreg.h gives, from the table before the call: a
 			 * refusal for a bad width or the zero MAC; else the box that holds
 			 * this MAC; else the first unbound box of this width; else a new row
-			 * at the lowest free range; else (full table, no range) a refusal. */
+			 * at the lowest free range; else (full table, no range) a refusal.
+			 * contract: include/reac/reac_boxreg.h:62-67 */
 			int held = -1, bind = -1, lf = -1, want = -1;
 			for (int j = 0; j < prev.n; j++) {
 				if (held < 0 && nonzero && memcmp(prev.box[j].mac, mac, 6) == 0)

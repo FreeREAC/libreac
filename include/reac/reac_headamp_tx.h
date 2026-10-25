@@ -156,18 +156,22 @@ void reac_headamp_tx_init(struct reac_headamp_tx *t);
 /* Set one cell's absolute value and arm the sender. `ch` is the WIRE channel
  * (model_base + box_input-1, 0..REAC_HEADAMP_MAX_CH-1); `param` is a
  * reac_headamp_param. Marks the cell dirty so the change is emitted on the next
- * eligible slot (the edge). Returns 0, or -1 on a bad ch/param/value. */
+ * eligible slot (the edge). Returns 0, or -1 on a bad ch/param/value: a legal
+ * value is 0 or 1 for phantom and pad, 0..REAC_HEADAMP_SENS_MAX for SENS, and no
+ * value is legal for any other param. */
 int reac_headamp_tx_set(struct reac_headamp_tx *t, uint8_t ch, uint8_t param,
                         uint8_t value);
 
 /* The enrolling DEFAULT a complete scene carries for an unset cell: phantom OFF
  * and pad OFF (the safe-off directions), SENS deliberately NON-ZERO — the box
- * only enrols a channel whose arming scene carries a real value. */
+ * only enrols a channel whose arming scene carries a real value. Any other param
+ * has no default: 0. */
 uint8_t reac_headamp_default(uint8_t param);
 
 /* The value a complete scene carries for a cell: the table's if the operator set
  * it (a deliberate 0 counts — `set`, not the value, is the test), else the
- * enrolling default. NULL-safe: a NULL table is an all-default scene. */
+ * enrolling default; 0 for a param that is not one of the three. NULL-safe: a
+ * NULL table is an all-default scene. */
 uint8_t reac_headamp_tx_effective(const struct reac_headamp_tx *t,
                                   uint8_t ch, uint8_t param);
 

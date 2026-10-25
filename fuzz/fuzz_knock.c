@@ -56,7 +56,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	struct reac_knock k;
 	reac_knock_init(&k, now);
 
-	/* mutant: src/reac_knock.c:13 `REAC_KNOCK_LISTENING` -> `REAC_KNOCK_CANCELLED`
+	/* contract: include/reac/reac_knock.h:108 (init begins listening), :88, :102, :105
+	 * mutant: src/reac_knock.c:13 `REAC_KNOCK_LISTENING` -> `REAC_KNOCK_CANCELLED`
 	 * input: silent-wire
 	 * mutant: src/reac_knock.c:18 `k->due_ns = now_ns + REAC_KNOCK_LISTEN_NS;` -> `k->due_ns = now_ns + REAC_KNOCK_LISTEN_NS; k->granted = 1;`
 	 * input: silent-wire
@@ -83,7 +84,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		}
 		if (ev & 2) {
 			enum reac_knock_act a = reac_knock_step(&k, now);
-			/* mutant: src/reac_knock.c:55 `return REAC_KNOCK_ACT_DRIVE;` -> `return 2;`
+			/* contract: include/reac/reac_knock.h:95-98
+			 * mutant: src/reac_knock.c:55 `return REAC_KNOCK_ACT_DRIVE;` -> `return 2;`
 			 * input: silent-wire
 			 */
 			if (a != REAC_KNOCK_ACT_NONE && a != REAC_KNOCK_ACT_DRIVE)
@@ -91,6 +93,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			if (a == REAC_KNOCK_ACT_DRIVE) {
 				drives++;
 				/* Once, and with the licence set.
+				 * contract: include/reac/reac_knock.h:93-94, :105, :121
 				 * mutant: src/reac_knock.c:47 `k->state != REAC_KNOCK_LISTENING` -> `k->state == REAC_KNOCK_CANCELLED`
 				 * input: silent-wire
 				 * mutant: src/reac_knock.c:54 `k->granted = 1;` -> ``
@@ -100,6 +103,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 					abort();
 				/* Only after a whole window of silence. The first record is the
 				 * sabotage patch fuzz/sabotage/knock.patch.
+				 * contract: include/reac/reac_knock.h:34-37, :56-59, :85, :121-123
 				 * mutant: src/reac_knock.c:49 `k->due_ns` -> `k->opened_ns`
 				 * input: silent-wire
 				 * mutant: src/reac_knock.c:28 `k->state == REAC_KNOCK_LISTENING` -> `0`
@@ -112,6 +116,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			 * due, and withholding it is the latch the re-opening cancellation
 			 * exists to prevent. (A frame heard this instant sets quiet_since to
 			 * now, so the window is then open.)
+			 * contract: include/reac/reac_knock.h:121-123 (on the first step at or
+			 * after the observation closes)
 			 * mutant: src/reac_knock.c:49 `now_ns < k->due_ns` -> `now_ns <= k->due_ns`
 			 * input: exact-window
 			 * mutant: src/reac_knock.c:42 `< REAC_KNOCK_LISTEN_NS` -> `<= REAC_KNOCK_LISTEN_NS`
@@ -124,6 +130,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		}
 		/* The licence is set exactly when the caller was told DRIVE, and a frame
 		 * heard after it does not revoke it (reac_knock.h).
+		 * contract: include/reac/reac_knock.h:105, :113-115
 		 * mutant: src/reac_knock.c:23 `k->heard_ns = now_ns;` -> `k->heard_ns = now_ns; k->granted = 0;`
 		 * input: stray-frame
 		 * mutant: src/reac_knock.c:29 `k->state = REAC_KNOCK_CANCELLED;` -> `k->state = REAC_KNOCK_CANCELLED; k->granted = 1;`
@@ -135,6 +142,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		 * does not change it); else CANCELLED after a frame. A cancelled knock
 		 * re-opens only in a step at least a window after the frame, and that
 		 * same step drives, so LISTENING is seen only before the first frame.
+		 * contract: include/reac/reac_knock.h:88-90, :56, :118
 		 * mutant: src/reac_knock.c:29 `k->state = REAC_KNOCK_CANCELLED;` -> `k->due_ns = now_ns + REAC_KNOCK_LISTEN_NS;`
 		 * input: desk-talking
 		 * mutant: src/reac_knock.c:53 `k->state = REAC_KNOCK_PROVEN;` -> ``
