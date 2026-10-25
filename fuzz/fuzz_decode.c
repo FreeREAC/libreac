@@ -21,15 +21,19 @@
  *   - the decoders agree with reac_frame_inspect(): a frame decodes exactly when
  *     inspect calls it valid and the geometry fits (and, for reac_decode(), the
  *     width is even), and then returns its ns;
- *   - a decoder that refuses a frame (returns -1) writes nothing into its output;
+ *   - a decoder that refuses a frame (returns -1) writes nothing into its output
+ *     (reac_decode.h, reac_upstream.h: on -1, out is untouched);
  *   - the braid is a bijection: decoding then re-encoding through
  *     reac_braid_encode() gives back the audio region byte for byte, downstream
- *     and upstream; for a geometry with more than 12 samples, where the encoder
- *     stops, each decoded sample is the bytes reac_braid_pos() names;
+ *     and upstream (for a geometry of 12 samples or fewer, where the encoder
+ *     works);
+ *   - every decoded sample, downstream and upstream, is the three bytes the braid
+ *     map of reac_braid.h puts it in, the map written out in the harness;
  *   - reac_decode_plain_le() is a straight copy: each sample (ch, s) is the 3
  *     bytes at (s * n_channels + ch) * 3;
- *   - reac_upstream_channels() is reac_frame_channels() restricted to box widths,
- *     the even widths REAC_BOX_MIN_CHANNELS..REAC_BOX_MAX_CHANNELS;
+ *   - reac_upstream_channels() is the frame's geometry (52 + 36 per channel,
+ *     worked out in the harness) restricted to box widths, the even widths
+ *     REAC_BOX_MIN_CHANNELS..REAC_BOX_MAX_CHANNELS;
  *   - reac_frame_clean_len() strips the two-byte FCS residue, and only that: it
  *     strips 2 bytes exactly when the length is 2 more than a legal geometry.
  *
@@ -58,6 +62,40 @@ static int changed(const uint8_t *p, size_t n)
 	for (size_t i = 0; i < n; i++)
 		c |= p[i] != 0xa5;
 	return c;
+}
+
+/* Each decoded sample (ch, s) of an nch-wide region is the three bytes the braid
+ * puts it in. The map is written out here from the header's statement of it, and
+ * not taken from reac_braid_pos(), which the decoders and the encoder all read:
+ * a wrong map there keeps the round trip below true.
+ * contract: include/reac/reac_braid.h:9-12 (the pair (2k, 2k+1) of time sample s
+ * is one 6-byte group at (s*n_ch + 2k)*3; the even channel's lo, mid, hi at
+ * group[3], group[0], group[1], the odd channel's at group[4], group[5],
+ * group[2]). */
+static void check_braid(const uint8_t *audio, const uint8_t *pcm, int nch, int ns)
+{
+	int bad = 0;
+	for (int ch = 0; ch < nch; ch++) {
+		for (int s = 0; s < ns; s++) {
+			const uint8_t *g = audio + ((size_t)s * (size_t)nch + (size_t)(ch & ~1)) * 3;
+			const uint8_t *got = pcm + ((size_t)ch * (size_t)ns + (size_t)s) * REAC_RESOLUTION;
+			if (ch & 1)
+				bad |= got[0] != g[4] || got[1] != g[5] || got[2] != g[2];
+			else
+				bad |= got[0] != g[3] || got[1] != g[0] || got[2] != g[1];
+		}
+	}
+	/* The decoders follow the documented braid, for every geometry they accept.
+	 * A decoder accepts only nch * ns * 3 <= 1440, so each group lies inside the
+	 * region.
+	 * mutant: include/reac/reac_braid.h:60 `pos[0] = g + 3; pos[1] = g + 0;` -> `pos[0] = g + 0; pos[1] = g + 3;`
+	 * input: downstream-program-48k
+	 * mutant: include/reac/reac_braid.h:62 `pos[1] = g + 5; pos[2] = g + 2;` -> `pos[1] = g + 2; pos[2] = g + 5;`
+	 * input: upstream-program-8ch
+	 * mutant: src/reac_decode.c:78 `reac_braid_pos(s,` -> `reac_braid_pos(s % 12,`
+	 * input: downstream-program-custom-20x24 */
+	if (bad)
+		abort();
 }
 
 /* Decode planar 24-bit PCM back to floats and braid it into a fresh region; the
@@ -155,29 +193,12 @@ static void fuzz_downstream(const uint8_t *frame, size_t len, const struct reac_
 	 * input: downstream-bad-ethertype */
 	if (r < 0 && changed(out, olen))
 		abort();
-	if (r > 0 && ns <= REAC_SAMPLES_PER_PKT) {
+	/* reac_braid_encode() stops at 12 samples, so the round trip covers only a
+	 * geometry of 12 samples or fewer; the braid check covers every one. */
+	if (r > 0 && ns <= REAC_SAMPLES_PER_PKT)
 		check_round_trip(frame + REAC_L2_HEADER_LEN, out, nch, ns);
-	} else if (r > 0) {
-		const uint8_t *audio = frame + REAC_L2_HEADER_LEN;
-		int bad = 0;
-		for (int ch = 0; ch < nch; ch++) {
-			for (int s = 0; s < ns; s++) {
-				size_t pos[3];
-				const uint8_t *got = out + ((size_t)ch * (size_t)ns + (size_t)s) * REAC_RESOLUTION;
-				reac_braid_pos(s, ch, nch, pos);
-				bad |= got[0] != audio[pos[0]] || got[1] != audio[pos[1]] ||
-				       got[2] != audio[pos[2]];
-			}
-		}
-		/* reac_braid_encode() stops at 12 samples, so no round trip covers a wider
-		 * geometry. Each decoded sample (ch, s) is then the 3 bytes that the layout
-		 * oracle reac_braid_pos() names (reac_decode.c reads through it). r > 0
-		 * gives nch * ns <= 480, and the positions stay inside the region.
-		 * mutant: src/reac_decode.c:78 `reac_braid_pos(s,` -> `reac_braid_pos(s % 12,`
-		 * input: downstream-program-custom-20x24 */
-		if (bad)
-			abort();
-	}
+	if (r > 0)
+		check_braid(frame + REAC_L2_HEADER_LEN, out, nch, ns);
 
 	memset(out, 0xa5, olen);
 	r = reac_decode_plain_le(frame, len, mode, out);
@@ -217,17 +238,28 @@ static void fuzz_downstream(const uint8_t *frame, size_t len, const struct reac_
 static void fuzz_upstream(const uint8_t *frame, size_t len)
 {
 	int nch = reac_upstream_channels(len);
-	unsigned geom = reac_frame_channels(len);
+	/* The geometry of a clean frame, worked out here and not taken from a libreac
+	 * function (reac_frame_channels() is one).
+	 * contract: include/reac/reac.h:65-66 (52 bytes of header and end marker,
+	 * then 36 bytes for each channel; any other length has no geometry) */
+	const unsigned geom =
+		len >= REAC_UPSTREAM_OVERHEAD && (len - REAC_UPSTREAM_OVERHEAD) % REAC_UPSTREAM_BYTES_PER_CH == 0
+			? (unsigned)((len - REAC_UPSTREAM_OVERHEAD) / REAC_UPSTREAM_BYTES_PER_CH)
+			: 0;
 	const int box_width = geom >= REAC_BOX_MIN_CHANNELS && geom <= REAC_BOX_MAX_CHANNELS &&
 	                      (geom & 1) == 0;
 	/* A box's return is a legal geometry at a box width, and nothing else. A box
-	 * width is a protocol fact (reac_facts_box_width.h): an even width from
-	 * REAC_BOX_MIN_CHANNELS (2) to REAC_BOX_MAX_CHANNELS (40). The harness spells
-	 * the rule out and does not ask reac_box_width_ok().
+	 * width is a protocol fact: an even width from REAC_BOX_MIN_CHANNELS (2) to
+	 * REAC_BOX_MAX_CHANNELS (40). The harness spells the rule out and does not ask
+	 * reac_box_width_ok().
+	 * contract: include/reac/reac_facts_box_width.h:43, :51 (2 and 40), and
+	 * include/reac/reac.h:70-71 (even per direction)
 	 * mutant: include/reac/reac.h:86 `n <= REAC_BOX_MAX_CHANNELS` -> `n <= REAC_BOX_MAX_CHANNELS + 2`
 	 * input: upstream-width-42
 	 * mutant: include/reac/reac.h:86 `&& (n & 1) == 0` -> ``
-	 * input: upstream-width-3 */
+	 * input: upstream-width-3
+	 * mutant: src/reac_upstream.c:25 `/ REAC_UPSTREAM_BYTES_PER_CH;` -> `/ REAC_UPSTREAM_BYTES_PER_CH + 2;`
+	 * input: upstream-s0808-8ch */
 	if (nch != (box_width ? (int)geom : -1))
 		abort();
 
@@ -269,8 +301,10 @@ static void fuzz_upstream(const uint8_t *frame, size_t len)
 	 * input: upstream-bad-end-marker */
 	if (r < 0 && changed(out, olen))
 		abort();
-	if (r > 0)
+	if (r > 0) {
 		check_round_trip(frame + REAC_L2_HEADER_LEN, out, nch, REAC_SAMPLES_PER_PKT);
+		check_braid(frame + REAC_L2_HEADER_LEN, out, nch, REAC_SAMPLES_PER_PKT);
+	}
 	free(out);
 }
 

@@ -341,6 +341,27 @@ static void gen_decode(void)
 		snprintf(name, sizeof name, "upstream-bad-%s", BREAK[i].name);
 		emit("decode", name, &s);
 	}
+	/* the S-0808 return's header around 8 x 12 distinct samples, braided by the
+	 * library's encoder: the captured returns are silent, and a byte the braid
+	 * misplaces shows only in a region whose bytes differ */
+	{
+		static float planes[8][REAC_SAMPLES_PER_PKT];
+		float *planar[8];
+		for (int ch = 0; ch < 8; ch++) {
+			planar[ch] = planes[ch];
+			for (int s = 0; s < REAC_SAMPLES_PER_PKT; s++)
+				planes[ch][s] = (float)((ch * REAC_SAMPLES_PER_PKT + s + 1) * 1024 *
+				                        ((ch & 1) ? -1 : 1)) / 8388608.0f;
+		}
+		memset(g_frame, 0, sizeof UP8);
+		memcpy(g_frame, UP8, REAC_L2_HEADER_LEN);
+		reac_braid_encode(g_frame + REAC_L2_HEADER_LEN, 8, planar, 8, REAC_SAMPLES_PER_PKT);
+		g_frame[sizeof UP8 - 2] = REAC_END_MARKER_0;
+		g_frame[sizeof UP8 - 1] = REAC_END_MARKER_1;
+		put8(&s, 1); put8(&s, 0); put8(&s, 0);
+		put(&s, g_frame, sizeof UP8);
+		emit("decode", "upstream-program-8ch", &s);
+	}
 	static const unsigned WIDTHS[] = { 3, 42 };
 	for (size_t i = 0; i < 2; i++) {
 		size_t n = REAC_UPSTREAM_OVERHEAD + WIDTHS[i] * REAC_UPSTREAM_BYTES_PER_CH;
