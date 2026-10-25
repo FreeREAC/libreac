@@ -28,8 +28,9 @@
  *     FILLER (type 00 00) aside, only for a frame whose block checksum closes;
  *   - an identity payload is where the record puts it, inside the frame (or the
  *     reassembly buffer), and only ever comes out of a record whose block and
- *     record checksums close; a frame whose block checksum does not close does
- *     not change the reassembly state;
+ *     record checksums close, under the address that the record (or the FIRST
+ *     fragment that opened it) carries; a frame whose block checksum does not
+ *     close does not change the reassembly state;
  *   - a decoded port table counts each slot code as its own kind, in whole
  *     4-channel slots, and names the first unknown code;
  *   - a catalogue row comes only from a config-announce, and it is the first row
@@ -237,8 +238,33 @@ static const struct reac_box_model *row_of_block(const uint8_t *block)
 	return NULL;
 }
 
+/* The address that the last FIRST fragment carried, read by the harness from the
+ * frame, frame bytes 36 and 37. */
+struct first_frag {
+	int have;
+	uint8_t addr[2];
+};
+
+/* 1 when the frame opens an identity record: a cd ea link-4 FIRST fragment with
+ * the wrapper 00 02 00 fe, a body of 1 to 22 bytes (it ends before the check
+ * byte), and a block that sums to 0 mod 256. A newer FIRST replaces an older one.
+ * contract: reac.ksy:1897-1908 (link 4, segment FIRST, the wrapper at block[4:8],
+ * the length echo at block[8], that many bytes after it);
+ * include/reac/reac_ctrlblk.h:88, :91 (REAC_LINK_RECORD, REAC_SEG_FIRST), :620-628
+ * (a FIRST is kept; both block checksums close) */
+static int opens_record(const uint8_t *frame, size_t len, int sum_ok)
+{
+	if (len < REAC_CTRL_BLOCK_END || !sum_ok)
+		return 0;
+	const uint8_t *b = frame + REAC_CTRL_BLOCK_OFF;
+	return frame[16] == 0xcd && frame[17] == 0xea && b[0] == REAC_LINK_RECORD &&
+	       b[1] == REAC_SEG_FIRST && b[4] == 0x00 && b[5] == 0x02 && b[6] == 0x00 &&
+	       b[7] == 0xfe && b[8] >= 1 && 9 + b[8] <= REAC_CTRL_BLOCK_LEN - 1;
+}
+
 static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
-                       struct reac_identity_frag *frag, struct reac_identity *id)
+                       struct reac_identity_frag *frag, struct first_frag *first,
+                       struct reac_identity *id)
 {
 	const uint8_t *blk = len >= REAC_CTRL_BLOCK_END ? frame + REAC_CTRL_BLOCK_OFF : NULL;
 	struct reac_ctrl_parsed p;
@@ -303,6 +329,15 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		 * input: breakages */
 		if (!record_sum_closes(blk + 16, pll + 5))
 			abort();
+		/* The address is the record's own, block[18] high and block[19] low: it
+		 * picks the identity field that the payload fills.
+		 * contract: include/reac/reac_ctrlblk.h:600-601 (addr_lo is the low half
+		 * of the Roland address); reac.ksy:1834-1839 (addr_lo, u2be, after TAG
+		 * 0x0500), :1714-1724 (the tag is the high half and addr_lo the low)
+		 * mutant: src/reac_ctrlblk.c:374 `| block[19]` -> ``
+		 * input: identity-reply-addr-0011 */
+		if (addr != (uint16_t)(blk[18] << 8 | blk[19]))
+			abort();
 		/* ingest returns -1 only for a NULL argument.
 		 * mutant: src/reac_identity.c:68 `if (!id || (len > 0 && !payload))` -> `if (id)`
 		 * input: identity-reply-s1608-firmware */
@@ -342,11 +377,24 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		 * input: breakages */
 		if (!record_sum_closes(frag->buf + 7, pll + 5))
 			abort();
+		/* The address is the one the FIRST fragment that opened the record
+		 * carries, frame bytes 36 and 37 of that frame, kept by the harness.
+		 * contract: reac.ksy:1905-1920 (the FIRST body is f0 41 0a 00 00 12 12
+		 * 05 00, then addr_lo); include/reac/reac_ctrlblk.h:620-623
+		 * mutant: src/reac_ctrlblk.c:1395 `| r[10]` -> ``
+		 * input: frag-addr-1011 */
+		if (!first->have || addr != (uint16_t)(first->addr[0] << 8 | first->addr[1]))
+			abort();
 		/* ingest returns -1 only for a NULL argument.
 		 * mutant: src/reac_identity.c:68 `if (!id || (len > 0 && !payload))` -> `if (id)`
 		 * input: fixtures-all */
 		if (reac_identity_ingest(id, addr, pl, pll) < 0)
 			abort();
+	}
+	if (opens_record(frame, len, sum_ok)) {
+		first->have = 1;
+		first->addr[0] = frame[36];
+		first->addr[1] = frame[37];
 	}
 
 	if (is_8819) {
@@ -617,6 +665,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
 	struct reac_identity id;
 	struct reac_identity_frag frag;
+	struct first_frag first = { 0, { 0, 0 } };
 	reac_identity_init(&id);
 	memset(&frag, 0, sizeof frag);
 
@@ -653,7 +702,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		const uint8_t *body;
 		size_t len = fuzz_record(&in, &body);
 		uint8_t *frame = fuzz_dup(body, len);
-		fuzz_frame(frame, len, our, &frag, &id);
+		fuzz_frame(frame, len, our, &frag, &first, &id);
 		free(frame);
 	}
 	/* Whatever was ingested is a well-formed string.

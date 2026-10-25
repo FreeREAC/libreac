@@ -502,6 +502,32 @@ static void gen_ctrl(void)
 		put_rec(&s, g_frame, n);
 		emit("ctrl", "headamp-link-0", &s);
 	}
+	/* the S-1608 firmware reply under address 0x0011: the address low byte 00
+	 * becomes 11 and the record checksum 77 becomes 66, so both sums still close */
+	{
+		size_t n = reac_ctrl_build_as(g_frame, reac_box_catalogue_by_token("s1608"),
+		                              REAC_BOX_BLOCK_CC0016, OUR, BOX, 9, NULL, 0);
+		g_frame[BLK(19)] = 0x11;
+		g_frame[BLK(24)] = (uint8_t)((g_frame[BLK(24)] - 0x11) & 0x7f);
+		put(&s, OUR, 6); put8(&s, 0);
+		put_rec(&s, g_frame, n);
+		emit("ctrl", "identity-reply-addr-0011", &s);
+	}
+	/* the S-0808 name record under address 0x1011: the FIRST fragment's address low
+	 * byte 00 becomes 11, the inner checksum in the LAST fragment 1a becomes 09, and
+	 * each block is restamped */
+	{
+		size_t n = fixture_frame(g_frame, &FIXTURES[17], 17);
+		g_frame[BLK(19)] = 0x11;
+		reac_ctrl_checksum_apply(g_frame);
+		put(&s, OUR, 6); put8(&s, 0);
+		put_rec(&s, g_frame, n);
+		n = fixture_frame(g_frame, &FIXTURES[18], 18);
+		g_frame[BLK(15)] = (uint8_t)((g_frame[BLK(15)] - 0x11) & 0x7f);
+		reac_ctrl_checksum_apply(g_frame);
+		put_rec(&s, g_frame, n);
+		emit("ctrl", "frag-addr-1011", &s);
+	}
 	free(s.p);
 }
 
