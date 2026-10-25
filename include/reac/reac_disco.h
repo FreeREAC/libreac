@@ -80,13 +80,15 @@ enum reac_disco_role {
 	REAC_DISCO_ROLE_MASTER,
 };
 
+/* "box", "master" or "unknown": the names the JSON below uses. */
 const char *reac_disco_role_name(enum reac_disco_role r);
 
 struct reac_disco_sighting {
-	uint8_t mac[6];
+	uint8_t mac[6];            /* the frame's own L2 source, frame[6..11]           */
 	enum reac_disco_role role;
 	/* What the peer DECLARED, when this frame is its config announce (reac_ports_parse):
-	 * `has_decl` and the two widths. Never filled from the model catalogue (1.7.0). */
+	 * `has_decl` and the two widths, set only when each width is at most
+	 * REAC_MAX_CHANNELS. Never filled from the model catalogue (1.7.0). */
 	uint8_t has_decl;
 	uint8_t decl_in, decl_out;
 	/* The box family its identity page named (enum reac_box_family), 0 when unknown.
@@ -194,12 +196,27 @@ struct reac_disco_table {
 void reac_disco_table_init(struct reac_disco_table *t);
 
 /* Record a sighting. Returns 1 when the table changed observably (new MAC, or a role/
- * model/ownership upgrade), 0 when it only refreshed a timestamp. Main thread only. */
+ * model/ownership upgrade), 0 when it only refreshed a timestamp. Main thread only.
+ *
+ * A KNOWN MAC keeps its place and first_seen_ns, and last_seen_ns takes now_ns. Its
+ * facts only sharpen: a known role (not UNKNOWN) replaces the old one, except that an
+ * entry held as BOX never turns into MASTER (A BOX DOES NOT UN-PROVE ITSELF: a box's
+ * own BYE has the shape of a master's scene push); a declaration, a non-zero
+ * announced_slots and a non-zero family replace the old ones; channels keeps the
+ * widest geometry heard; owned, once set, stays set. The return is 1 exactly when one
+ * of those facts changed, and seq moves by the return.
+ *
+ * A NEW MAC takes the next entry, with the sighting's facts, `owned` as 0 or 1 and
+ * now_ns as both times, and the return is 1. When the table already holds
+ * REAC_DISCO_MAX entries a new MAC is refused instead: nothing is added, the return is
+ * 0, overflowed is set, and seq moves once, on the first such refusal only. */
 int reac_disco_table_observe(struct reac_disco_table *t,
                              const struct reac_disco_sighting *s,
                              int owned, uint64_t now_ns);
 
-/* Withdraw entries unheard for REAC_DISCO_STALE_NS. Returns how many were removed. */
+/* Withdraw entries unheard for REAC_DISCO_STALE_NS: those whose last_seen_ns lies more
+ * than that before now_ns (a clock that stepped back withdraws nothing). Returns how
+ * many were removed; seq moves once when any was. */
 int reac_disco_table_age(struct reac_disco_table *t, uint64_t now_ns);
 
 /* Serialized age_ms is time since the last REPORTED sighting, not since the last frame:
@@ -215,7 +232,16 @@ int reac_disco_table_age(struct reac_disco_table *t, uint64_t now_ns);
 /* Serialize to the JSON array published as reac.discovery.devices. One string is one
  * atomic snapshot — enumerated per-device prop keys would let a reader observe device 0
  * of the new set beside device 1 of the old. Returns the length written, or -1 when it
- * would not fit (the caller publishes nothing rather than a truncated list). */
+ * would not fit (the caller publishes nothing rather than a truncated list).
+ *
+ * THE SHAPE: a NUL-terminated JSON array of one object per entry, in table order, each
+ *   {"mac":"aa:bb:cc:dd:ee:ff","role":"<role>","model":"<model>","width":"<w>",
+ *    "owned":true|false,"age_ms":<n>}
+ * mac in lower-case hex; role as reac_disco_role_name gives it; model the token
+ * reac_box_name gives for the entry's family and declared widths, and width the
+ * declared "<in>x<out>", or "unknown" and "0x0" for an entry with no declaration
+ * reac_box_name accepts; age_ms the whole milliseconds from last_seen_ns to now_ns, 0
+ * when now_ns is not after it. */
 int reac_disco_table_json(const struct reac_disco_table *t, uint64_t now_ns,
                           char *buf, size_t cap);
 

@@ -34,8 +34,8 @@
  * coherent-looking image. Since 0.5.0 both directions decode this braid by
  * default (reac_decode / reac_upstream_decode) and plain LE survives only as
  * the explicitly named diagnostic reac_decode_plain_le() (see reac_decode.h).
- * Do not add a second copy of this byte map anywhere; consumers (reac-pw,
- * reac-aes67) call this oracle.
+ * Do not add a second copy of this byte map to a consumer; reac-pw and reac-aes67
+ * call this oracle (fuzz_decode states it again, as the check it is held to).
  */
 #ifndef LIBREAC_REAC_BRAID_H
 #define LIBREAC_REAC_BRAID_H

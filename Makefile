@@ -472,6 +472,9 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 #   make fuzz-run FUZZ_TIME=60  run each for the budget; red on any crash, the
 #                               crashing input left in fuzz/findings/
 #   make fuzz-sabotage          plant each harness's one-line mutant, require a crash
+#   make fuzz-records           make each check's recorded breakage alone, require
+#                               that check to stop the named seed; red on a check
+#                               with no record and no not-a-property line
 #   make fuzz-cov               line coverage of each parser over its seed corpus,
 #                               red below fuzz/coverage-floor.txt or on a harness
 #                               check no seed reaches
@@ -510,6 +513,37 @@ fuzz-run: fuzz
 
 fuzz-sabotage:
 	FUZZ_BUILD=$(FUZZ_BUILD) MAKE="$(MAKE)" fuzz/sabotage.sh $(FUZZ_HARNESSES)
+
+# The mutant records: every property check names a one-line breakage and the seed
+# that catches it, and fuzz/records.sh proves each one at this commit on the plain
+# harness (no sanitizer, fuzz/records-main.c as the driver, each abort() naming its
+# line through fuzz/records-abort.h), against a libreac.a of its own.
+REC_BUILD      := $(BUILD_DIR)/records
+REC_CFLAGS     := -O1 -g -std=c11 -Wall -Wextra
+REC_LIB_OBJS   := $(OBJS:%.o=$(REC_BUILD)/obj/%.o)
+
+$(REC_BUILD)/obj/%.o: src/%.c
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(REC_CFLAGS) -MMD -MP $(INC) -c $< -o $@
+
+-include $(REC_LIB_OBJS:.o=.d)
+
+$(REC_BUILD)/libreac.a: $(REC_LIB_OBJS)
+	$(AR) rcs $@ $(REC_LIB_OBJS)
+
+$(REC_BUILD)/records-main.o: fuzz/records-main.c
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(REC_CFLAGS) -c $< -o $@
+
+$(REC_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h fuzz/records-abort.h $(REC_BUILD)/records-main.o \
+                     $(REC_BUILD)/libreac.a
+	$(FUZZ_CC) $(REC_CFLAGS) -include fuzz/records-abort.h -MMD -MP -MF $@.d $(INC) $< \
+	    $(REC_BUILD)/records-main.o $(REC_BUILD)/libreac.a -lm $(FUZZ_LDFLAGS_$*) -o $@
+
+-include $(FUZZ_HARNESSES:%=$(REC_BUILD)/fuzz_%.d)
+
+fuzz-records:
+	REC_BUILD=$(REC_BUILD) MAKE="$(MAKE)" fuzz/records.sh $(FUZZ_HARNESSES)
 
 # The coverage witness: the same harnesses without sanitizers, instrumented for
 # llvm-cov, each run once over its seed corpus (-runs=0 executes the corpus and
@@ -560,4 +594,4 @@ clean:
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \
-        fuzz fuzz-run fuzz-sabotage fuzz-cov fuzz-corpus
+        fuzz fuzz-run fuzz-sabotage fuzz-records fuzz-cov fuzz-corpus

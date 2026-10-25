@@ -58,7 +58,8 @@ struct reac_frame reac_frame_inspect(const uint8_t *raw, size_t len,
  * REAC_L2_HEADER_LEN. Returns the number of samples written per channel, or
  * -1 on a malformed frame, or on a mode descriptor whose channel width is odd
  * (the braid packs channel PAIRS) or whose geometry does not fit the 1440-byte
- * audio region. The shipped REAC_MODE_* descriptors are all 40 x 12. */
+ * audio region. The shipped REAC_MODE_* descriptors are all 40 x 12.
+ * On -1, out is untouched: every refusal comes before the first byte is written. */
 int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
                 uint8_t *out);
 
@@ -75,7 +76,7 @@ int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
  * Same arguments, same planar output shape and same return contract as
  * reac_decode(), minus the braid's even-width check (a linear index does not pair
  * channels). The SIZE check stays: a geometry wider than the 1440-byte region
- * returns -1 here too.
+ * returns -1 here too. On -1, out is untouched.
  * Do not build new code on this layout. */
 int reac_decode_plain_le(const uint8_t *raw, size_t len,
                          const struct reac_mode *mode, uint8_t *out);

@@ -1,3 +1,18 @@
+libreac (1.8.0) unstable; urgency=medium
+
+  * pcap_source_next skips a record of 0 bytes and goes on; 0 means the end of
+    the file and nothing else. It used to return the empty record's length, 0,
+    and end the walk on it (#23).
+  * The fuzz harnesses are Theorem Labs' per-check rewrite: every property
+    check names a one-line breakage and the seed that catches it, 393 records
+    on 207 checks, all proven at this commit by `make fuzz-records`, and a
+    check without a record is refused. The headers promise what the checks
+    hold: a refused decode or scene build leaves its output untouched; the
+    scene trailer, the grant sweep's order and head rows, discovery's observe,
+    age and JSON, and the head-amp values are documented (#23).
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Sun, 25 Oct 2026 12:00:00 +0000
+
 libreac (1.7.3) unstable; urgency=medium
 
   * libreac-tests (RPM and DEB) ships fake_box in /usr/libexec/libreac/tests/fake_box,

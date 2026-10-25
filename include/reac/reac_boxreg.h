@@ -47,7 +47,7 @@ struct reac_boxreg {
 	int fabric;     /* total AUDIO fabric slots (<= REAC_BOXREG_FABRIC) */
 };
 
-/* Reset the registry to empty with `fabric` total AUDIO slots (0 or >FABRIC -> 40). */
+/* Reset the registry to empty with `fabric` total AUDIO slots (<=0 or >FABRIC -> 40). */
 void reac_boxreg_init(struct reac_boxreg *r, int fabric);
 
 /* Index of the box with this MAC, or -1. */

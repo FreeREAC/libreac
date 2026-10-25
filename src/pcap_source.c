@@ -59,6 +59,11 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
 		uint32_t sec = rd_u32(ph, ps->swapped);
 		uint32_t usec = rd_u32(ph + 4, ps->swapped);
 		uint32_t incl = rd_u32(ph + 8, ps->swapped);
+		/* An empty record carries no frame. Its length, 0, is what the end of the
+		 * file returns, so handing it back would end the walk on it: it is skipped,
+		 * and 0 means the end of the file and nothing else. */
+		if (incl == 0)
+			continue;
 		ps->last_orig_len = rd_u32(ph + 12, ps->swapped);
 		if (incl > cap) {
 			/* Frame larger than the caller buffer (a jumbo/non-REAC packet, or

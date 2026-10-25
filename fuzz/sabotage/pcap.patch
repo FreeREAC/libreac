@@ -1,8 +1,11 @@
+Breaks the check of fuzz/fuzz_pcap.c:146 (a record pcap_source_next hands back fits the caller's buffer).
+Caught by the seed input "record-one-byte-over-cap" of fuzz_pcap.
+
 diff --git a/src/pcap_source.c b/src/pcap_source.c
-index 3dccbbc..feeb5f4 100644
+index 62c8e6c..edaea48 100644
 --- a/src/pcap_source.c
 +++ b/src/pcap_source.c
-@@ -62,3 +62,3 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
+@@ -67,3 +67,3 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
  		ps->last_orig_len = rd_u32(ph + 12, ps->swapped);
 -		if (incl > cap) {
 +		if (incl > cap + 1) {

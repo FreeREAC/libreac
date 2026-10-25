@@ -248,6 +248,47 @@ int main(void)
 		pcap_source_close(&ps);
 	}
 
+	/* 6c. a record of 0 bytes carries no frame and is skipped: the walk goes on to
+	 *     the records after it, and 0 means the end of the file and nothing else.
+	 *     It used to return the record's length, 0, which a caller cannot tell from
+	 *     the end of the file, so a capture ended on its first empty record. */
+	{
+		char pz[256];
+		snprintf(pz, sizeof pz, "%s/empty-record.pcap", dir);
+		FILE *f = fopen(pz, "wb");
+		wr_u32(f, 0xA1B2C3D4u, 0);
+		wr_u32(f, 0x00040002u, 0);
+		wr_u32(f, 0, 0); wr_u32(f, 0, 0);
+		wr_u32(f, 65535, 0);
+		wr_u32(f, 1, 0);
+		uint8_t frame[FRAME_LEN];
+		for (int i = 0; i < 2; i++) {
+			wr_u32(f, 700, 0); wr_u32(f, (uint32_t)i, 0);   /* an empty record */
+			wr_u32(f, 0, 0); wr_u32(f, 0, 0);
+			mk_frame(frame, i);
+			wr_u32(f, 701, 0); wr_u32(f, (uint32_t)i, 0);
+			wr_u32(f, FRAME_LEN, 0); wr_u32(f, FRAME_LEN, 0);
+			fwrite(frame, 1, FRAME_LEN, f);
+		}
+		fclose(f);
+		struct pcap_source ps;
+		CHECK(pcap_source_open(&ps, pz) == 0, "empty record: open ok");
+		uint8_t buf[2048], want[FRAME_LEN];
+		uint64_t ts = 0;
+		for (int i = 0; i < 2; i++) {
+			long n = pcap_source_next(&ps, buf, sizeof buf, &ts);
+			mk_frame(want, i);
+			CHECK(n == FRAME_LEN && memcmp(buf, want, FRAME_LEN) == 0,
+			      "empty record: skipped, the frame after it comes back");
+			CHECK(ts == 701ull * 1000000ull + (uint64_t)i,
+			      "empty record: the timestamp is the frame's, not the empty record's");
+		}
+		CHECK(pcap_source_next(&ps, buf, sizeof buf, NULL) == 0,
+		      "empty record: 0 at the end of the file");
+		pcap_source_close(&ps);
+		unlink(pz);
+	}
+
 	/* 7. nonexistent file refuses to open */
 	{
 		struct pcap_source ps;

@@ -129,9 +129,9 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 		 * but declares only REAC_SCENE_TAIL_BYTES of it as body — the transfer
 		 * ends mid-slot. The 12 bytes behind the body are a fixed trailer, not
 		 * desk state: identical in every LAST frame of both the M-200i and the M-300
-		 * establish captures (3/3 each), so they are reproduced rather than
-		 * zeroed. Zeroing still satisfies the declared length, but this box has
-		 * punished "functionally equivalent" before. */
+		 * establish captures (3/3 each; reac_ctrlblk.h documents them), so they
+		 * are reproduced rather than zeroed. Zeroing still satisfies the declared
+		 * length, but this box has punished "functionally equivalent" before. */
 		static const uint8_t TAIL_TRAILER[12] = {
 			0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
 			0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1323,20 +1323,11 @@ int reac_ctrl_headamp_record_verify(const uint8_t *frame)
 	                                    HEADAMP_REC_LEN);
 }
 
-/* cdea 04 03 0014, record 12 12 01 00: the master's ACK of the box's join params. */
-static const uint8_t GRANT_HEAD_ACK[34] = {
-	0xcd, 0xea, 0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe, 0x0f, 0xf0,
-	0x41, 0x0a, 0x00, 0x00, 0x12, 0x12, 0x01, 0x00, 0x06, 0x00, 0x01, 0x00,
-	0x78, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
-
-/* cdea 04 03 0014, record 12 12 00 00: the marker that separates the first
- * channel's group-A records from the group-B block. */
-static const uint8_t GRANT_HEAD_MARK[34] = {
-	0xcd, 0xea, 0x04, 0x03, 0x00, 0x14, 0x00, 0x02, 0x00, 0xfe, 0x0f, 0xf0,
-	0x41, 0x0a, 0x00, 0x00, 0x12, 0x12, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
-	0x7d, 0xf7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
+/* The sweep's two head rows, as reac_ctrlblk.h documents them: record 12 12 01 00,
+ * the master's ACK of the box's join params, and record 12 12 00 00, the marker that
+ * separates the first channel's group-A records from the group-B block. */
+static const uint8_t GRANT_HEAD_ACK[34] = REAC_GRANT_HEAD_ACK;
+static const uint8_t GRANT_HEAD_MARK[34] = REAC_GRANT_HEAD_MARK;
 
 /* GROUP B — the fixed 6-record constant (marker 12 11, TAG 05 00), byte-identical
  * across 8/16/32-input boxes: (ch,sub,val) = (00,00,04) (06,00,08) (10,00,11)

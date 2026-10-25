@@ -2,7 +2,7 @@
 # libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.7.3
+Version:        1.8.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -181,6 +181,18 @@ make test
 %{_libexecdir}/libreac/tests/fake_box
 
 %changelog
+* Sun Oct 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.8.0-1
+- pcap_source_next skips a record of 0 bytes and goes on; 0 means the end of
+  the file and nothing else. It used to return the empty record's length, 0,
+  and end the walk on it (#23).
+- The fuzz harnesses are Theorem Labs' per-check rewrite: every property check
+  names a one-line breakage and the seed that catches it, 393 records on 207
+  checks, all proven at this commit by `make fuzz-records`, and a check
+  without a record is refused. The headers promise what the checks hold: a
+  refused decode or scene build leaves its output untouched; the scene
+  trailer, the grant sweep's order and head rows, discovery's observe, age
+  and JSON, and the head-amp values are documented (#23).
+
 * Sat Oct 24 2026 Pau Aliagas <linuxnow@gmail.com> - 1.7.3-1
 - libreac-tests (RPM and DEB) ships fake_box in /usr/libexec/libreac/tests/fake_box,
   needing only libc and libm, so a consumer's tests install it from the

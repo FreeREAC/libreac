@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+// Modified by Theorem Labs, 2026-10-25: a modified copy of fuzz/fuzz.h at libreac 9ed322ef.
 
 /* What every libFuzzer harness in fuzz/ shares: a cursor over the input, the
  * input-size refusal, and the exact-size copy that lets the sanitizer see a read
@@ -76,6 +77,7 @@ static inline size_t fuzz_record(struct fuzz_in *in, const uint8_t **out)
 static inline uint8_t *fuzz_dup(const uint8_t *p, size_t n)
 {
 	uint8_t *b = malloc(n);
+	/* not a property: malloc failed */
 	if (!b && n)
 		abort();
 	if (n)
