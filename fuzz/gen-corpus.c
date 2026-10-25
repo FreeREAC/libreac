@@ -288,6 +288,15 @@ static void gen_decode(void)
 		snprintf(name, sizeof name, "downstream-program-%s", MODES[m].name);
 		emit("decode", name, &s);
 	}
+	/* the 41x12 seed's frame (counter 0x1006) under an odd width and a width past
+	 * the region: the braid's even-width rule and the geometry bound, each alone */
+	static const unsigned WIDE[] = { 39, 42 };
+	for (size_t i = 0; i < sizeof WIDE / sizeof WIDE[0]; i++) {
+		put8(&s, 3); put8(&s, WIDE[i]); put8(&s, 12);
+		put(&s, g_frame, program_frame(g_frame, 0x1006));
+		snprintf(name, sizeof name, "downstream-program-custom-%ux12", WIDE[i]);
+		emit("decode", name, &s);
+	}
 	/* the plain silent downstream and its FCS-residue twin */
 	put8(&s, 1); put8(&s, 0); put8(&s, 0);
 	put(&s, g_frame, (size_t)reac_downstream_build(g_frame, NULL, 0, 0, 7, DESK));
@@ -380,6 +389,9 @@ static void gen_ctrl(void)
 	static const struct { const char *name; enum reac_box_block block; } REPLIES[] = {
 		{ "reply-firmware",     REAC_BOX_BLOCK_CC0016 },
 		{ "reply-reac-version", REAC_BOX_BLOCK_CC001A },
+		/* the firmware reply again, under the name the enrolment review's records
+		 * give it */
+		{ "identity-reply-s1608-firmware", REAC_BOX_BLOCK_CC0016 },
 	};
 	for (size_t i = 0; i < sizeof REPLIES / sizeof REPLIES[0]; i++) {
 		uint16_t addr;
@@ -403,6 +415,47 @@ static void gen_ctrl(void)
 		put_rec(&s, g_frame, n);
 	}
 	emit("ctrl", "breakages", &s);
+	/* the reply whose DT1 record sum does not close, alone: the block sum closes, so
+	 * only the record check refuses it */
+	for (const struct breakage *b = BREAKAGES; b->name; b++) {
+		if (strcmp(b->name, "reply-inner-checksum") != 0)
+			continue;
+		put(&s, OUR, 6); put8(&s, 0);
+		put_rec(&s, g_frame, broken_frame(g_frame, b));
+		emit("ctrl", b->name, &s);
+	}
+	/* the box heartbeat under type 00 01, its block sum broken: not FILLER, so
+	 * the classifier must refuse it */
+	{
+		size_t n = fixture_frame(g_frame, &FIXTURES[8], 8);
+		g_frame[16] = 0x00;
+		g_frame[17] = 0x01;
+		g_frame[BLK(31)] = 0x00;
+		put(&s, OUR, 6); put8(&s, 0);
+		put_rec(&s, g_frame, n);
+		emit("ctrl", "box-hb-type-0001-bad-checksum", &s);
+	}
+	/* a declaration with two slot codes nobody has captured: the first one is named */
+	{
+		size_t n = fixture_frame(g_frame, &FIXTURES[9], 9);
+		g_frame[BLK(10)] = 0x07;
+		g_frame[BLK(11)] = 0x09;
+		reac_ctrl_checksum_apply(g_frame);
+		put(&s, OUR, 6); put8(&s, 0);
+		put_rec(&s, g_frame, n);
+		emit("ctrl", "decl-two-unknown-slots", &s);
+	}
+	/* the S-0808 name record whose FIRST fragment carries a changed name byte under
+	 * a restamped block: both block sums close, the record sum does not */
+	{
+		size_t n = fixture_frame(g_frame, &FIXTURES[17], 9);
+		g_frame[BLK(25)] = 0x00;
+		reac_ctrl_checksum_apply(g_frame);
+		put(&s, OUR, 6); put8(&s, 0);
+		put_rec(&s, g_frame, n);
+		put_rec(&s, g_frame, fixture_frame(g_frame, &FIXTURES[18], 9));
+		emit("ctrl", "frag-inner-checksum", &s);
+	}
 	/* the identity record's fragments out of order and from two boxes */
 	put(&s, OUR, 6); put8(&s, 0);
 	put_rec(&s, g_frame, fixture_frame(g_frame, &FIXTURES[18], 1));   /* LAST alone */
@@ -414,6 +467,10 @@ static void gen_ctrl(void)
 	put(&s, BOX, 6); put8(&s, 0);
 	put_rec(&s, g_frame, fixture_frame(g_frame, &FIXTURES[8], 1));
 	emit("ctrl", "own-echo", &s);
+	/* and our own join grant heard back */
+	put(&s, BOX, 6); put8(&s, 0);
+	put_rec(&s, g_frame, fixture_frame(g_frame, &FIXTURES[12], 12));
+	emit("ctrl", "own-echo-join", &s);
 	free(s.p);
 }
 
@@ -426,11 +483,19 @@ static void put_ident(struct seed *s, unsigned sel, unsigned addr, const uint8_t
 	put(s, p, n);
 }
 
-static void put_name_tail(struct seed *s, unsigned fam, unsigned in, unsigned out)
+/* The tail at chosen name, token and display capacities. */
+static void put_tail_caps(struct seed *s, unsigned fam, unsigned in, unsigned out,
+                          unsigned cap_name, unsigned cap_tok, unsigned cap_disp)
 {
 	put8(s, fam); put8(s, in); put8(s, out);
-	put8(s, 15); put8(s, 31); put8(s, 39); put8(s, 39); put8(s, 63); put8(s, 0);
+	put8(s, 15); put8(s, 31); put8(s, cap_name); put8(s, cap_tok); put8(s, cap_disp);
+	put8(s, 0);
 	put16(s, 10234);   /* a firmware of 10.234: a two-digit whole part */
+}
+
+static void put_name_tail(struct seed *s, unsigned fam, unsigned in, unsigned out)
+{
+	put_tail_caps(s, fam, in, out, 39, 39, 63);
 }
 
 static void gen_identity(void)
@@ -531,6 +596,26 @@ static void gen_identity(void)
 	put_ident(&s, 1, 0, VER[2], 8);
 	put_name_tail(&s, 0, 3, 8);
 	emit("identity", "odd-width", &s);
+	/* a name of two bytes and no NUL: the decode must stop at the payload's end */
+	static const uint8_t NAME_AB[3] = { 1, 'A', 'B' };
+	put8(&s, 1);
+	put_ident(&s, 2, 0, NAME_AB, sizeof NAME_AB);
+	emit("identity", "name-no-nul-sabotage", &s);
+	/* the S-1608's page, each of its three strings into a buffer of exactly its
+	 * length: "S-1608" (6), "s1608" (5), "S-1608 (16 in / 8 out)" (22), no room for
+	 * the NUL */
+	static const struct { const char *name; unsigned nm, tk, dp; } EXACT[] = {
+		{ "s1608-name-cap-equal-length",    6, 39, 63 },
+		{ "s1608-token-cap-equal-length",  39,  5, 63 },
+		{ "s1608-display-cap-equal-length", 39, 39, 22 },
+	};
+	for (size_t i = 0; i < sizeof EXACT / sizeof EXACT[0]; i++) {
+		put8(&s, 2);
+		put_ident(&s, 0, 0, FW[1], 4);
+		put_ident(&s, 1, REAC_IDENTITY_ADDR_REAC_VERSION, VER[1], 8);
+		put_tail_caps(&s, 0, 16, 8, EXACT[i].nm, EXACT[i].tk, EXACT[i].dp);
+		emit("identity", EXACT[i].name, &s);
+	}
 	free(s.p);
 }
 
@@ -589,17 +674,22 @@ static void gen_disco(void)
 	}
 	put_op(&s, 3, 0);
 	emit("disco", "eight-boxes", &s);
-	/* nine peers, straight into the table and through the gate: both saturate */
-	put(&s, OUR, 6); put8(&s, 0);
-	for (unsigned b = 0; b < 9; b++) {
-		uint8_t src[6] = { 0x00, 0x40, 0xab, 0xc4, 0x01, (uint8_t)(0x20 + b) };
-		put_op(&s, 0 | 4 | 8 | 0x10 | (b % 3) << 5, 1);
-		put_rec(&s, g_frame, frame_of(g_frame, reac_ctrl_box_frame_len(8), OUR, src,
-		                              (uint16_t)b, FX_FILLER));
+	/* nine peers, straight into the table and through the gate: both saturate; the
+	 * second seed then serialises the full table into REAC_DISCO_JSON_MAX */
+	for (int full = 0; full < 2; full++) {
+		put(&s, OUR, 6); put8(&s, 0);
+		for (unsigned b = 0; b < 9; b++) {
+			uint8_t src[6] = { 0x00, 0x40, 0xab, 0xc4, 0x01, (uint8_t)(0x20 + b) };
+			put_op(&s, 0 | 4 | 8 | 0x10 | (b % 3) << 5, 1);
+			put_rec(&s, g_frame, frame_of(g_frame, reac_ctrl_box_frame_len(8), OUR, src,
+			                              (uint16_t)b, FX_FILLER));
+		}
+		put_op(&s, 3 | 1 << 2, 0);   /* a 32-byte buffer: too small, refused */
+		put_op(&s, 3 | 2 << 2, 0);
+		if (full)
+			put_op(&s, 3, 0);
+		emit("disco", full ? "nine-peers-full-json" : "nine-peers", &s);
 	}
-	put_op(&s, 3 | 1 << 2, 0);   /* a 32-byte buffer: too small, refused */
-	put_op(&s, 3 | 2 << 2, 0);
-	emit("disco", "nine-peers", &s);
 	/* the peer lock, the gate's edges and its refresh window */
 	put(&s, OUR, 6); put8(&s, 4);
 	put_op(&s, 1, 1);    /* a verified heartbeat from the box latches the lock */
@@ -673,6 +763,38 @@ static void gen_disco(void)
 	put_rec(&s, g_frame, frame_of(g_frame, 600, BCAST, DESK, 1, FX_ANNOUNCE));
 	put_op(&s, 3, 1);
 	emit("disco", "unreadable-rival", &s);
+	/* a box FILLER (type 00 00, an all-zero block) one byte short of a control block */
+	put(&s, OUR, 6); put8(&s, 0);
+	put_op(&s, 0, 1);
+	{
+		static const uint8_t ZERO_WIN[34];
+		frame_of(g_frame, reac_ctrl_box_frame_len(8), OUR, BOX, 0, ZERO_WIN);
+		put_rec(&s, g_frame, 49);
+	}
+	emit("disco", "short-filler-49", &s);
+	/* the box heartbeat with the two FCS bytes a capture keeps, to the hunt */
+	put(&s, OUR, 6); put8(&s, 0);
+	put_op(&s, 2, 1);
+	{
+		size_t n = fixture_frame(g_frame, &FIXTURES[8], 8);
+		g_frame[n] = 0x00;
+		g_frame[n + 1] = 0x00;
+		put_rec(&s, g_frame, n + 2);
+	}
+	emit("disco", "box-hb-fcs-hunt", &s);
+	/* the box heartbeat into the table, then an age with the clock stepped back */
+	put(&s, OUR, 6); put8(&s, 0);
+	put_op(&s, 0, 1);
+	put_rec(&s, g_frame, fixture_frame(g_frame, &FIXTURES[8], 8));
+	put_op(&s, 3 | 0x80, 1);
+	emit("disco", "box-then-clock-back", &s);
+	/* a box's FILLER, then its link-1 bulk SINGLE, both against the peer lock */
+	put(&s, OUR, 6); put8(&s, 0);
+	put_op(&s, 1, 5);
+	put_rec(&s, g_frame, fixture_frame(g_frame, &FIXTURES[0], 0));
+	put_op(&s, 1, 25);
+	put_rec(&s, g_frame, fixture_frame(g_frame, &FIXTURES[5], 5));
+	emit("disco", "box-then-bye-table", &s);
 	free(s.p);
 }
 
@@ -752,6 +874,24 @@ static void gen_boxreg(void)
 	put8(&s, 1); put8(&s, 0x02); put8(&s, 2);
 	put8(&s, 0); put8(&s, 2); put8(&s, 0xff); put8(&s, 0);
 	emit("boxreg", "fabric-16-full", &s);
+	/* one call each, on a 40-slot fabric: the refusals and the edges of the rules */
+	static const struct { const char *name; uint8_t n, ops[12]; } ONE[] = {
+		{ "add-odd-width",      3, { 1, 0x31, 7 } },
+		{ "add-zero-width",     3, { 1, 0x31, 0 } },
+		{ "add-zero-mac",       8, { 5, 0, 0, 0, 0, 0, 0, 8 } },
+		{ "declare-odd-width",  4, { 0, 7, 0xff, 0 } },
+		{ "find-absent",        2, { 2, 0x99 } },
+		{ "find-near-mac",      5, { 1, 0x41, 8, 2, 0x42 } },
+		{ "find-zero-mac",     11, { 0, 4, 0xff, 0, 6, 0, 0, 0, 0, 0, 0 } },
+		{ "pinned-at-end",      4, { 0, 8, 32, 0 } },
+		{ "pinned-then-join",   7, { 0, 16, 4, 0, 1, 0x41, 16 } },
+		{ "rejoin-other-width", 6, { 1, 0x41, 16, 1, 0x41, 8 } },
+	};
+	for (size_t i = 0; i < sizeof ONE / sizeof ONE[0]; i++) {
+		put8(&s, 40);
+		put(&s, ONE[i].ops, ONE[i].n);
+		emit("boxreg", ONE[i].name, &s);
+	}
 	free(s.p);
 }
 
@@ -785,6 +925,35 @@ static void gen_knock(void)
 		put8(&s, 0x03 | 7 << 4); put16(&s, 0x4000);
 	}
 	emit("knock", "desk-talking", &s);
+	/* steps of 65535 << 7 ns from a start of 0: 59 of them and 0x9b05 << 7 ns more
+	 * are exactly REAC_KNOCK_LISTEN_NS (500 ms) */
+	put32(&s, 0);
+	for (int i = 0; i < 59; i++) {
+		put8(&s, 0x02 | 7 << 4); put16(&s, 0xffff);
+	}
+	put8(&s, 0x02 | 7 << 4); put16(&s, 0x9b05);
+	emit("knock", "exact-window", &s);
+	/* a frame at 128 ns, then the window measured from it, to the nanosecond */
+	put32(&s, 0);
+	put8(&s, 0x01 | 7 << 4); put16(&s, 1);
+	for (int i = 0; i < 59; i++) {
+		put8(&s, 0x02 | 7 << 4); put16(&s, 0xffff);
+	}
+	put8(&s, 0x02 | 7 << 4); put16(&s, 0x9b05);
+	emit("knock", "exact-reopen", &s);
+	/* the clock alone past the due time, then a frame and a step in the same instant */
+	put32(&s, 0);
+	for (int i = 0; i < 60; i++) {
+		put8(&s, 0x00 | 7 << 4); put16(&s, 0xffff);
+	}
+	put8(&s, 0x03 | 7 << 4); put16(&s, 0);
+	emit("knock", "frame-at-due", &s);
+	/* a start at 2^53 ns, stepped through a whole window */
+	put32(&s, 0x00400000);
+	for (int i = 0; i < 64; i++) {
+		put8(&s, 0x02 | 7 << 4); put16(&s, 0xffff);
+	}
+	emit("knock", "late-start", &s);
 	free(s.p);
 }
 
@@ -847,6 +1016,26 @@ static void gen_grant(void)
 	put8(&s, 0); put8(&s, 0);         /* no replay */
 	put32(&s, 0); put16(&s, 16);
 	emit("grant", "idle-scheduler", &s);
+	/* the 40-wide box with a buffer of exactly its sweep, REAC_GRANT_SWEEP_LEN(40) =
+	 * 128 rows, the widest sweep the u8 row count can hold */
+	put16(&s, 0); put8(&s, 40); put8(&s, 128);
+	put8(&s, 3);
+	put8(&s, 1); put8(&s, REAC_HEADAMP_PHANTOM); put8(&s, 1);
+	put8(&s, 1); put8(&s, REAC_HEADAMP_SENS); put8(&s, 0x20);
+	put8(&s, 47); put8(&s, REAC_HEADAMP_PAD); put8(&s, 1);
+	put8(&s, 0); put8(&s, 40); put8(&s, 0); put8(&s, 40);
+	put32(&s, 64); put16(&s, 1024);
+	emit("grant", "box-base0-w40-rows128", &s);
+	/* a box whose one slot is 0x30, the first past the head-amp space, its cells
+	 * set there; the hand-built allocation and the replay take 0x2f instead */
+	put16(&s, 0x30); put8(&s, 1); put8(&s, 127);
+	put8(&s, 3);
+	put8(&s, 0x30); put8(&s, REAC_HEADAMP_PHANTOM); put8(&s, 1);
+	put8(&s, 0x30); put8(&s, REAC_HEADAMP_SENS); put8(&s, 0x20);
+	put8(&s, 47); put8(&s, REAC_HEADAMP_PAD); put8(&s, 1);
+	put8(&s, 0x2f); put8(&s, 1); put8(&s, 0x2f); put8(&s, 1);
+	put32(&s, 64); put16(&s, 1024);
+	emit("grant", "box-base48-w1", &s);
 	free(s.p);
 }
 
@@ -940,6 +1129,23 @@ static void gen_pcap(void)
 	pcap_record(&s, 0, 1, 2, g_frame, n, n);
 	s.n -= 10;
 	emit("pcap", "oversized-cut", &s);
+	/* an 8-byte buffer: a 9-byte record one byte over it, alone and then followed by
+	 * a record that fits; and two equal 1-byte records */
+	static const uint8_t NINE[9] = { 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18 };
+	put8(&s, 1);
+	pcap_header(&s, 0);
+	pcap_record(&s, 0, 1, 0, NINE, sizeof NINE, sizeof NINE);
+	emit("pcap", "record-one-byte-over-cap", &s);
+	put8(&s, 1);
+	pcap_header(&s, 0);
+	pcap_record(&s, 0, 1, 2, NINE, sizeof NINE, sizeof NINE);
+	pcap_record(&s, 0, 1, 3, (const uint8_t *)"\x42", 1, 1);
+	emit("pcap", "skipped-then-small", &s);
+	put8(&s, 1);
+	pcap_header(&s, 0);
+	pcap_record(&s, 0, 1, 2, (const uint8_t *)"A", 1, 1);
+	pcap_record(&s, 0, 1, 2, (const uint8_t *)"A", 1, 1);
+	emit("pcap", "two-equal-records", &s);
 	free(s.p);
 }
 
