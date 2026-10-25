@@ -15,9 +15,17 @@ never `assert()`, every outcome an input can choose returns 0, and an input of 6
 is refused. Each frame is copied into an allocation of exactly its length, so a read one byte
 past it is a sanitizer report instead of a quiet read of the next frame.
 
-The harnesses call the decoders as they are. They do not re-implement the protocol: where a
-property needs to know what a frame should say, it asks a second libreac function (the encoder
-for the decoder, the builder for the parser) and requires the two to agree.
+The harnesses call the decoders as they are. Where a property needs to know what a frame
+should say, the harness works the answer out from what the protocol states, never from the
+function it judges: a checksum is summed in the harness, a geometry is counted from the frame
+length, the braid's byte map and the identity poll are written out. Every such constant or rule
+carries a `contract:` line in its comment naming the header line or the `reac.ksy` field it
+comes from (reac-protocol's `spec/reac.ksy`), so the protocol, not the harness, owns it. Where
+two libreac functions must agree (the encoder and the decoder, a builder and its parser), the
+harness requires that as well, beside the check against the contract.
+
+The harnesses are Theorem Labs' rewrite of ours (theorem-labs/oss-verify, branch
+libreac/harness-fixes), taken in 1.8.0 with their modification notice, and extended here.
 
 ## The harnesses
 
@@ -49,35 +57,50 @@ makes with those values chosen by the input.
 Beyond "no crash, no sanitizer report", each harness states properties of the code it drives.
 The header comment of every harness lists them; in short:
 
-- **decode**: a frame decodes exactly when `reac_frame_inspect` calls it valid and the geometry
-  fits; decoding and re-encoding through `reac_braid_encode` gives back the audio region byte
-  for byte, downstream and upstream; `reac_frame_clean_len` only strips the two-byte FCS residue.
+- **decode**: a frame is valid exactly when it has 1492 bytes, EtherType 88 19 and the end
+  marker, in both directions; a frame decodes exactly when it is valid and the geometry fits;
+  a refused decode leaves its output untouched; decoding and re-encoding through
+  `reac_braid_encode` gives back the audio region byte for byte, and every decoded sample is
+  the three bytes the braid map of `reac_braid.h` names, written out in the harness; plain LE is
+  a straight copy, sample by sample; a box return's width is its length's, at a box width only;
+  `reac_frame_clean_len` only strips the two-byte FCS residue.
 - **ctrl**: `reac_ctrl_parse` reads the addresses and counter where the frame carries them; the
   box classifier answers only for a Roland source that is not us and, FILLER aside, only when the
-  block checksum closes; an identity payload points inside its frame and comes only out of a
-  record whose checksums close; a port table is whole four-channel slots; and what
+  block sums to zero (summed in the harness); an identity payload points inside its frame and
+  comes only out of a record whose block and DT1 sums close; a port table is whole four-channel
+  slots; a catalogue row is the first whose declaration is the frame's block; and what
   `reac_ctrl_build_as` emits for each catalogue row parses back as its kind, matches its row,
   declares the row's widths and reassembles to the row's own identity.
-- **identity**: an accepted firmware is four decimal digits and prints as them; a model name is the
-  payload's ASCII up to its first NUL, never empty, always terminated; every formatter refuses or
-  writes a terminated string inside its capacity; `reac_box_name`'s three strings agree.
-- **disco**: a sighting is the frame's own source and never us; no table holds more than
-  `REAC_DISCO_MAX` peers or a MAC twice; a box never turns into a master; `seq` moves on every
-  change and never back; a full table always fits `REAC_DISCO_JSON_MAX`.
-- **scene**: the doors accept exactly an 8904-byte body and a step in range; every step's block
-  sums to zero; the declared lengths sum to the declared total and the payloads concatenated are
-  the body; `reac_ctrl_parse` reads each step back as `SCENE_TRANSFER`.
+- **identity**: a well-formed record is accepted and an ignored one changes nothing; an accepted
+  firmware is four decimal digits and prints as them; a model name is the payload's ASCII up to
+  its first NUL, never empty, always terminated; the decode reads no byte past its length; the
+  formatters print the exact strings the header describes; `reac_box_name`'s three strings are
+  the expected ones, and the catalogue defect mask is exact.
+- **disco**: a sighting is the frame's own source and never us, its geometry the length's; no
+  table holds more than `REAC_DISCO_MAX` peers or a MAC twice; a box never turns into a master;
+  every observe and age changes the table as the header says, and `seq` with it; a
+  serialisation is one JSON array with one object per entry, each field as the header gives it.
+- **scene**: the doors accept exactly an 8904-byte body and a step in range, and a refusal writes
+  nothing; every step is a cd ea link-1 bulk block whose 32 bytes sum to zero and whose payload
+  is the body's slice, the LAST step's trailer included; the declared lengths sum to the declared
+  total and the payloads concatenated are the body; `reac_ctrl_parse` reads each step back as
+  `SCENE_TRANSFER`.
 - **boxreg**: at most five boxes, each an even width inside the fabric, no two overlapping, no MAC
-  twice, a pinned base kept, `add` idempotent, the zero MAC never a box.
+  twice; every call gives the result the header states, worked out on the table before it; no
+  call moves a box or rebinds a MAC; a pinned base kept, `add` idempotent, the zero MAC never a box.
 - **knock**: the licence to drive comes at most once, only after `REAC_KNOCK_LISTEN_NS` of silence
-  since the wire came up and since the last frame heard, and is not withheld once that is true.
+  since the wire came up and since the last frame heard, and is not withheld once that is true;
+  the state follows the header's model.
 - **grant**: a box is admitted exactly when its slots lie in the head-amp space; a sweep is
-  `REAC_GRANT_SWEEP_LEN(width)` rows, each closed, its group-A rows parsing back as the head-amp
-  records for the right channels and values, its group B the identity poll; the scheduler only
-  emits cells the table can hold.
+  `REAC_GRANT_SWEEP_LEN(width)` rows in the header's order, each closed, its two head rows the
+  measured frames, its group-A rows parsing back as the head-amp records for the right channels
+  and values with their DT1 sums closed, its group B the identity poll for the six addresses the
+  header names; an unset cell carries the header's default; the scheduler only emits cells the
+  table can hold, and an unset cell at most once.
 - **pcap**: only the two classic magics open; a record handed back fits the buffer and equals the
   file's record, its 802.1Q tag stripped exactly when it carried one; the timestamp is the
-  header's.
+  header's; a record of 0 bytes is skipped like one larger than the buffer, and the walk ends with
+  0 exactly at the end of the file (since 1.8.0: 0 means the end of the file and nothing else).
 
 ## The seed corpus
 
@@ -90,7 +113,9 @@ parser makes (a short frame, a wrong EtherType, a checksum that does not close, 
 its `f7`, a fragment from the wrong box, a record cut short...), so the corpus reaches the
 refusal paths as well as the accepting ones. Nothing is fetched and no private capture is read;
 the generator is deterministic, and the corpus is committed so CI and a release tarball fuzz
-from the same seeds.
+from the same seeds. The seeds a mutant record names (below) are written by the generator too,
+under the names their records give them; a seed the generator could not derive would be a
+committed file beside the rest, and today there is none.
 
 ## The coverage witness
 
@@ -116,6 +141,14 @@ A check no input reaches is a property nobody tests, and the library's line coun
 it: a seed that was the only one to drive a harness branch can go without a parser line
 falling. A check that needs a new kind of input gets a seed from `fuzz/gen-corpus.c`.
 
+`make fuzz-cov` is also red on a check whose comment names no breakage (the record ratchet,
+below):
+
+```
+  RECORD: fuzz/fuzz_knock.c:86 (abort at line 88) names no breakage and is not marked not a property: ...
+make fuzz-cov: RED -- harness checks with no mutant record: knock
+```
+
 | Harness | Parser lines | Covered | Lines no input can reach |
 | --- | ---: | ---: | --- |
 | decode | 104 | 100.00% | |
@@ -126,30 +159,72 @@ falling. A check that needs a new kind of input gets a seed from `fuzz/gen-corpu
 | boxreg | 87 | 100.00% | |
 | knock | 28 | 100.00% | |
 | grant | 142 | 99.30% | `reac_grant_build_sweep`: the width re-check after `reac_grant_alloc_fits` has already refused that width |
-| pcap | 78 | 100.00% | |
+| pcap | 80 | 100.00% | |
 
-## The mutants
+## The mutant records
 
-`make fuzz-sabotage` proves each harness can find a bug in the code it covers. For every harness,
-`fuzz/sabotage/<harness>.patch` is a one-line change to the parser; the target applies it,
-rebuilds, fuzzes for at most 30 s from the corpus, restores the source with `git checkout --`,
-and is red unless the fuzzer crashed.
+Every property check names, in its comment, one or more breakages of libreac it catches and the
+seed it catches each on, in the format OSS Verify reads
+([build-contract.md](https://github.com/theorem-labs/oss-verify/blob/main/docs/build-contract.md#the-checks-of-a-fuzz-target)):
 
-| Harness | Mutant | Found by |
+```
+/* A refused reac_decode() writes nothing into the output.
+ * mutant: src/reac_decode.c:72 `return -1;` -> `return (out[0] = 1, out[1] = 1, out[2] = 1), -1;`
+ * input: downstream-program-custom-41x12 */
+if (r < 0 && changed(out, olen))
+	abort();
+```
+
+A stop that is not a property (the allocation of a harness buffer failed) says so on one line,
+`not a property: <reason>`, instead. A mutant names a line of this tree, so a change that moves
+a line a record names moves the record with it, in the same commit.
+
+`make fuzz-records` (`fuzz/records.sh`) proves every record at the commit it runs on. For each
+one alone it makes the change (the old text must occur exactly once on that line), builds the
+plain harness (no sanitizer; `fuzz/records-main.c` as the driver; every abort() naming its own
+line through `fuzz/records-abort.h`, which only the harness is compiled with), runs it on the
+named seed, requires exit 134 from that record's own check, and puts the file back. Before any
+change, every named seed must exit 0 on the unchanged harness. A record whose line moved, whose
+seed no longer reaches the check, or whose breakage another check stops first is red, with what
+happened instead:
+
+```
+  RECORD: fuzz/fuzz_knock.c:100: mutant src/reac_knock.c:47 `...` -> `...`, input desk-talking: exit 0
+fuzz-records: 14/16 records met, on 7 checks (1 more marked not a property)
+make fuzz-records: RED -- 2 failures
+```
+
+THE RECORD RATCHET. A check whose comment has no record and no `not a property:` line is
+refused by `make fuzz-records` before anything is built, and by `make fuzz-cov`
+(`fuzz/checks.awk` reads each check's comment the way OSS Verify's record reader does: the
+comment lines directly above the check and its abort, and those inside its `if`). A new check
+lands with its breakage, or it does not land.
+
+## The sabotage patches
+
+`make fuzz-sabotage` proves each harness can find a bug in the code it covers by fuzzing, not
+only on its records. For every harness, `fuzz/sabotage/<harness>.patch` is a one-line change to
+the parser, with the check it breaks and the seed that catches it written above its
+`diff --git` line (OSS Verify reads the directory as `mutants: fuzz/sabotage`); the target
+applies it, rebuilds, fuzzes for at most 30 s from the corpus, restores the source with
+`git checkout --`, and is red unless the fuzzer crashed. Each patch is also one of the records
+above, so `make fuzz-records` proves its seed and its check.
+
+| Harness | Mutant | Caught by |
 | --- | --- | --- |
-| decode | `reac_decode` drops the geometry bound (`nch * ns * 3 <= 1440`) | ASan, heap overflow reading past the frame, within the first second |
-| ctrl | `reac_ctrl_parse` accepts a frame from 16 bytes instead of 50 | the short-frame seed, the property that a frame under 50 bytes is `NONE` |
-| identity | `store_model_name` copies `len` bytes after the kind byte instead of `len - 1` | ASan, heap overflow reading past the payload, within the first second |
-| disco | `reac_disco_table_observe` saturates at `n > MAX` instead of `n >= MAX` | the nine-peer seed, ASan (a ninth entry written past the table) |
-| scene | `reac_ctrl_build_scene_step` accepts any body of at least 24 bytes | the short-body seeds: ASan on the read past the body, or the property that only an 8904-byte body is accepted |
-| boxreg | `reac_boxreg_declare` drops its `n >= REAC_BOXREG_MAX_BOXES` check | the no-room seed, ASan (a sixth box written past the registry) |
-| knock | `reac_knock_step` compares against `opened_ns` instead of `due_ns` | the silent-wire seed, the silence property |
-| grant | `reac_grant_alloc_fits` lets a box's last slot reach `0x30` | the admission property, within the first second |
-| pcap | `pcap_source_next` reads a record one byte larger than the buffer | ASan, heap overflow in `fread`, within the first second |
+| decode | `reac_decode` drops the geometry bound (`nch * ns * 3 <= 1440`) | the seed `downstream-program-custom-42x12`: the decode property (ASan can report the read past the frame first) |
+| ctrl | `reac_ctrl_parse` accepts a frame from 16 bytes instead of 50 | the seed `breakages`, the property that a frame under 50 bytes is `NONE` |
+| identity | `store_model_name` copies `len` bytes after the kind byte instead of `len - 1` | the seed `name-no-nul-sabotage`: the guard-byte property (ASan in its builds) |
+| disco | `reac_disco_table_observe` saturates at `n > MAX` instead of `n >= MAX` | the seed `nine-peers`, ASan (a ninth entry written past the table) or the table bound |
+| scene | `reac_ctrl_build_scene_step` accepts any body of at least 24 bytes | the seed `short-body-8903`, the property that only an 8904-byte body is accepted |
+| boxreg | `reac_boxreg_declare` drops its `n >= REAC_BOXREG_MAX_BOXES` check | the seed `no-room`, ASan (a sixth box written past the registry) or the row property |
+| knock | `reac_knock_step` compares against `opened_ns` instead of `due_ns` | the seed `silent-wire`, the silence property |
+| grant | `reac_grant_alloc_fits` lets a box's last slot reach `0x30` | the seed `box-base48-w1`, the admission property |
+| pcap | `pcap_source_next` reads a record one byte larger than the buffer | the seed `record-one-byte-over-cap`: the fit property (ASan in `fread` in its builds) |
 
-Five of the nine are caught by a seed on its first execution: those seeds exist to reach the
-refusal the mutant removes, which is what makes them the coverage witness for it. The other four
-are found by fuzzing, in under a second.
+Every one of the nine is caught by a seed on its first execution. Four of them (decode, identity,
+grant, pcap) used to be found only by fuzzing, in under a second; each now has the seed that
+catches it.
 
 ## Running
 
@@ -157,7 +232,8 @@ are found by fuzzing, in under a second.
 make fuzz                    # build every harness into build/fuzz/
 make fuzz-run FUZZ_TIME=60   # fuzz each for 60 s; red on any crash
 make fuzz-sabotage           # every mutant must be found
-make fuzz-cov                # the coverage witness
+make fuzz-records            # every check's recorded breakage, proven at this commit
+make fuzz-cov                # the coverage witness and the record ratchet
 make fuzz-corpus             # regenerate fuzz/corpus/ from the fixtures
 ```
 
