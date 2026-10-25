@@ -76,7 +76,7 @@ static const uint8_t HEAD_MARK[34] = {
 
 /* Group B's six identity-page RQ1s, each the address (high, low) and the size it
  * asks for, in the header's order.
- * contract: include/reac/reac_ctrlblk.h:602-604 */
+ * contract: include/reac/reac_ctrlblk.h:611-613 */
 static const uint8_t POLL[REAC_GRANT_GROUPB_LEN][3] = {
 	{ 0x00, 0x00, 4 }, { 0x06, 0x00, 8 }, { 0x10, 0x00, 17 },
 	{ 0x10, 0x11, 9 }, { 0x11, 0x00, 17 }, { 0x11, 0x11, 9 },
@@ -126,11 +126,11 @@ static void check_groupa(const uint8_t row[34], uint8_t ch, uint8_t param,
 	 * contract: include/reac/reac_ctrlblk.h:819-821 (group A: one head-amp record
 	 * per allocated channel per parameter), include/reac/reac_grant.h:100-103 (the
 	 * value is tx's cell when set, else the default)
-	 * mutant: src/reac_ctrlblk.c:323 `REAC_CTRL_HEADAMP` -> `REAC_CTRL_GRANT`
+	 * mutant: src/reac_ctrlblk.c:326 `REAC_CTRL_HEADAMP` -> `REAC_CTRL_GRANT`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1465 `base + c` -> `base + c - 1`
+	 * mutant: src/reac_ctrlblk.c:1468 `base + c` -> `base + c - 1`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1459 `base, p, values[p]` -> `base, p ^ (p < 2), values[p]`
+	 * mutant: src/reac_ctrlblk.c:1462 `base, p, values[p]` -> `base, p ^ (p < 2), values[p]`
 	 * input: box-base0-w8
 	 * mutant: src/reac_grant.c:168 `reac_grant_headamp_value(tx, ch, p);` -> `w == REAC_GRANT_MAX_WIDTH ? 0 : reac_grant_headamp_value(tx, ch, p);`
 	 * input: box-base0-w40-rows128
@@ -152,7 +152,7 @@ static void check_groupa(const uint8_t row[34], uint8_t ch, uint8_t param,
 	 * contract: include/reac/reac_ctrlblk.h:53-55 (the 7-bit DT1 sum), :105-108 (the
 	 * record runs frame[34..39]). A record window that the builder and the verifier
 	 * both read wrong keeps the check above true.
-	 * mutant: src/reac_ctrlblk.c:808 `HEADAMP_REC_LEN  6` -> `HEADAMP_REC_LEN  7`
+	 * mutant: src/reac_ctrlblk.c:811 `HEADAMP_REC_LEN  6` -> `HEADAMP_REC_LEN  7`
 	 * input: box-base0-w8 */
 	if ((s & 0x7f) != 0)
 		abort();
@@ -279,9 +279,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		/* The sweep has SWEEP_LEN(width) rows, and is refused when the buffer is
 		 * smaller.
 		 * contract: include/reac/reac_grant.h:62-65, :96-98
-		 * mutant: src/reac_ctrlblk.c:1430 `max < n` -> `max <= n`
+		 * mutant: src/reac_ctrlblk.c:1433 `max < n` -> `max <= n`
 		 * input: box-base0-w40-rows128
-		 * mutant: src/reac_ctrlblk.c:1471 `return k;` -> `return k + 1;`
+		 * mutant: src/reac_ctrlblk.c:1474 `return k;` -> `return k + 1;`
 		 * input: box-base0-w8 */
 		if (n != (rows >= want ? want : -1))
 			abort();
@@ -290,9 +290,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				check_row(sweep[k]);
 			/* Row 0 is HEAD_ACK and row 4 is HEAD_MARK, byte for byte. Both frames
 			 * pass check_row, so only this check sees them swapped.
-			 * mutant: src/reac_ctrlblk.c:1457 `GRANT_HEAD_ACK` -> `GRANT_HEAD_MARK`
+			 * mutant: src/reac_ctrlblk.c:1460 `GRANT_HEAD_ACK` -> `GRANT_HEAD_MARK`
 			 * input: box-base0-w8
-			 * mutant: src/reac_ctrlblk.c:1461 `GRANT_HEAD_MARK` -> `GRANT_HEAD_ACK`
+			 * mutant: src/reac_ctrlblk.c:1464 `GRANT_HEAD_MARK` -> `GRANT_HEAD_ACK`
 			 * input: box-base0-w8 */
 			if (memcmp(sweep[0], HEAD_ACK, 34) != 0 || memcmp(sweep[4], HEAD_MARK, 34) != 0)
 				abort();
@@ -307,9 +307,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			for (int i = 0; i < REAC_GRANT_GROUPB_LEN; i++) {
 				uint8_t poll[34];
 				/* Group B is the identity poll, byte for byte.
-				 * mutant: src/reac_ctrlblk.c:1463 `GRANT_GROUPB[i]` -> `GRANT_GROUPB[5 - i]`
+				 * mutant: src/reac_ctrlblk.c:1466 `GRANT_GROUPB[i]` -> `GRANT_GROUPB[5 - i]`
 				 * input: box-base0-w8
-				 * mutant: src/reac_ctrlblk.c:1343 `i >= REAC_GRANT_GROUPB_LEN` -> `i >= REAC_GRANT_GROUPB_LEN - 1`
+				 * mutant: src/reac_ctrlblk.c:1346 `i >= REAC_GRANT_GROUPB_LEN` -> `i >= REAC_GRANT_GROUPB_LEN - 1`
 				 * input: box-base0-w8 */
 				if (reac_ctrl_identity_poll_block(i, poll) != 0 ||
 				    memcmp(poll, sweep[5 + i], 34) != 0)
@@ -319,12 +319,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				 * the same table, so a wrong table keeps it true: each group-B row is
 				 * an RQ1 (marker 12 11) on TAG 05 00 for the i-th address and size,
 				 * written out here.
-				 * contract: include/reac/reac_ctrlblk.h:602-604 (0x0000 (4),
+				 * contract: include/reac/reac_ctrlblk.h:611-613 (0x0000 (4),
 				 * 0x0600 (8), 0x1000 (17), 0x1011 (9), 0x1100 (17), 0x1111 (9)),
 				 * include/reac/reac_grant.h:17 (marker 12 11, TAG 05 00)
-				 * mutant: src/reac_ctrlblk.c:1333 `0x00, 0x00, 0x04, 0x77` -> `0x04, 0x00, 0x00, 0x77`
+				 * mutant: src/reac_ctrlblk.c:1336 `0x00, 0x00, 0x04, 0x77` -> `0x04, 0x00, 0x00, 0x77`
 				 * input: box-base0-w8
-				 * mutant: src/reac_ctrlblk.c:1335 `0x10, 0x00, 0x11, 0x5a` -> `0x10, 0x01, 0x10, 0x5a`
+				 * mutant: src/reac_ctrlblk.c:1338 `0x10, 0x00, 0x11, 0x5a` -> `0x10, 0x01, 0x10, 0x5a`
 				 * input: box-base0-w8 */
 				if (memcmp(sweep[5 + i] + 16, (const uint8_t[]){ 0x12, 0x11, 0x05, 0x00 }, 4) != 0 ||
 				    memcmp(sweep[5 + i] + 20, POLL[i], 3) != 0)

@@ -196,23 +196,23 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 	int sum_ok = len >= REAC_CTRL_BLOCK_END && block_sum_closes(frame);
 	int type_filler = len >= REAC_CTRL_BLOCK_END && frame[16] == 0x00 && frame[17] == 0x00;
 	/* NONE exactly for a frame under 50 B or not 0x8819.
-	 * mutant: src/reac_ctrlblk.c:259 `AUDIO_OFF` -> `TYPE_OFF`
+	 * mutant: src/reac_ctrlblk.c:262 `AUDIO_OFF` -> `TYPE_OFF`
 	 * input: breakages
-	 * mutant: src/reac_ctrlblk.c:259 `frame[13] != 0x19` -> `frame[13] != 0x18`
+	 * mutant: src/reac_ctrlblk.c:262 `frame[13] != 0x19` -> `frame[13] != 0x18`
 	 * input: fixture-filler */
 	if ((k == REAC_CTRL_NONE) == is_8819)
 		abort();
 	/* NULL out is allowed, and gives the same verdict.
-	 * mutant: src/reac_ctrlblk.c:257 `out = &scratch;` -> `return REAC_CTRL_NONE;`
+	 * mutant: src/reac_ctrlblk.c:260 `out = &scratch;` -> `return REAC_CTRL_NONE;`
 	 * input: fixture-filler */
 	if (reac_ctrl_parse(frame, len, NULL) != k)
 		abort();
 	/* The verdict is the kind in out, and the kind has a name.
-	 * mutant: src/reac_ctrlblk.c:277 `return out->kind;` -> `return REAC_CTRL_LINK2;`
+	 * mutant: src/reac_ctrlblk.c:280 `return out->kind;` -> `return REAC_CTRL_LINK2;`
 	 * input: fixture-filler
-	 * mutant: src/reac_ctrlblk.c:220 `"filler"` -> `NULL`
+	 * mutant: src/reac_ctrlblk.c:223 `"filler"` -> `NULL`
 	 * input: fixture-filler
-	 * mutant: src/reac_ctrlblk.c:220 `"filler"` -> `"?"`
+	 * mutant: src/reac_ctrlblk.c:223 `"filler"` -> `"?"`
 	 * input: fixture-filler */
 	if (k != p.kind || !reac_ctrl_kind_name(k) || strcmp(reac_ctrl_kind_name(k), "?") == 0)
 		abort();
@@ -222,31 +222,31 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 	size_t pll = 0;
 	int r = reac_ctrl_identity_reply(frame, len, &addr, &pl, &pll);
 	/* identity_reply returns -1 only for a NULL argument, and none is passed.
-	 * mutant: src/reac_ctrlblk.c:349 `return 0;` -> `return -2;`
+	 * mutant: src/reac_ctrlblk.c:352 `return 0;` -> `return -2;`
 	 * input: fixture-filler */
 	if (r < 0)
 		abort();
 	if (r == 1) {
 		/* A reply comes only from a frame whose block checksum closes, and its
 		 * payload, record checksum and f7 are inside the frame.
-		 * mutant: src/reac_ctrlblk.c:367 `!= 0` -> `< -1`
+		 * mutant: src/reac_ctrlblk.c:370 `!= 0` -> `< -1`
 		 * input: breakages
-		 * mutant: src/reac_ctrlblk.c:373 `- 13` -> `+ 4096`
+		 * mutant: src/reac_ctrlblk.c:376 `- 13` -> `+ 4096`
 		 * input: identity-reply-s1608-firmware */
 		if (!sum_ok || !inside(pl, pll + 2, frame, len))
 			abort();
 		/* The payload starts at block[20], and the SysEx length block[8] is the
 		 * payload and 13 bytes of framing.
-		 * mutant: src/reac_ctrlblk.c:372 `&block[20]` -> `&block[21]`
+		 * mutant: src/reac_ctrlblk.c:375 `&block[20]` -> `&block[21]`
 		 * input: identity-reply-s1608-firmware
-		 * mutant: src/reac_ctrlblk.c:373 `- 13` -> `- 12`
+		 * mutant: src/reac_ctrlblk.c:376 `- 13` -> `- 12`
 		 * input: identity-reply-s1608-firmware */
 		if (pl != blk + 20 || pll + 13 != blk[8])
 			abort();
 		/* The record TAG(2) ADDR(2) PAYLOAD CKSUM sums to 0 mod 128.
 		 * mutant: src/reac_ctrlblk.c:73 `((s & 0x7f) == 0) ? 0 : -1` -> `0`
 		 * input: reply-inner-checksum
-		 * mutant: src/reac_ctrlblk.c:369 `!= 0` -> `< -1`
+		 * mutant: src/reac_ctrlblk.c:372 `!= 0` -> `< -1`
 		 * input: breakages */
 		if (!record_sum_closes(blk + 16, pll + 5))
 			abort();
@@ -261,31 +261,31 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 	memcpy(&before, frag, sizeof before);
 	r = reac_ctrl_identity_fragment(frag, frame, len, &addr, &pl, &pll);
 	/* identity_fragment returns -1 only for a NULL argument.
-	 * mutant: src/reac_ctrlblk.c:1360 `return 0;` -> `return -2;`
+	 * mutant: src/reac_ctrlblk.c:1363 `return 0;` -> `return -2;`
 	 * input: fixture-filler */
 	if (r < 0)
 		abort();
 	/* A frame whose block checksum does not close is corrupt: it neither opens
 	 * nor closes a record, so the reassembly state does not change.
-	 * mutant: src/reac_ctrlblk.c:1366 `!= 0` -> `< -1`
+	 * mutant: src/reac_ctrlblk.c:1369 `!= 0` -> `< -1`
 	 * input: breakages */
 	if (!sum_ok && memcmp(&before, frag, sizeof before) != 0)
 		abort();
 	if (r == 1) {
 		/* The payload, record checksum and f7 are inside the buffer.
-		 * mutant: src/reac_ctrlblk.c:1393 `&r[11]` -> `&r[60]`
+		 * mutant: src/reac_ctrlblk.c:1396 `&r[11]` -> `&r[60]`
 		 * input: fixtures-all */
 		if (!inside(pl, pll + 2, frag->buf, sizeof frag->buf))
 			abort();
 		/* The payload starts after f0 41 dev 00 00 12 12 05 00 addr(2).
-		 * mutant: src/reac_ctrlblk.c:1393 `&r[11]` -> `&r[12]`
+		 * mutant: src/reac_ctrlblk.c:1396 `&r[11]` -> `&r[12]`
 		 * input: fixtures-all */
 		if (pl != frag->buf + 11)
 			abort();
 		/* The reassembled record TAG(2) ADDR(2) PAYLOAD CKSUM sums to 0 mod 128.
 		 * mutant: src/reac_ctrlblk.c:73 `((s & 0x7f) == 0) ? 0 : -1` -> `0`
 		 * input: frag-inner-checksum
-		 * mutant: src/reac_ctrlblk.c:1390 `!= 0` -> `< -1`
+		 * mutant: src/reac_ctrlblk.c:1393 `!= 0` -> `< -1`
 		 * input: breakages */
 		if (!record_sum_closes(frag->buf + 7, pll + 5))
 			abort();
@@ -298,19 +298,19 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 
 	if (is_8819) {
 		/* The addresses and the counter come from the frame.
-		 * mutant: src/reac_ctrlblk.c:263 `frame, 6` -> `frame + 1, 6`
+		 * mutant: src/reac_ctrlblk.c:266 `frame, 6` -> `frame + 1, 6`
 		 * input: fixture-filler
-		 * mutant: src/reac_ctrlblk.c:264 `frame + 6, 6` -> `frame + 7, 6`
+		 * mutant: src/reac_ctrlblk.c:267 `frame + 6, 6` -> `frame + 7, 6`
 		 * input: fixture-filler
-		 * mutant: src/reac_ctrlblk.c:266 `frame[CNT_OFF] |` -> `(frame[CNT_OFF] ^ 1) |`
+		 * mutant: src/reac_ctrlblk.c:269 `frame[CNT_OFF] |` -> `(frame[CNT_OFF] ^ 1) |`
 		 * input: fixture-filler */
 		if (memcmp(p.dst, frame, 6) || memcmp(p.src, frame + 6, 6) ||
 		    p.counter != (uint16_t)(frame[14] | frame[15] << 8))
 			abort();
 		/* FILLER is type 00 00, and only that type.
-		 * mutant: src/reac_ctrlblk.c:275 `t0 == 0x00 && t1 == 0x00` -> `t0 == 0x00`
+		 * mutant: src/reac_ctrlblk.c:278 `t0 == 0x00 && t1 == 0x00` -> `t0 == 0x00`
 		 * input: box-hb-type-0001-bad-checksum
-		 * mutant: src/reac_ctrlblk.c:275 `t1 == 0x00` -> `t1 == 0x01`
+		 * mutant: src/reac_ctrlblk.c:278 `t1 == 0x00` -> `t1 == 0x01`
 		 * input: fixture-filler */
 		if ((k == REAC_CTRL_FILLER) != (frame[16] == 0x00 && frame[17] == 0x00))
 			abort();
@@ -322,9 +322,9 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		if (reac_ctrl_checksum_verify(frame) != (sum_ok ? 0 : -1))
 			abort();
 		/* A head-amp record is only ever a link-4 SINGLE.
-		 * mutant: src/reac_ctrlblk.c:303 `REAC_CTRL_LINK2` -> `REAC_CTRL_HEADAMP`
+		 * mutant: src/reac_ctrlblk.c:306 `REAC_CTRL_LINK2` -> `REAC_CTRL_HEADAMP`
 		 * input: breakages
-		 * mutant: src/reac_ctrlblk.c:311 `REAC_CTRL_RECORD_FRAGMENT` -> `REAC_CTRL_HEADAMP`
+		 * mutant: src/reac_ctrlblk.c:314 `REAC_CTRL_RECORD_FRAGMENT` -> `REAC_CTRL_HEADAMP`
 		 * input: fixture-frag-first */
 		if (k == REAC_CTRL_HEADAMP && (p.link != REAC_LINK_RECORD || p.seg != REAC_SEG_SINGLE))
 			abort();
@@ -336,9 +336,9 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		 * frame[34..40) sum to 0 mod 128.
 		 * mutant: src/reac_ctrlblk.c:73 `((s & 0x7f) == 0) ? 0 : -1` -> `0`
 		 * input: breakages
-		 * mutant: src/reac_ctrlblk.c:1316 `frame[REAC_CTRL_BLOCK_OFF] != REAC_LINK_RECORD` -> `0`
+		 * mutant: src/reac_ctrlblk.c:1319 `frame[REAC_CTRL_BLOCK_OFF] != REAC_LINK_RECORD` -> `0`
 		 * input: fixture-l1-box-hb
-		 * mutant: src/reac_ctrlblk.c:1319 `HEADAMP_REC_OFF` -> `HEADAMP_REC_OFF + 1`
+		 * mutant: src/reac_ctrlblk.c:1322 `HEADAMP_REC_OFF` -> `HEADAMP_REC_OFF + 1`
 		 * input: fixture-l4-headamp */
 		if (reac_ctrl_headamp_record_verify(frame) != want_v)
 			abort();
@@ -377,11 +377,11 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		want_m = row_of_block(blk);
 	/* Only a cdea config-announce names a row, and the row is the first one whose
 	 * declaration is the frame's block.
-	 * mutant: src/reac_ctrlblk.c:717 `return &t[i];` -> `return &t[0];`
+	 * mutant: src/reac_ctrlblk.c:720 `return &t[i];` -> `return &t[0];`
 	 * input: fixture-l1-decl-84
-	 * mutant: src/reac_ctrlblk.c:704 `return NULL;` -> `return reac_box_catalogue(NULL);`
+	 * mutant: src/reac_ctrlblk.c:707 `return NULL;` -> `return reac_box_catalogue(NULL);`
 	 * input: fixture-l1-box-hb
-	 * mutant: src/reac_ctrlblk.c:719 `return NULL;` -> `return t;`
+	 * mutant: src/reac_ctrlblk.c:722 `return NULL;` -> `return t;`
 	 * input: breakages */
 	if (reac_box_catalogue_match(frame, len) != want_m)
 		abort();
@@ -404,7 +404,7 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 			continue;
 		/* A builder only emits a legal geometry. (The n > sizeof out term has no
 		 * record: a builder that makes n too large writes past out before here.)
-		 * mutant: src/reac_ctrlblk.c:380 `+ 2;` -> `+ 3;`
+		 * mutant: src/reac_ctrlblk.c:383 `+ 2;` -> `+ 3;`
 		 * input: round-trip-s1608 */
 		if (n > sizeof out || reac_frame_channels(n) == 0)
 			abort();
@@ -419,11 +419,11 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 			struct reac_box_ports ports;
 			/* The declaration is a config-announce whose block sums to 0, names
 			 * this row, and declares this row's widths.
-			 * mutant: src/reac_ctrlblk.c:247 `return REAC_CTRL_CONFIG_ANNOUNCE;` -> `return REAC_CTRL_BOX_HB;`
+			 * mutant: src/reac_ctrlblk.c:250 `return REAC_CTRL_CONFIG_ANNOUNCE;` -> `return REAC_CTRL_BOX_HB;`
 			 * input: round-trip-s1608
 			 * mutant: src/reac_ctrlblk.c:38 `256 - (s & 0xff)` -> `255 - (s & 0xff)`
 			 * input: round-trip-s1608
-			 * mutant: src/reac_ctrlblk.c:717 `return &t[i];` -> `return &t[0];`
+			 * mutant: src/reac_ctrlblk.c:720 `return &t[i];` -> `return &t[0];`
 			 * input: round-trip-s0808
 			 * mutant: src/reac_ports.c:17 `REAC_SEG_SINGLE` -> `REAC_SEG_FIRST`
 			 * input: round-trip-s1608
@@ -443,9 +443,9 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 		case REAC_BOX_BLOCK_CC001A:
 			/* A firmware or REAC-version record is a GRANT that reads back as
 			 * one identity reply, and ingest takes it.
-			 * mutant: src/reac_ctrlblk.c:322 `REAC_DT1_TAG_HEADAMP` -> `REAC_DT1_TAG_IDENTITY`
+			 * mutant: src/reac_ctrlblk.c:325 `REAC_DT1_TAG_HEADAMP` -> `REAC_DT1_TAG_IDENTITY`
 			 * input: round-trip-s1608
-			 * mutant: src/reac_ctrlblk.c:350 `p.dt1_tag != REAC_DT1_TAG_IDENTITY` -> `p.dt1_tag == REAC_DT1_TAG_IDENTITY`
+			 * mutant: src/reac_ctrlblk.c:353 `p.dt1_tag != REAC_DT1_TAG_IDENTITY` -> `p.dt1_tag == REAC_DT1_TAG_IDENTITY`
 			 * input: round-trip-s1608
 			 * mutant: src/reac_identity.c:78 `return 1;` -> `return 0;`
 			 * input: round-trip-s1608 */
@@ -456,9 +456,9 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 			break;
 		case REAC_BOX_BLOCK_IDENT_FIRST:
 			/* The FIRST fragment is a fragment, and it is kept, not closed.
-			 * mutant: src/reac_ctrlblk.c:311 `REAC_CTRL_RECORD_FRAGMENT` -> `REAC_CTRL_GRANT`
+			 * mutant: src/reac_ctrlblk.c:314 `REAC_CTRL_RECORD_FRAGMENT` -> `REAC_CTRL_GRANT`
 			 * input: round-trip-s0808
-			 * mutant: src/reac_ctrlblk.c:1373 `return 0;` -> `return 1;`
+			 * mutant: src/reac_ctrlblk.c:1376 `return 0;` -> `return 1;`
 			 * input: round-trip-s0808 */
 			if (k != REAC_CTRL_RECORD_FRAGMENT ||
 			    reac_ctrl_identity_fragment(&frag, frame, n, &addr, &pl, &pll) != 0)
@@ -466,9 +466,9 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 			break;
 		case REAC_BOX_BLOCK_IDENT_LAST:
 			/* The LAST fragment closes the record, and ingest takes it.
-			 * mutant: src/reac_ctrlblk.c:306 `out->seg != REAC_SEG_SINGLE` -> `out->seg == REAC_SEG_FIRST`
+			 * mutant: src/reac_ctrlblk.c:309 `out->seg != REAC_SEG_SINGLE` -> `out->seg == REAC_SEG_FIRST`
 			 * input: round-trip-s0808
-			 * mutant: src/reac_ctrlblk.c:1395 `return 1;` -> `return 0;`
+			 * mutant: src/reac_ctrlblk.c:1398 `return 1;` -> `return 0;`
 			 * input: round-trip-s0808
 			 * mutant: src/reac_identity.c:55 `return 1;` -> `return 0;`
 			 * input: round-trip-s0808 */
@@ -480,7 +480,7 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 		default:
 			/* CC0014 and CC0013 are GRANTs whose block sums to 0 mod 256. CC0013 is
 			 * sent raw, so its stored bytes must already close.
-			 * mutant: src/reac_ctrlblk.c:328 `REAC_CTRL_GRANT` -> `REAC_CTRL_LINK2`
+			 * mutant: src/reac_ctrlblk.c:331 `REAC_CTRL_GRANT` -> `REAC_CTRL_LINK2`
 			 * input: round-trip-s1608
 			 * mutant: src/reac_box_synth.c:86 `0x7a` -> `0x7b`
 			 * input: round-trip-s1608 */
@@ -532,9 +532,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		size_t count = 0;
 		const struct reac_box_model *cat = reac_box_catalogue(&count);
 		/* The catalogue is not empty.
-		 * mutant: src/reac_ctrlblk.c:660 `sizeof(BOX_CATALOGUE) / sizeof(BOX_CATALOGUE[0])` -> `0`
+		 * mutant: src/reac_ctrlblk.c:663 `sizeof(BOX_CATALOGUE) / sizeof(BOX_CATALOGUE[0])` -> `0`
 		 * input: round-trip-s1608
-		 * mutant: src/reac_ctrlblk.c:661 `return BOX_CATALOGUE;` -> `return NULL;`
+		 * mutant: src/reac_ctrlblk.c:664 `return BOX_CATALOGUE;` -> `return NULL;`
 		 * input: round-trip-s1608 */
 		if (!cat || count == 0)
 			abort();
@@ -552,9 +552,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		const uint8_t *pl;
 		size_t n;
 		uint8_t code = 0xee, blk[32] = { 0 };
-		/* mutant: src/reac_ctrlblk.c:346 `return -1;` -> `return 0;`
+		/* mutant: src/reac_ctrlblk.c:349 `return -1;` -> `return 0;`
 		 * input: fixture-filler
-		 * mutant: src/reac_ctrlblk.c:1354 `return -1;` -> `return 0;`
+		 * mutant: src/reac_ctrlblk.c:1357 `return -1;` -> `return 0;`
 		 * input: fixture-filler
 		 * mutant: src/reac_ports.c:12 `return -1;` -> `return 0;`
 		 * input: fixture-filler
@@ -564,7 +564,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		 * input: fixture-filler
 		 * mutant: src/reac_ports.c:52 `*first_code = 0;` -> `*first_code = 1;`
 		 * input: fixture-filler
-		 * mutant: src/reac_ctrlblk.c:232 `return "?";` -> `return "!";`
+		 * mutant: src/reac_ctrlblk.c:235 `return "?";` -> `return "!";`
 		 * input: fixture-filler */
 		if (reac_ctrl_identity_reply(NULL, 0, &a, &pl, &n) != -1 ||
 		    reac_ctrl_identity_fragment(&frag, NULL, 0, &a, &pl, &n) != -1 ||

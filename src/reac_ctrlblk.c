@@ -127,12 +127,15 @@ int reac_ctrl_build_scene_step(uint8_t blk[34], const uint8_t *body, size_t n,
 	} else {
 		/* The final chunk fills the SAME 26-byte payload slot as every other one
 		 * but declares only REAC_SCENE_TAIL_BYTES of it as body — the transfer
-		 * ends mid-slot. The 12 bytes behind the body are the fixed trailer of
-		 * reac_ctrlblk.h, reproduced rather than zeroed. Zeroing still satisfies
-		 * the declared length, but this box has punished "functionally equivalent"
-		 * before. */
-		static const uint8_t TAIL_TRAILER[REAC_SCENE_LAST_TRAILER_BYTES] =
-			REAC_SCENE_LAST_TRAILER;
+		 * ends mid-slot. The 12 bytes behind the body are a fixed trailer, not
+		 * desk state: identical in every LAST frame of both the M-200i and the M-300
+		 * establish captures (3/3 each; reac_ctrlblk.h documents them), so they
+		 * are reproduced rather than zeroed. Zeroing still satisfies the declared
+		 * length, but this box has punished "functionally equivalent" before. */
+		static const uint8_t TAIL_TRAILER[12] = {
+			0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+			0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+		};
 		size_t off = REAC_SCENE_BYTES - REAC_SCENE_TAIL_BYTES;
 		blk[SCENE_LINK_OFF] = REAC_LINK_CTRL;
 		blk[SCENE_SEG_OFF]  = REAC_SEG_LAST;

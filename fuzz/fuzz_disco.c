@@ -182,7 +182,7 @@ static void check_sighting(const struct reac_disco_sighting *s, const uint8_t *f
 	 * names the frame's source (bytes 6..11), and is never our own MAC.
 	 * contract: include/reac/reac_disco.h:87 (the frame's own source), :109-110
 	 * (never our own echo); include/reac/reac_ctrlblk.h:38 (the block at [18:50])
-	 * mutant: src/reac_ctrlblk.c:259 `len < AUDIO_OFF` -> `len < 14`
+	 * mutant: src/reac_ctrlblk.c:262 `len < AUDIO_OFF` -> `len < 14`
 	 * input: short-filler-49
 	 * mutant: src/reac_disco.c:142 `p.src, 6` -> `p.src, 5`
 	 * input: fixture-l1-box-hb

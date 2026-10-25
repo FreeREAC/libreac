@@ -150,9 +150,9 @@ int  reac_ctrl_record_cksum_verify(const uint8_t *rec, size_t n);
  * 12 bytes after the body are a fixed trailer, not desk state, identical in every LAST
  * frame of both the M-200i and the M-300 establish captures (3/3 each). reac.ksy
  * (`scene_final_payload.chunk`) calls them padding and gives no value; these are the
- * captured bytes, which reac_ctrl_build_scene_step writes rather than zeros. */
-#define REAC_SCENE_LAST_TRAILER_BYTES 12
-#define REAC_SCENE_LAST_TRAILER { 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00 }
+ * captured bytes, which reac_ctrl_build_scene_step writes rather than zeros:
+ *   00 00 03 00 00 00 01 00 00 00 00 00
+ */
 
 /* WHAT THE BOX VALIDATES. The state-4 commit does three four-byte compares and
  * promotes NOTHING if any one misses, while the transfer still looks complete
