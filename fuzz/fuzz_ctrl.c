@@ -170,15 +170,68 @@ static void check_ports(const uint8_t *block)
 		abort();
 }
 
-/* The first catalogue row whose synthesised declaration is this block, or NULL. */
+/* The declaration a row sends, built here and not by libreac's synthesiser. A
+ * captured row's declaration is its captured config_block. Any other row's is the
+ * grammar: 01 03 00 10, the selector, 00 00, the head-amp strap, the twelve slot
+ * codes in the row's declared order (inputs first as 02, or outputs first and the
+ * inputs as 00), 03 for each slot left, the 11-byte tail, and the check byte that
+ * makes the 32 bytes sum to 0 mod 256. 0 when the twelve slots cannot hold the
+ * row's widths, so the row has no declaration.
+ * contract: include/reac/reac_ctrlblk.h:432-434 (the grammar), :440-443 (the check
+ * byte), :448-454 (a CAPTURED row carries its bytes), :456-472 (port_layout);
+ * include/reac/reac_ports.h:89-96 (the table offset, twelve slots of 4 channels,
+ * the slot codes) */
+static int declaration_of(const struct reac_box_model *m, uint8_t out[REAC_CTRL_BLOCK_LEN])
+{
+	if (m->origin == REAC_BOX_CAPTURED) {
+		memcpy(out, m->config_block, REAC_CTRL_BLOCK_LEN);
+		return 1;
+	}
+	if (m->in_ch < 0 || m->out_ch < 0 || m->in_ch % REAC_PORTS_CH_PER_SLOT ||
+	    m->out_ch % REAC_PORTS_CH_PER_SLOT)
+		return 0;
+	int in_slots = m->in_ch / REAC_PORTS_CH_PER_SLOT;
+	int out_slots = m->out_ch / REAC_PORTS_CH_PER_SLOT;
+	if (in_slots + out_slots > REAC_PORTS_TABLE_SLOTS)
+		return 0;
+	static const uint8_t head[4] = { 0x01, 0x03, 0x00, 0x10 };
+	memcpy(out, head, sizeof head);
+	out[4] = m->selector;
+	out[5] = 0x00;
+	out[6] = 0x00;
+	out[7] = m->headamp_strap;
+	uint8_t *slot = out + REAC_PORTS_TABLE_OFF;
+	int k = 0;
+	if (m->port_layout == REAC_BOX_PORTS_SPLIT_OUT_FIRST) {
+		for (int i = 0; i < out_slots; i++)
+			slot[k++] = REAC_PORT_SLOT_OUT;
+		for (int i = 0; i < in_slots; i++)
+			slot[k++] = REAC_PORT_SLOT_IN_SPLIT;
+	} else {
+		for (int i = 0; i < in_slots; i++)
+			slot[k++] = REAC_PORT_SLOT_IN;
+		for (int i = 0; i < out_slots; i++)
+			slot[k++] = REAC_PORT_SLOT_OUT;
+	}
+	while (k < REAC_PORTS_TABLE_SLOTS)
+		slot[k++] = REAC_PORT_SLOT_EMPTY;
+	memcpy(slot + REAC_PORTS_TABLE_SLOTS, m->tail, sizeof m->tail);
+	unsigned s = 0;
+	for (int i = 0; i < REAC_CTRL_BLOCK_LEN - 1; i++)
+		s += out[i];
+	out[REAC_CTRL_BLOCK_LEN - 1] = (uint8_t)(0x100u - (s & 0xffu));
+	return 1;
+}
+
+/* The first catalogue row whose declaration (declaration_of) is this block, or
+ * NULL. */
 static const struct reac_box_model *row_of_block(const uint8_t *block)
 {
 	size_t count = 0;
 	const struct reac_box_model *cat = reac_box_catalogue(&count);
 	for (size_t i = 0; cat && i < count; i++) {
 		uint8_t blk[REAC_CTRL_BLOCK_LEN];
-		if (reac_box_model_block(&cat[i], REAC_BOX_BLOCK_CONFIG, blk) == 1 &&
-		    memcmp(block, blk, sizeof blk) == 0)
+		if (declaration_of(&cat[i], blk) && memcmp(block, blk, sizeof blk) == 0)
 			return &cat[i];
 	}
 	return NULL;
@@ -384,7 +437,11 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 	if (k == REAC_CTRL_CONFIG_ANNOUNCE && frame[16] == 0xcd && frame[17] == 0xea)
 		want_m = row_of_block(blk);
 	/* Only a cdea config-announce names a row, and the row is the first one whose
-	 * declaration is the frame's block.
+	 * declaration, as the harness builds it (declaration_of), is the frame's block.
+	 * contract: include/reac/reac_ctrlblk.h:432-434, :539-541 (the entry a config
+	 * announce is byte-equal to)
+	 * mutant: src/reac_box_synth.c:105 `out[5] = 0x00;` -> `out[5] = 0x01;`
+	 * input: fixture-l1-decl-84
 	 * mutant: src/reac_ctrlblk.c:720 `return &t[i];` -> `return &t[0];`
 	 * input: fixture-l1-decl-84
 	 * mutant: src/reac_ctrlblk.c:707 `return NULL;` -> `return reac_box_catalogue(NULL);`
@@ -444,6 +501,15 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 			    reac_box_catalogue_match(frame, n) != m ||
 			    reac_ports_parse(frame + REAC_CTRL_BLOCK_OFF, &ports) != 0 ||
 			    ports.in_ch != m->in_ch || ports.out_ch != m->out_ch)
+				abort();
+			uint8_t want[REAC_CTRL_BLOCK_LEN];
+			/* The block the builder sent is the row's declaration, as the harness
+			 * builds it (declaration_of).
+			 * contract: include/reac/reac_ctrlblk.h:432-434, :448-454, :485
+			 * mutant: src/reac_box_synth.c:105 `out[5] = 0x00;` -> `out[5] = 0x01;`
+			 * input: round-trip-s1608 */
+			if (!declaration_of(m, want) ||
+			    memcmp(frame + REAC_CTRL_BLOCK_OFF, want, sizeof want) != 0)
 				abort();
 			break;
 		}
