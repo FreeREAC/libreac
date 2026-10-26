@@ -171,6 +171,22 @@ static size_t fixture_frame(uint8_t *out, const struct fixture *fx, uint16_t cou
 	return frame_of(out, reac_ctrl_box_frame_len(8), OUR, BOX, counter, fx->win);
 }
 
+/* A link-4 record fragment from the box, with the wrapper of FX_FRAG_FIRST: the
+ * segment, and n bytes of body. */
+static size_t frag_frame(uint8_t *out, uint8_t seg, const uint8_t *body, unsigned n,
+                         uint16_t counter)
+{
+	uint8_t win[34] = { 0 };
+	memcpy(win, FX_FRAG_FIRST, 2 + 9);
+	win[2 + 1] = seg;
+	win[2 + 3] = (uint8_t)(n + 5);
+	win[2 + 8] = (uint8_t)n;
+	memcpy(win + 2 + 9, body, n);
+	size_t len = frame_of(out, reac_ctrl_box_frame_len(8), OUR, BOX, counter, win);
+	reac_ctrl_checksum_apply(out);
+	return len;
+}
+
 /* A downstream frame whose 480 samples are all distinct. */
 static size_t program_frame(uint8_t *out, uint16_t counter)
 {
@@ -513,20 +529,30 @@ static void gen_ctrl(void)
 		put_rec(&s, g_frame, n);
 		emit("ctrl", "identity-reply-addr-0011", &s);
 	}
-	/* the S-0808 name record under address 0x1011: the FIRST fragment's address low
-	 * byte 00 becomes 11, the inner checksum in the LAST fragment 1a becomes 09, and
-	 * each block is restamped */
+	/* the S-0808 name record under address 0x1011 (its low byte 0x00 becomes 0x11,
+	 * and the record checksum is restamped), split where it was captured, after 10
+	 * bytes (0x11 opens the LAST) and after 9 (0x10 0x11 open it) */
 	{
-		size_t n = fixture_frame(g_frame, &FIXTURES[17], 17);
-		g_frame[BLK(19)] = 0x11;
-		reac_ctrl_checksum_apply(g_frame);
-		put(&s, OUR, 6); put8(&s, 0);
-		put_rec(&s, g_frame, n);
-		n = fixture_frame(g_frame, &FIXTURES[18], 18);
-		g_frame[BLK(15)] = (uint8_t)((g_frame[BLK(15)] - 0x11) & 0x7f);
-		reac_ctrl_checksum_apply(g_frame);
-		put_rec(&s, g_frame, n);
-		emit("ctrl", "frag-addr-1011", &s);
+		const unsigned first_len = FX_FRAG_FIRST[2 + 8];
+		const unsigned rec_len = first_len + FX_FRAG_LAST[2 + 8];
+		const struct { unsigned cut; const char *name; } split[] = {
+			{ first_len, "frag-addr-1011" },
+			{ 10, "frag-first-10-addr-1011" },
+			{ 9, "frag-first-9-addr-1011" },
+		};
+		uint8_t rec[64];
+		memcpy(rec, FX_FRAG_FIRST + 2 + 9, first_len);
+		memcpy(rec + first_len, FX_FRAG_LAST + 2 + 9, rec_len - first_len);
+		rec[10] = 0x11;
+		reac_ctrl_record_cksum_stamp(rec + 7, rec_len - 8);
+		for (size_t i = 0; i < sizeof split / sizeof split[0]; i++) {
+			unsigned cut = split[i].cut;
+			put(&s, OUR, 6); put8(&s, 0);
+			put_rec(&s, g_frame, frag_frame(g_frame, REAC_SEG_FIRST, rec, cut, 17));
+			put_rec(&s, g_frame, frag_frame(g_frame, REAC_SEG_LAST, rec + cut,
+			                                rec_len - cut, 18));
+			emit("ctrl", split[i].name, &s);
+		}
 	}
 	free(s.p);
 }

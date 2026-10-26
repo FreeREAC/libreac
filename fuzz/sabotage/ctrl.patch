@@ -1,4 +1,4 @@
-Breaks the check of fuzz/fuzz_ctrl.c:282 (reac_ctrl_parse is NONE exactly for a frame under 50 bytes or not 0x8819).
+Breaks the check of fuzz/fuzz_ctrl.c:290 (reac_ctrl_parse is NONE exactly for a frame under 50 bytes or not 0x8819).
 Caught by the seed input "breakages" of fuzz_ctrl.
 
 diff --git a/src/reac_ctrlblk.c b/src/reac_ctrlblk.c
