@@ -53,8 +53,9 @@ int pcap_source_open(struct pcap_source *ps, const char *path);
  * carries no frame and is skipped, like a record larger than cap, and the walk
  * goes on to the record after it; it changes none of the source's last_*
  * fields. Before 1.8.0 an empty record returned its length, 0, and ended the
- * walk. With cap 0 no record with a body can be skipped (the skip reads
- * through buf), so the first such record gives -1. */
+ * walk. Both skips are silent: the reader prints nothing on stderr. With
+ * cap 0 no record with a body can be skipped (the skip reads through buf),
+ * so the first such record gives -1. */
 long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t *ts_usec);
 
 void pcap_source_close(struct pcap_source *ps);

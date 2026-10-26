@@ -159,7 +159,7 @@ make fuzz-cov: RED -- harness checks with no mutant record: knock
 | boxreg | 87 | 100.00% | |
 | knock | 28 | 100.00% | |
 | grant | 142 | 99.30% | `reac_grant_build_sweep`: the width re-check after `reac_grant_alloc_fits` has already refused that width |
-| pcap | 80 | 100.00% | |
+| pcap | 78 | 100.00% | |
 
 ## The mutant records
 

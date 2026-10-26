@@ -69,9 +69,8 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
 			/* Frame larger than the caller buffer (a jumbo/non-REAC packet, or
 			 * a corrupt header). Skip its body and keep going — returning -1
 			 * here is indistinguishable from a read error and would silently
-			 * abort the rest of a multi-thousand-frame capture. */
-			fprintf(stderr, "pcap_source: skipping oversized frame (%u > %zu bytes)\n",
-			        incl, cap);
+			 * abort the rest of a multi-thousand-frame capture. The skip
+			 * writes nothing to stderr. */
 			/* READ past it, don't seek: fseek beyond EOF succeeds, so a record
 			 * cut short inside its own body read as a clean EOF (0) and a
 			 * truncated capture ended quietly. A short discard is the -1 a cut
