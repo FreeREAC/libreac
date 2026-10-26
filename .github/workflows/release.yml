@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   rpm:
-    uses: FreeMixer/.github/.github/workflows/build-rpm.yml@main
+    uses: FreeMixer/.github/.github/workflows/build-rpm.yml@v1
     with:
       package-name: libreac
       binary-names: libreac libreac-devel libreac-transport libreac-transport-devel
@@ -37,7 +37,7 @@ jobs:
       DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
 
   deb:
-    uses: FreeMixer/.github/.github/workflows/build-deb.yml@main
+    uses: FreeMixer/.github/.github/workflows/build-deb.yml@v1
     with:
       package-name: libreac
       binary-names: libreac6 libreac-dev libreac-transport7 libreac-transport-dev
