@@ -194,6 +194,13 @@ fuzz-records: 14/16 records met, on 7 checks (1 more marked not a property)
 make fuzz-records: RED -- 2 failures
 ```
 
+A met record prints nothing. `REC_VERBOSE=1 make fuzz-records` prints each one too, with the
+line whose abort() stopped it:
+
+```
+  met: fuzz/fuzz_ctrl.c:340: mutant src/reac_ctrlblk.c:374 `| block[19]` -> ``, input identity-reply-addr-0011: fires at fuzz/fuzz_ctrl.c:340
+```
+
 THE RECORD RATCHET. A check whose comment has no record and no `not a property:` line is
 refused by `make fuzz-records` before anything is built, and by `make fuzz-cov`
 (`fuzz/checks.awk` reads each check's comment the way OSS Verify's record reader does: the
@@ -233,6 +240,7 @@ make fuzz                    # build every harness into build/fuzz/
 make fuzz-run FUZZ_TIME=60   # fuzz each for 60 s; red on any crash
 make fuzz-sabotage           # every mutant must be found
 make fuzz-records            # every check's recorded breakage, proven at this commit
+REC_VERBOSE=1 make fuzz-records   # the same, and the line each met record fires at
 make fuzz-cov                # the coverage witness and the record ratchet
 make fuzz-corpus             # regenerate fuzz/corpus/ from the fixtures
 ```

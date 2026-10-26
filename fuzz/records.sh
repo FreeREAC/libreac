@@ -27,6 +27,9 @@
 # line is refused here, before anything is built (fuzz/checks.awk reads the comments;
 # fuzz/coverage.sh refuses it too).
 #
+# REC_VERBOSE=1 also prints each record that is met, with the line whose abort()
+# stopped it. Unset, a met record prints nothing.
+#
 # Usage: REC_BUILD=build/records MAKE=make records.sh <harness>...
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -142,6 +145,7 @@ while IFS="$SEP" read -r file abort path line old new input; do
 	fired=$(sed -n 's/^records: abort at //p' "$B/run.err" | tail -1)
 	if [ $rc -eq 134 ] && [ "$fired" = "$file:$abort" ]; then
 		met=$((met + 1))
+		[ -z "${REC_VERBOSE:-}" ] || echo "  met: $where: fires at $fired"
 	elif [ $rc -eq 134 ] && [ -n "$fired" ]; then
 		fail "$where: the check at $fired stops it first"
 	else
