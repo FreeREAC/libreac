@@ -198,7 +198,7 @@ A met record prints nothing. `REC_VERBOSE=1 make fuzz-records` prints each one t
 line whose abort() stopped it:
 
 ```
-  met: fuzz/fuzz_ctrl.c:340: mutant src/reac_ctrlblk.c:374 `| block[19]` -> ``, input identity-reply-addr-0011: fires at fuzz/fuzz_ctrl.c:340
+  met: fuzz/fuzz_ctrl.c:348: mutant src/reac_ctrlblk.c:374 `| block[19]` -> ``, input identity-reply-addr-0011: fires at fuzz/fuzz_ctrl.c:348
 ```
 
 THE RECORD RATCHET. A check whose comment has no record and no `not a property:` line is
