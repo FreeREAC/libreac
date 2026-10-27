@@ -78,9 +78,9 @@ The header comment of every harness lists them; in short:
   box classifier answers only for a Roland source that is not us and, FILLER aside, only when the
   block sums to zero (summed in the harness); an identity payload points inside its frame and
   comes only out of a record whose block and DT1 sums close; a port table is whole four-channel
-  slots; a catalogue row is the first whose declaration is the frame's block; and what
-  `reac_ctrl_build_as` emits for each catalogue row parses back as its kind, matches its row,
-  declares the row's widths and reassembles to the row's own identity.
+  slots; a catalogue row is the first whose declaration is the frame's block; and
+  `reac_ctrl_build_as` emits each block a catalogue row has and no other, which parses back as
+  its kind, matches its row, declares the row's widths and reassembles to the row's own identity.
 - **identity**: a well-formed record is accepted and an ignored one changes nothing; an accepted
   firmware is four decimal digits and prints as them; a model name is the payload's ASCII up to
   its first NUL, never empty, always terminated; the decode reads no byte past its length; the

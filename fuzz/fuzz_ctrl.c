@@ -35,9 +35,9 @@
  *     4-channel slots, and names the first unknown code;
  *   - a catalogue row comes only from a config-announce, and it is the first row
  *     whose declaration is the frame's block;
- *   - THE BUILDERS AND THE PARSERS AGREE: what reac_ctrl_build_as emits for a
- *     catalogue row parses back as the kind it is, matches that row, declares the
- *     row's widths, and its identity records reassemble to the row's own facts.
+ *   - THE BUILDERS AND THE PARSERS AGREE: reac_ctrl_build_as emits each block a
+ *     catalogue row has and no other, which parses back as its kind, matches the
+ *     row, declares the row's widths, and has identity records with the row's facts.
  *
  * Each property has, in its comment, one or more pairs of lines "mutant:" and
  * "input:". A mutant is a one-line change to libreac that makes the property
@@ -513,6 +513,14 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		abort();
 }
 
+/* The width rule, written out here and not taken from the library: each direction
+ * of a box is 0 or an even 2..40 channels.
+ * contract: include/reac/reac_ctrlblk.h:513-515, include/reac/reac.h:70-72 */
+static int box_width(int nch)
+{
+	return nch == 0 || (nch >= 2 && nch <= 40 && nch % 2 == 0);
+}
+
 /* Build a row's blocks and read them back through the parsers. */
 static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uint16_t counter)
 {
@@ -526,6 +534,23 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 	for (int b = REAC_BOX_BLOCK_CONFIG; b <= REAC_BOX_BLOCK_IDENT_LAST; b++) {
 		size_t n = reac_ctrl_build_as(out, m, (enum reac_box_block)b, our, box, counter,
 		                              NULL, 0);
+		int has = box_width(m->in_ch) && box_width(m->out_ch) &&
+		          (m->has_identity_record || (b != REAC_BOX_BLOCK_IDENT_FIRST &&
+		                                      b != REAC_BOX_BLOCK_IDENT_LAST));
+		/* The builder emits a block of a catalogue row exactly when the row has
+		 * it: each block when the two widths are box widths, but the two name
+		 * fragments only when the row has an identity record.
+		 * contract: include/reac/reac_ctrlblk.h:513-515, :524-526
+		 * mutant: src/reac_ctrlblk.c:1225 `return CTRL_CONFIG_ANNOUNCE;` -> `return -1;`
+		 * input: round-trip-s1608
+		 * mutant: src/reac_ctrlblk.c:1226 `return CTRL_COLDCONNECT;` -> `return -1;`
+		 * input: round-trip-s1608
+		 * mutant: src/reac_ctrlblk.c:1227 `return CTRL_COLDCONNECT_0013;` -> `return -1;`
+		 * input: round-trip-s1608
+		 * mutant: src/reac_ctrlblk.c:833 `return m->has_identity_record;` -> `return 1;`
+		 * input: round-trip-s1608 */
+		if ((n != 0) != has)
+			abort();
 		if (n == 0)
 			continue;
 		/* A builder only emits a legal geometry. (The n > sizeof out term has no
