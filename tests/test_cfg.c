@@ -8,8 +8,8 @@
  * This proves the VALUES line up where a shape test cannot see them:
  *   1. the role flag's encoding is enum reac_role's, not a second 0/1;
  *   2. the closed rate list is the REAC_MODE_* descriptors' rates;
- *   3. reac-pw's names (vendored snapshot) resolve to reac_cfg.h's values, and
- *      its refusal tables are indexed right — the idle answer is the same "none"
+ *   3. the refusal tables and the role answers libreac-transport reads resolve to
+ *      reac_cfg.h's values and are indexed right — the idle answer is the same "none"
  *      on both sides, which is the drift this file exists to stop, and every role
  *      answer reac-pw publishes, the tap's "role_tap" included, is declared here;
  *   4. the refusal sentinel is the one libreac's own arbitration publishes. */
@@ -17,8 +17,6 @@
 #include <reac/reac_cfg.h>
 #include <reac/reac_role.h>
 #include <reac/reac_arbitration.h>
-#include "reac_rate_cfg.h"
-#include "reac_role_cfg.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -30,8 +28,6 @@ static int fails;
 
 _Static_assert(REAC_CFG_ROLE_MASTER == REAC_ROLE_MASTER, "role flag 0 is enum reac_role's master");
 _Static_assert(REAC_CFG_ROLE_SLAVE == REAC_ROLE_SLAVE, "role flag 1 is enum reac_role's slave");
-_Static_assert(REAC_CFG_ROLE_VALUE_MASTER == REAC_CFG_ROLE_MASTER, "reac-pw's name is an alias");
-_Static_assert(REAC_CFG_ROLE_VALUE_SLAVE == REAC_CFG_ROLE_SLAVE, "reac-pw's name is an alias");
 
 int main(void)
 {
@@ -47,15 +43,19 @@ int main(void)
 	CHK(reac_rate_snap(5999.0) == REAC_CFG_RATE_48000);
 	CHK(reac_rate_snap(6000.0) == REAC_CFG_RATE_96000);
 
-	/* 3. the consumer's names resolve to the declaration */
-	CHK(strcmp(REAC_CFG_PROP_RATE, "reac.cfg.rate") == 0);
-	CHK(strcmp(REAC_PROP_RATE_REFUSED, "reac.cfg.rate.refused") == 0);
-	CHK(strcmp(REAC_CFG_PROP_ROLE, "reac.cfg.role") == 0);
-	CHK(strcmp(REAC_PROP_ROLE, "reac.role") == 0);
+	/* 3. the names libreac-transport reads resolve to the declaration */
+	CHK(strcmp(REAC_CFG_RATE_PROP, "reac.cfg.rate") == 0);
+	CHK(strcmp(REAC_CFG_RATE_REFUSED_PROP, "reac.cfg.rate.refused") == 0);
+	CHK(strcmp(REAC_CFG_ROLE_PROP, "reac.cfg.role") == 0);
+	CHK(strcmp(REAC_ROLE_PROP, "reac.role") == 0);
+	CHK(strcmp(REAC_ROLE_STATE_APPLIED, "applied") == 0);
 	CHK(strcmp(REAC_ROLE_STATE_REESTABLISH_PENDING, "role_reestablish_pending") == 0);
 	/* the tap's own role answer: reac-pw publishes it, so the one declaration names it */
 	CHK(strcmp(REAC_CFG_ROLE_STATE_TAP, "role_tap") == 0);
-	CHK(strcmp(REAC_ROLE_STATE_TAP, REAC_CFG_ROLE_STATE_TAP) == 0);
+
+	/* the drivable mask: one distinct bit per closed-list rate, all three in ALL_BITS */
+	CHK(REAC_RATE_BIT_44100 == 1u && REAC_RATE_BIT_48000 == 2u && REAC_RATE_BIT_96000 == 4u);
+	CHK(REAC_RATE_ALL_BITS == 7u);
 
 	static const char *const rate_codes[] = REAC_RATE_REFUSE_CODES_INIT;
 	static const char *const role_codes[] = REAC_ROLE_REFUSE_CODES_INIT;
@@ -77,7 +77,7 @@ int main(void)
 		return 1;
 	}
 	printf("OK: reac_cfg — one declaration: the role flag is enum reac_role's, the rate "
-	       "list is the descriptors', reac-pw's names and refusal tables resolve to it, "
+	       "list is the descriptors', the refusal tables and role answers resolve to it, "
 	       "and \"none\" is the one idle refusal\n");
 	return 0;
 }
