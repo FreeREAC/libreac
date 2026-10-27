@@ -566,8 +566,9 @@ size_t reac_ctrl_build_flood_filler(uint8_t *out, const uint8_t bcast[6],
 
 
 
-/* The RETIRED --box pin's one and only remaining job: say ONCE that what somebody
- * typed disagrees with what the wire declared. `*pin` is the raw pin value
+/* The `--box` pin's notice (reac-pw's `--box MODEL[:LABEL]`, the live pin for a fixed
+ * install): say ONCE that what somebody typed disagrees with what the wire declared.
+ * `*pin` is the raw pin value
  * ("s1608" or "s1608:Drums"; NULL = nothing was typed) and is CONSUMED — set to
  * NULL — on the first call that sees a recognized model, whether or not it
  * disagreed. Returns 1 exactly when a notice is due.
