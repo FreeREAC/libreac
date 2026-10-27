@@ -34,9 +34,11 @@
  * REAC_CFG_REFUSED_* codes below — never a silently substituted value.
  *
  * THIS FILE IS THE DECLARATION, AND THE ONLY ONE. reac-pw's reac_rate_cfg.h and
- * reac_role_cfg.h (snapshot in packaging/vendor/reac-pw-headers/) include it and
- * name these macros; they spell none of the strings themselves. A key or code
- * typed a second time anywhere is a red test (tests/conformance-declared-once.sh).
+ * reac_role_cfg.h include it and name these macros; they spell none of the strings
+ * themselves. The refusal enums, the drivable-rate masks and the role answers that
+ * libreac-transport reads (reac_pacer.h, reac_role_swap.h) are declared here too, so
+ * libreac builds without a reac-pw header. A key or code typed a second time
+ * anywhere is a red test (tests/conformance-declared-once.sh).
  */
 #ifndef REAC_CFG_H
 #define REAC_CFG_H
@@ -102,6 +104,13 @@
 #define REAC_CFG_RATE_48000  48000
 #define REAC_CFG_RATE_96000  96000
 
+/* One bit per closed-list rate: the DRIVABLE MASK a segment publishes and the pacer
+ * keeps. REAC_RATE_ALL_BITS is the honest "assume everything not yet measured". */
+#define REAC_RATE_BIT_44100  (1u << 0)
+#define REAC_RATE_BIT_48000  (1u << 1)
+#define REAC_RATE_BIT_96000  (1u << 2)
+#define REAC_RATE_ALL_BITS   (REAC_RATE_BIT_44100 | REAC_RATE_BIT_48000 | REAC_RATE_BIT_96000)
+
 
 /* ---- refusal codes: why `reac.cfg.rate` was refused, on `.refused` -------- */
 
@@ -123,6 +132,40 @@
  * sides of one prop disagreed on its idle value. */
 #define REAC_CFG_REFUSED_NONE               "none"
 
+/* Why a `reac.cfg.rate` assertion was refused. REAC_RATE_REFUSE_NONE doubles as the
+ * published state once a refusal is superseded by an accepted rate. */
+enum reac_rate_refuse {
+	REAC_RATE_REFUSE_NONE = 0,
+	REAC_RATE_REFUSE_NOT_CLOSED,    /* not one of 44100 / 48000 / 96000           */
+	REAC_RATE_REFUSE_NOT_DRIVABLE,  /* in the closed list, outside this segment's */
+	REAC_RATE_REFUSE_ROLE_SLAVE,    /* a slave has no rate setting of its own     */
+	REAC_RATE_REFUSE_MALFORMED,     /* the prop value was not a usable number     */
+};
+
+/* The published code for each rate refusal, indexed by enum reac_rate_refuse: the table a
+ * consumer's refuse-code function returns from, so no code is typed twice. */
+#define REAC_RATE_REFUSE_CODES_INIT { \
+	[REAC_RATE_REFUSE_NONE]         = REAC_CFG_REFUSED_NONE,         \
+	[REAC_RATE_REFUSE_NOT_CLOSED]   = REAC_CFG_REFUSED_NOT_CLOSED,   \
+	[REAC_RATE_REFUSE_NOT_DRIVABLE] = REAC_CFG_REFUSED_NOT_DRIVABLE, \
+	[REAC_RATE_REFUSE_ROLE_SLAVE]   = REAC_CFG_REFUSED_ROLE_SLAVE,   \
+	[REAC_RATE_REFUSE_MALFORMED]    = REAC_CFG_REFUSED_MALFORMED,    \
+}
+
+/* Why a `reac.cfg.role` assertion was refused. REAC_ROLE_REFUSE_NONE doubles as the
+ * published state once a refusal is superseded by an accepted role. Role has no
+ * drivability-style constraint the way rate does, so there is one refusal today. */
+enum reac_role_refuse {
+	REAC_ROLE_REFUSE_NONE = 0,
+	REAC_ROLE_REFUSE_MALFORMED,   /* the prop value was not 0 or 1 */
+};
+
+/* The published code for each role refusal, indexed by enum reac_role_refuse. */
+#define REAC_ROLE_REFUSE_CODES_INIT { \
+	[REAC_ROLE_REFUSE_NONE]      = REAC_CFG_REFUSED_NONE,      \
+	[REAC_ROLE_REFUSE_MALFORMED] = REAC_CFG_REFUSED_MALFORMED, \
+}
+
 /* The assertion's lifecycle, published beside the refusal: an accepted rate re-establishes
  * the segment, so the truth passes through "pending" before it is "applied" and every
  * surface can show the swap instead of guessing at it. */
@@ -138,6 +181,10 @@
 #define REAC_CFG_ROLE_REFUSED_PROP          "reac.cfg.role.refused"
 #define REAC_CFG_ROLE_STATE_APPLIED         "applied"
 #define REAC_CFG_ROLE_STATE_PENDING         "role_reestablish_pending"
+/* The names the role answer is read under in libreac-transport (reac_role_swap.c) and in
+ * reac-pw: aliases of the two above, never a second spelling. */
+#define REAC_ROLE_STATE_APPLIED             REAC_CFG_ROLE_STATE_APPLIED
+#define REAC_ROLE_STATE_REESTABLISH_PENDING REAC_CFG_ROLE_STATE_PENDING
 /* The swap landed on a slave that no master has enrolled yet: the role is right, the
  * job it names is not being done (reac_role_swap.h). */
 #define REAC_CFG_ROLE_STATE_HUNTING         "role_hunting"

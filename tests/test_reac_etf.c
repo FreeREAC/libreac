@@ -36,8 +36,8 @@
 #include <string.h>
 
 /* reac_pacer.h's REAC_CATCHUP_MAX_DEFAULT_US, restated rather than included: that
- * header pulls reac_rate_cfg.h out of a reac-pw checkout, which a standalone build
- * of this test does not have. The two must agree; if the soak's worst debt ever
+ * header pulls in the whole transport surface, which this standalone test does not
+ * need. The two must agree; if the soak's worst debt ever
  * moves, both move. */
 #define REAC_CATCHUP_MAX_DEFAULT_US_MIRROR 2000u
 

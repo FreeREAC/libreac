@@ -51,10 +51,10 @@
 #define REAC_ROLE_SWAP_H
 
 #include <reac/reac_role.h>
-#include "reac_role_cfg.h"  /* the answer vocabulary this one extends (see below) */
+#include <reac/reac_cfg.h>   /* the answer vocabulary this one extends (see below) */
 #include <reac/reac_master.h>   /* enum reac_master_state — the master engine's FSM */
 
-/* The answer strings published on REAC_PROP_ROLE_STATE (reac_role_cfg.h). All
+/* The answer strings published on REAC_PROP_ROLE_STATE (reac-pw's reac_role_cfg.h). All
  * three — applied, pending and this module's HUNTING — are declared once, in
  * libreac's <reac/reac_cfg.h>, and reach here by include, never by copy. */
 #define REAC_ROLE_STATE_HUNTING REAC_CFG_ROLE_STATE_HUNTING
