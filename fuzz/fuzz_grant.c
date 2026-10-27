@@ -99,13 +99,13 @@ static void check_row(const uint8_t row[34])
 	/* Each sweep row is a cd ea link-4 SINGLE, and its block [2..33] sums to 0.
 	 * contract: reac.ksy `frame_type` (0xcdea: control); include/reac/reac_grant.h:4
 	 * (the cdea 04 03 grant), include/reac/reac_ctrlblk.h:46, :66-70
-	 * mutant: include/reac/reac_ctrlblk.h:924 `0xcd` -> `0xce`
+	 * mutant: include/reac/reac_ctrlblk.h:925 `0xcd` -> `0xce`
 	 * input: box-base0-w8
-	 * mutant: include/reac/reac_ctrlblk.h:924 `0xea` -> `0xeb`
+	 * mutant: include/reac/reac_ctrlblk.h:925 `0xea` -> `0xeb`
 	 * input: box-base0-w8
-	 * mutant: include/reac/reac_ctrlblk.h:928 `0x03` -> `0x02`
+	 * mutant: include/reac/reac_ctrlblk.h:925 `0x03` -> `0x02`
 	 * input: box-base0-w8
-	 * mutant: include/reac/reac_ctrlblk.h:926 `0x78` -> `0x79`
+	 * mutant: include/reac/reac_ctrlblk.h:927 `0x78` -> `0x79`
 	 * input: box-base0-w8 */
 	if (row[0] != 0xcd || row[1] != 0xea || row[2] != REAC_LINK_RECORD ||
 	    row[3] != REAC_SEG_SINGLE || (s & 0xff) != 0)
