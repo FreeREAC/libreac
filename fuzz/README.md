@@ -137,6 +137,15 @@ fuzz-cov` is red on any check whose guard no seed executed, naming the file and 
 make fuzz-cov: RED -- harness checks no seed reaches: ctrl
 ```
 
+The guard of a check is its `if`. A brace-less body belongs to the nearest `if`, `else`, `case` or
+`default` above it, never to the `for` headers above that, so a loop whose body never iterates
+leaves its `if` unreached. A guard line with no count in the profile reads as not reached.
+A `default: abort()` has no `if` of its own: its guard is the `switch`, and that the switch ran
+is the only thing the floor can observe there. The arm is never taken by design, so the floor
+holds no independent witness for it; the record above it names the breakage that makes it fire.
+`make fuzz-checks-selftest` (run first by `make fuzz-cov`) feeds these shapes to `checks.awk` and
+`coverage.sh` and requires the strict answer.
+
 A check no input reaches is a property nobody tests, and the library's line count cannot see
 it: a seed that was the only one to drive a harness branch can go without a parser line
 falling. A check that needs a new kind of input gets a seed from `fuzz/gen-corpus.c`.

@@ -468,6 +468,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 #   make fuzz-cov               line coverage of each parser over its seed corpus,
 #                               red below fuzz/coverage-floor.txt or on a harness
 #                               check no seed reaches
+#   make fuzz-checks-selftest   the floor's own guards on inputs built to break them
 #   make fuzz-corpus            regenerate fuzz/corpus/ from the test fixtures
 FUZZ_CC        ?= clang
 FUZZ_TIME      ?= 60
@@ -558,7 +559,12 @@ $(FUZZ_COV_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h $(FUZZ_COV_BUILD)/libreac.a
 	$(FUZZ_CC) $(FUZZ_COV_FLAGS) -fsanitize=fuzzer $(INC) $< $(FUZZ_COV_BUILD)/libreac.a -lm \
 	    $(FUZZ_LDFLAGS_$*) -o $@
 
-fuzz-cov: $(FUZZ_HARNESSES:%=$(FUZZ_COV_BUILD)/fuzz_%)
+# The floor's own guards (fuzz/checks.awk, fuzz/coverage.sh) on inputs built to break
+# them; needs no clang. fuzz-cov runs it first.
+fuzz-checks-selftest:
+	@sh fuzz/checks-selftest.sh
+
+fuzz-cov: fuzz-checks-selftest $(FUZZ_HARNESSES:%=$(FUZZ_COV_BUILD)/fuzz_%)
 	@set -e; for h in $(FUZZ_HARNESSES); do \
 	  rm -f $(FUZZ_COV_BUILD)/$$h.profraw; \
 	  LLVM_PROFILE_FILE=$(FUZZ_COV_BUILD)/$$h.profraw $(FUZZ_COV_BUILD)/fuzz_$$h -runs=0 \
@@ -584,4 +590,4 @@ clean:
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \
-        fuzz fuzz-run fuzz-sabotage fuzz-records fuzz-cov fuzz-corpus
+        fuzz fuzz-run fuzz-sabotage fuzz-records fuzz-cov fuzz-checks-selftest fuzz-corpus
