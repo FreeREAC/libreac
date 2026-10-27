@@ -280,6 +280,12 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.9.0: THE PACE AND ROLE DECLARATIONS ARE LIBREAC'S (FreeREAC/libreac#8). reac_cfg.h gains
+ *        enum reac_rate_refuse, enum reac_role_refuse, their REAC_*_REFUSE_CODES_INIT tables,
+ *        the REAC_RATE_BIT_* / REAC_RATE_ALL_BITS drivable masks and REAC_ROLE_STATE_APPLIED /
+ *        REAC_ROLE_STATE_REESTABLISH_PENDING, and reac_pacer.h and reac_role_swap.h include
+ *        it instead of two reac-pw headers. Installed-header additions only: no symbol or
+ *        struct moves, and LIBREAC_ABI stays 6.
  * 1.8.0: 0 MEANS THE END OF THE FILE AND NOTHING ELSE (#23). pcap_source_next skips a
  *        record of 0 bytes, as it skips one larger than the buffer, where it returned
  *        the record's length, 0, and ended the walk on it. What a public function
@@ -388,7 +394,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 8
+#define LIBREAC_VERSION_MINOR 9
 #define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version

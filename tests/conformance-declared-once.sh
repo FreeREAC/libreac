@@ -14,11 +14,14 @@
 # A source-shape gate in the style of tools/conformance-*.sh:
 #   ARM 1  every macro reac_cfg.h declares has a reader outside reac_cfg.h;
 #   ARM 2  no other header restates one of its string literals under another name;
-#   ARM 3  every vendored reac-pw cfg header includes <reac/reac_cfg.h>;
+#   ARM 3  (retired: libreac no longer vendors reac-pw's cfg headers; ARM 7 keeps it so);
 #   ARM 4  REAC_CODE_LIST is defined only in reac_code.h, and none of its tokens is
 #          typed as a string literal anywhere else;
 #   ARM 5  an RTM_GETQDISC request is built only in reac_etf_qdisc.c;
-#   ARM 6  the tap's tag rule (`& TP_STATUS_VLAN_VALID`) is applied only in reac_topo.c.
+#   ARM 6  the tap's tag rule (`& TP_STATUS_VLAN_VALID`) is applied only in reac_topo.c;
+#   ARM 7  libreac includes no reac-pw header and names no packaging/vendor or REACPW_INCLUDE:
+#          the pure declarations its transport headers use live in reac_cfg.h, so the
+#          build needs nothing from a reac-pw tree.
 # Every arm carries a planted good/bad pair, so it cannot pass (or fail) vacuously.
 #
 #   tests/conformance-declared-once.sh                 libreac's own tree (make test)
@@ -38,7 +41,7 @@ CFG=include/reac/reac_cfg.h
 CODE=include/reac/reac_code.h
 QDISC_HOME=transport/src/reac_etf_qdisc.c
 TAP_HOME=transport/src/reac_topo.c
-SCOPE="src transport include packaging/vendor tools"
+SCOPE="src transport include tools"
 
 # cfg_check <cfg-header> <scope dirs...>: ARMS 1-3. Prints offences, returns their count > 0.
 cfg_check() {
@@ -52,16 +55,6 @@ cfg_check() {
 		fi
 	done
 	cfg_restated "$hdr" "$@" || n=$((n + 1))
-	for v in "$@"; do
-		for h in $(find "$v" -name '*_cfg.h' 2>/dev/null); do
-			[ "$h" = "$hdr" ] && continue
-			case "$h" in */vendor/*) ;; *) continue ;; esac
-			if ! grep -q '#include <reac/reac_cfg.h>' "$h"; then
-				echo "  ARM 3: $h does not include <reac/reac_cfg.h>"
-				n=$((n + 1))
-			fi
-		done
-	done
 	[ "$n" -gt 0 ]
 }
 
@@ -124,6 +117,18 @@ one_home() {
 	[ "$n" -eq 0 ]
 }
 
+# no_reacpw_headers <dirs...>: ARM 7. Returns 0 when nothing reaches for a reac-pw header.
+# Matches code and build files, not prose, so the comments that say why this is gone stay.
+REACPW_RE='packaging/vendor|reac-pw-headers|REACPW_INCLUDE|^[^*]*#[[:space:]]*include[[:space:]]+[<"]reac_(rate|role)_cfg\.h[>"]'
+no_reacpw_headers() {
+	n=0
+	for f in $(grep -rIlE --exclude-dir=.git --exclude=conformance-declared-once.sh "$REACPW_RE" "$@" 2>/dev/null); do
+		echo "  ARM 7: ${f#./} reaches for a reac-pw header ($(grep -hE "$REACPW_RE" "$f" | head -1 | tr -s '[:space:]' ' '))"
+		n=$((n + 1))
+	done
+	[ "$n" -eq 0 ]
+}
+
 QDISC_RE='=[[:space:]]*RTM_GETQDISC\b'
 TAP_RE='&[[:space:]]*TP_STATUS_VLAN_VALID\b'
 
@@ -160,21 +165,24 @@ printf '#define REAC_CODE_LIST(X) \\\n\tX(RC_E_A, "E_A") \\\n\tX(RC_S_B, "S_B")\
 printf 'void d(void) { r.type = RTM_GETQDISC; }\n' > "$tmp/homes/good/$QDISC_HOME"
 printf 'int t(void) { return a.s & TP_STATUS_VLAN_VALID; }\n' > "$tmp/homes/good/$TAP_HOME"
 printf '#include <reac/reac_code.h>\nint u = RC_E_A;\n' > "$tmp/homes/good/use.c"
+printf '#include <reac/reac_cfg.h>\n' > "$tmp/homes/good/own.c"
 printf '/* the home reads\n * (tp_status & TP_STATUS_VLAN_VALID), see d() = RTM_GETQDISC */\n' \
 	> "$tmp/homes/good/include/reac/prose.h"
 cp -R "$tmp/homes/good" "$tmp/homes/bad"
 printf '#define REAC_CODE_LIST(X) X(RC_E_A, "E_A")\n' > "$tmp/homes/bad/codes.h"
 printf 'void q(void) { r.type  = RTM_GETQDISC; }\n' > "$tmp/homes/bad/qdisc.c"
 printf 'int v(void) { return aux.tp_status & TP_STATUS_VLAN_VALID; }\n' > "$tmp/homes/bad/main.c"
-(cd "$tmp/homes/good" && homes_check . >/dev/null) || broken flagged GOOD homes
-bad_out=$(cd "$tmp/homes/bad" && homes_check . 2>&1)
-for arm in "ARM 4: codes.h defines" "ARM 4: token \"E_A\"" "ARM 5: qdisc.c" "ARM 6: main.c"; do
+printf '#include "reac_rate_cfg.h"\n' > "$tmp/homes/bad/rate.h"
+printf 'CFLAGS += -Ipackaging/vendor/reac-pw-headers\n' > "$tmp/homes/bad/rules.mk"
+(cd "$tmp/homes/good" && homes_check . >/dev/null && no_reacpw_headers . >/dev/null) || broken flagged GOOD homes
+bad_out=$(cd "$tmp/homes/bad" && { homes_check .; no_reacpw_headers .; } 2>&1)
+for arm in "ARM 4: codes.h defines" "ARM 4: token \"E_A\"" "ARM 5: qdisc.c" "ARM 6: main.c" "ARM 7: rate.h" "ARM 7: rules.mk"; do
 	case "$bad_out" in *"$arm"*) ;; *) broken missed BAD homes "$arm" ;; esac
 done
 
 fails=0
 # shellcheck disable=SC2086
-if out=$(cfg_check "$CFG" $SCOPE); then
+if out=$(cfg_check "$CFG" $SCOPE tests); then
 	echo "FAIL conformance-declared-once: $CFG is not the one declaration:"
 	echo "$out"
 	fails=1
@@ -182,6 +190,12 @@ fi
 # shellcheck disable=SC2086
 if ! out=$(homes_check $SCOPE); then
 	echo "FAIL conformance-declared-once: a second copy in libreac's own tree:"
+	echo "$out"
+	fails=1
+fi
+# ARM 7 is libreac's own tree only: a consumer legitimately includes reac-pw headers.
+if ! out=$(no_reacpw_headers .); then
+	echo "FAIL conformance-declared-once: libreac reaches for a reac-pw header:"
 	echo "$out"
 	fails=1
 fi
