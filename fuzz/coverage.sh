@@ -15,8 +15,10 @@
 # only together with the change that removed the lines.
 #
 # THE HARNESS FLOOR. Every property check of the harness itself, each abort() in
-# fuzz/fuzz_<harness>.c and the statement that guards it (fuzz/checks.awk), must be
-# executed by at least one seed. A check no seed reaches is a property nobody tests,
+# fuzz/fuzz_<harness>.c and the statement that guards it (fuzz/checks.awk), must have
+# that guard executed by at least one seed (a guard with no count at all reads as not
+# executed). For a `default:` arm the guard is its `switch`: that the switch ran is the
+# only observable, see fuzz/README.md. A check no seed reaches is a property nobody tests,
 # and the library's line count cannot see it; this names the harness file and the
 # line of every such check and turns red.
 #
@@ -113,8 +115,8 @@ for h in "$@"; do
 	if [ "$nchk" -eq 0 ]; then
 		echo "  CHECKS: no property check found in $src"
 		dead="$dead $h"
-	elif awk -F: '$4 == "0" { n++ } END { exit !n }' "$B/$h.checks"; then
-		awk -F: '$4 == "0" { t = $0; sub(/^([^:]*:){5}/, "", t)
+	elif awk -F: '$4 == "0" || $4 == "" { n++ } END { exit !n }' "$B/$h.checks"; then
+		awk -F: '$4 == "0" || $4 == "" { t = $0; sub(/^([^:]*:){5}/, "", t)
 			printf "  CHECK: %s:%d no seed reaches (abort at line %d): %s\n", $1, $2, $3, t }' \
 			"$B/$h.checks"
 		dead="$dead $h"
@@ -144,4 +146,4 @@ done
 [ -z "$dead" ] || echo "make fuzz-cov: RED -- harness checks no seed reaches:$dead"
 [ -z "$norec" ] || echo "make fuzz-cov: RED -- harness checks with no mutant record:$norec"
 [ -z "$low$dead$norec" ] || exit 1
-echo "make fuzz-cov: every harness at or above its coverage floor, every check reached and recorded"
+echo "make fuzz-cov: every harness at or above its coverage floor, every check's guard reached and recorded"
