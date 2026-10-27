@@ -70,6 +70,7 @@ int main(void)
 		"E_LINK_BUDGET", "E_ORPHAN_PAIR", "E_ROSTER_REMOVE", "E_ROSTER_NODE",
 		"S_SEGMENT_HEARD", "S_BUDGET_YIELDED", "S_SEGMENT_UP", "S_SEGMENT_DROPPED",
 		"S_KNOB_SET", "S_KNOB_SUMMARY", "E_UNKNOWN_KNOB", "S_NO_OVERRIDES",
+		"E_NOT_MARKED", "E_KNOCK_TX", "E_WAKE_EDGE",
 	};
 	for (size_t i = 0; i < sizeof reac_pw_tokens / sizeof reac_pw_tokens[0]; i++)
 		if (!declared(reac_pw_tokens[i])) {
