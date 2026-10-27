@@ -60,7 +60,19 @@
 	X(RC_E_UNKNOWN_KNOB,    "E_UNKNOWN_KNOB") \
 	/* status — reac-pw's own */ \
 	X(RC_S_BUDGET_YIELDED,  "S_BUDGET_YIELDED") \
-	X(RC_S_NO_OVERRIDES,    "S_NO_OVERRIDES")
+	X(RC_S_NO_OVERRIDES,    "S_NO_OVERRIDES") \
+	/* A served interface could not be marked `reac-pw:served`: its alias could not be \
+	 * read or written. The segment is served anyway; what is missing is the host being \
+	 * told to keep its network manager off the link. */ \
+	X(RC_E_NOT_MARKED,      "E_NOT_MARKED") \
+	/* The knock on a silent wire could not go out: its deaf sender would not open, or a \
+	 * frame was refused. The wire is still listened to, so a box that speaks first is \
+	 * still served; a cold box on it is not woken until this clears. */ \
+	X(RC_E_KNOCK_TX,        "E_KNOCK_TX") \
+	/* The knock's wake ladder could not make or undo its PHY edge: the link would not go \
+	 * down, or would not come back up; the second leaves the wire down until someone \
+	 * runs the `ip link` line the message names. */ \
+	X(RC_E_WAKE_EDGE,       "E_WAKE_EDGE")
 
 enum reac_code {
 	RC_NONE = 0,
