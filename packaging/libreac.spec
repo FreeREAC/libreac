@@ -2,7 +2,7 @@
 # libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.8.0
+Version:        1.9.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -101,14 +101,12 @@ cc %{build_ldflags} -shared -Wl,-soname,libreac.so.%{abi} -Wl,--no-undefined \
   -o libreac.so.%{version} *.o -lm
 
 # libreac-transport: a second, parallel object family in its own directory, never folded into the
-# glob above, or every transport file would join libreac's own soname. Two of its headers
-# (reac_pacer.h, reac_role_swap.h) #include pure declarations from reac-pw; the vendored snapshot
-# under packaging/vendor lets this build without a reac-pw checkout (see packaging/vendor/README.md).
+# glob above, or every transport file would join libreac's own soname.
 # It links the libreac.so just built, through a development symlink that stays in the build tree.
 ln -s libreac.so.%{version} libreac.so
 mkdir transport-obj
 for f in transport/src/*.c; do
-  cc %{optflags} -fPIC -D_GNU_SOURCE -Iinclude -Itransport/src -Ipackaging/vendor/reac-pw-headers \
+  cc %{optflags} -fPIC -D_GNU_SOURCE -Iinclude -Itransport/src \
      -c "$f" -o transport-obj/"$(basename "$f" .c).o"
 done
 # --no-undefined is the same gate as above: a symbol the transport calls into libreac that libreac
@@ -181,6 +179,14 @@ make test
 %{_libexecdir}/libreac/tests/fake_box
 
 %changelog
+* Tue Oct 27 2026 Pau Aliagas <linuxnow@gmail.com> - 1.9.0-1
+- reac_cfg.h declares the pace and role vocabulary libreac-transport used to
+  take from reac-pw: enum reac_rate_refuse, enum reac_role_refuse, their
+  REAC_*_REFUSE_CODES_INIT tables, the REAC_RATE_BIT_* and REAC_RATE_ALL_BITS
+  masks, and REAC_ROLE_STATE_APPLIED / REAC_ROLE_STATE_REESTABLISH_PENDING.
+  reac_pacer.h and reac_role_swap.h include it, so libreac builds without a
+  reac-pw header, and the vendored copy of reac-pw's two headers is gone (#8).
+
 * Sun Oct 25 2026 Pau Aliagas <linuxnow@gmail.com> - 1.8.0-1
 - pcap_source_next skips a record of 0 bytes and goes on; 0 means the end of
   the file and nothing else. It used to return the empty record's length, 0,

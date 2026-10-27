@@ -28,7 +28,7 @@ override_dh_auto_build:
 	mkdir -p transport-obj
 	for f in transport/src/*.c; do \
 	  $(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -D_GNU_SOURCE -Iinclude -Itransport/src \
-	    -Ipackaging/vendor/reac-pw-headers -c $$f -o transport-obj/$$(basename $$f .c).o || exit 1; \
+	    -c $$f -o transport-obj/$$(basename $$f .c).o || exit 1; \
 	done
 	$(CC) $(LDFLAGS) -shared -Wl,-soname,libreac-transport.so.$(TABI) -Wl,--no-undefined \
 	  -o libreac-transport.so.$(VERSION) transport-obj/*.o -L. -lreac -lm -lpthread

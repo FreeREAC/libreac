@@ -1,3 +1,14 @@
+libreac (1.9.0) unstable; urgency=medium
+
+  * reac_cfg.h declares the pace and role vocabulary libreac-transport used to
+    take from reac-pw: enum reac_rate_refuse, enum reac_role_refuse, their
+    REAC_*_REFUSE_CODES_INIT tables, the REAC_RATE_BIT_* and REAC_RATE_ALL_BITS
+    masks, and REAC_ROLE_STATE_APPLIED / REAC_ROLE_STATE_REESTABLISH_PENDING.
+    reac_pacer.h and reac_role_swap.h include it, so libreac builds without a
+    reac-pw header, and the vendored copy of reac-pw's two headers is gone (#8).
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Tue, 27 Oct 2026 12:00:00 +0000
+
 libreac (1.8.0) unstable; urgency=medium
 
   * pcap_source_next skips a record of 0 bytes and goes on; 0 means the end of

@@ -95,7 +95,6 @@ def build_tu(tmpdir):
     binp = os.path.join(tmpdir, "abi_tu")
     cmd = ["cc", "-g3", "-fno-eliminate-unused-debug-types", "-std=c11",
            "-D_GNU_SOURCE", "-I" + INC,
-           "-I" + os.path.join(TOP, "packaging", "vendor", "reac-pw-headers"),
            "-o", binp, src]
     subprocess.run(cmd, check=True)
     return binp

@@ -8,16 +8,13 @@ A hand-kept Makefile, no build system to configure. You need a C compiler, `make
 ```
 make                                            # libreac.a
 make test                                       # libreac's own suite
-make transport REACPW_INCLUDE=<reac-pw>/src     # libreac-transport.a
-make test-transport REACPW_INCLUDE=packaging/vendor/reac-pw-headers
+make transport                                  # libreac-transport.a
+make test-transport
 ```
 
-`libreac-transport` builds standalone for everything except two headers
-(`reac_pacer.h`, `reac_role_swap.h`) that still `#include` two pure-declaration headers from
-`reac-pw`'s tree (`reac_rate_cfg.h`, `reac_role_cfg.h`). `REACPW_INCLUDE` points the build at a
-`reac-pw` checkout's `src/` for those two, or at the vendored snapshot under
-`packaging/vendor/reac-pw-headers` (see `packaging/vendor/README.md`); unset, every other object
-still builds and only those two fail, loudly, at compile time.
+`libreac-transport` builds from this tree alone: the rate and role vocabulary its headers
+use (the refusal enums, the drivable-rate masks, the role answers) is declared in
+`include/reac/reac_cfg.h`, and no `reac-pw` header is needed.
 
 `make test` and `make test-transport` are exactly what CI runs (`.github/workflows/ci.yml`).
 Every test runs through `tests/run-test.sh`, which gives it a timeout; a test that exits 77
