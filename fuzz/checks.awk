@@ -11,7 +11,7 @@
 # condition ends in the abort, or, for a bare abort() in a block (an `else` arm, a
 # switch's `default:`), the statement that opens that block. <count> is how often the
 # seed corpus executed that statement's first line (empty with plain=1); 0 is a
-# property no seed tests.
+# property no seed tests, and so is a line llvm-cov shows with no count.
 #
 # <records> is what the check's comment documents: the number of its `mutant:` and
 # `input:` pairs, `np` for a `not a property: <reason>` line, `bad` for a record
@@ -91,9 +91,13 @@ function clean(t) {
 	return t
 }
 
-# The first line of the statement that ends on line l.
+# The first line of the statement that ends on line l. A brace-less body belongs to
+# the nearest if, else, case or default above it, not to the loop headers above that:
+# `for (...)` / `for (...)` / `if (c)` / `abort();` is the `if`'s check, so the walk
+# stops at the first line that opens with one of them.
 function stmt_start(l) {
-	while (l > 1 && C[l - 1] != "" && C[l - 1] !~ /[;{}:]$/) l--
+	while (l > 1 && C[l] !~ /^(if|else|case|default)([^A-Za-z0-9_]|$)/ &&
+	       C[l - 1] != "" && C[l - 1] !~ /[;{}:]$/) l--
 	return l
 }
 
@@ -185,6 +189,10 @@ END {
 		if (records) continue
 		t = S[s]
 		gsub(/^[ \t]+/, "", t)
-		printf "%s:%d:%d:%s:%s:%s\n", file, s, l, N[s], r, t
+		# A guard line llvm-cov draws no count for (a label, a bare `case X:`) was
+		# not executed as far as the profile can say: it reads 0, never reached.
+		c = N[s]
+		if (!plain && c == "") c = 0
+		printf "%s:%d:%d:%s:%s:%s\n", file, s, l, c, r, t
 	}
 }
