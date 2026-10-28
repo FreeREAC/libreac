@@ -1239,6 +1239,380 @@ static void gen_pcap(void)
 	free(s.p);
 }
 
+/* ---- qdisc: the etf qdisc read-back over a fake rtnetlink kernel ----
+ *
+ * Each seed is the grammar of fuzz/fuzz_qdisc.c: reads, each an op byte, a device
+ * index, two errno selectors and its reply chunks, each chunk a list of messages
+ * spelled for msg_build. The op byte: bit 0 a state read, bit 1 socket() fails, bit 2
+ * send() fails, bit 3 a NULL out or kind buffer, bit 4 the replies end in a recv()
+ * error, bits 5-7 the root-kind capacity in threes. */
+#define QOP_STATE   1
+#define QOP_NOSOCK  2
+#define QOP_NOSEND  4
+#define QOP_NULL    8
+#define QOP_RECVERR 16
+#define QOP_CAP(n)  ((n) / 3 << 5)
+
+static void qread(struct seed *s, unsigned op, int ifindex, unsigned nchunks)
+{
+	put8(s, op);
+	put8(s, (unsigned)(uint8_t)ifindex);
+	put8(s, 0);   /* ENOBUFS, when a call fails */
+	put8(s, 0);   /* ENOBUFS, when the replies end in an error */
+	put8(s, nchunks);
+}
+static void qchunk(struct seed *s, unsigned nmsgs)
+{
+	put8(s, 0);
+	put8(s, nmsgs);
+}
+/* a qdisc message: of the device asked for or another, root or a child, nattr
+ * attributes follow; `unpadded` leaves its length unpadded */
+static void qmsg(struct seed *s, int other, int root, unsigned nattr, int unpadded)
+{
+	put8(s, unpadded ? 6 : 0);
+	put8(s, (unsigned)(other ? 1 : 0) | (root ? 2 : 0));
+	put8(s, nattr);
+}
+static void qkind_etf(struct seed *s)
+{
+	put8(s, 0);
+}
+/* a kind by its index in msg_build's table (0 fq_codel, 1 etf, 2 "", 3 etfx, 4 et,
+ * 5 mq), with or without its NUL: the attribute byte that selects it */
+static void qkind(struct seed *s, unsigned idx, int nonul)
+{
+	for (unsigned a = 0; a < 256; a++)
+		if (a % 6 == 1 && (a >> 3) % 6 == idx && !!(a & 0x80) == !!nonul) {
+			put8(s, a);
+			return;
+		}
+	fprintf(stderr, "gen-corpus: no attribute byte for kind %u\n", idx);
+	exit(1);
+}
+static void qstats2(struct seed *s, uint32_t bytes, uint32_t packets, uint32_t drops,
+                    uint32_t over)
+{
+	put8(s, 2);
+	put8(s, 2);
+	put8(s, 0); put32(s, bytes); put32(s, packets); put32(s, 0);
+	put8(s, 1); put32(s, 0); put32(s, drops); put32(s, over);
+}
+static void qstats1(struct seed *s, int whole, uint32_t bytes, uint32_t packets,
+                    uint32_t drops, uint32_t over)
+{
+	put8(s, whole ? 3 : 4);
+	put32(s, bytes); put32(s, packets); put32(s, drops); put32(s, over);
+}
+static void qdone(struct seed *s)
+{
+	put8(s, 1);
+}
+static void qerror(struct seed *s, unsigned c)
+{
+	put8(s, 2);
+	put8(s, c);
+}
+static void qraw(struct seed *s, const char *p, unsigned n)
+{
+	put8(s, 1);
+	put16(s, n);
+	put(s, p, n);
+}
+
+static void gen_qdisc(void)
+{
+	struct seed s = { 0 };
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 3);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 0, 2, 0); qkind_etf(&s); qstats2(&s, 500, 5, 4, 1);
+	qdone(&s);
+	emit("qdisc", "two-etf-qdiscs", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 3);
+	qmsg(&s, 1, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 7, 1, 1, 1);
+	qdone(&s);
+	emit("qdisc", "other-device", &s);
+
+	/* etfx, fq_codel, et, "etf" with no NUL, a second kind after a first: none counts */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 7);
+	qmsg(&s, 0, 1, 2, 0); qkind(&s, 3, 0); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 0, 2, 0); qkind(&s, 0, 0); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 0, 2, 0); qkind(&s, 4, 0); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 0, 2, 0); qkind(&s, 1, 1); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 0, 3, 0); qkind(&s, 5, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 0, 2, 0); qkind_etf(&s); qstats2(&s, 1, 1, 1, 1);
+	qdone(&s);
+	emit("qdisc", "other-kinds", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats1(&s, 0, 900, 9, 4, 6);
+	qdone(&s);
+	emit("qdisc", "stats1-short", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats1(&s, 1, 900, 9, 4, 6);
+	qdone(&s);
+	emit("qdisc", "stats1-only", &s);
+
+	/* the DONE ends the dump: a qdisc after it in the same chunk, and one in a later
+	 * chunk, are never read */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 2);
+	qchunk(&s, 2);
+	qdone(&s);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	qchunk(&s, 1);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	emit("qdisc", "done-then-more", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 1);
+	qerror(&s, 0);     /* an ACK: no dump at all */
+	emit("qdisc", "error-ack", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 1);
+	qerror(&s, 196);   /* -EPERM, cut after its code */
+	emit("qdisc", "error-short", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 1);
+	qerror(&s, 4);     /* a positive code */
+	emit("qdisc", "error-positive", &s);
+
+	/* the replies stop: the poll times out */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 1);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	emit("qdisc", "replies-end", &s);
+
+	/* the replies stop: the socket reads as ready and the read fails */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_RECVERR, 3, 1);
+	qchunk(&s, 1);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	emit("qdisc", "recv-fails", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_NOSOCK, 3, 0);
+	emit("qdisc", "socket-fails", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_NOSEND, 3, 0);
+	emit("qdisc", "send-fails", &s);
+
+	/* an index no device has, a NULL out, and the same two for a state read */
+	s.n = 0;
+	put8(&s, 3);
+	qread(&s, 0, 0, 0);
+	qread(&s, QOP_NULL, 5, 0);
+	qread(&s, QOP_STATE | QOP_CAP(9), 0, 0);
+	emit("qdisc", "index-zero", &s);
+
+	/* two chunks, the DONE in the second; a raw chunk of a header too short */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 9, 3);
+	qchunk(&s, 1);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1, 2, 3, 4);
+	qraw(&s, "\x10\0\0\0\x24\0\0", 7);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 0, 1, 0); qkind_etf(&s);
+	qdone(&s);
+	emit("qdisc", "multi-chunk", &s);
+
+	/* the last message of the reply is not padded */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 1);
+	qmsg(&s, 0, 1, 1, 1); qkind_etf(&s);
+	emit("qdisc", "unpadded-last", &s);
+
+	/* a kind attribute with no payload at all, and an empty kind */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 3);
+	qmsg(&s, 0, 1, 1, 0); qkind(&s, 2, 1);
+	qmsg(&s, 0, 1, 1, 0); qkind(&s, 2, 0);
+	qdone(&s);
+	emit("qdisc", "kind-empty", &s);
+
+	/* a qdisc message too short for its tcmsg, another type, a header too short, a
+	 * header that runs far past the chunk, an unpadded last message */
+	s.n = 0;
+	put8(&s, 3);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 3);
+	put8(&s, 3);
+	put8(&s, 4);
+	put8(&s, 5);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 1);
+	put8(&s, 7); put8(&s, 0x80);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 1, 0); qkind_etf(&s);
+	qmsg(&s, 0, 0, 1, 1); qkind_etf(&s);
+	emit("qdisc", "malformed", &s);
+
+	/* a DONE whose length runs past the bytes read, but not past the chunk */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	put8(&s, 7); put8(&s, 5);   /* 16 + 24 bytes claimed, 16 present */
+	emit("qdisc", "overlong-header", &s);
+
+	/* a qdisc with its stats before its kind, one with no kind at all, and the same
+	 * two on a state read: a kind is looked for past other attributes, and a qdisc
+	 * without one is nothing */
+	s.n = 0;
+	put8(&s, 2);
+	qread(&s, 0, 3, 1);
+	qchunk(&s, 3);
+	qmsg(&s, 0, 1, 2, 0); qstats2(&s, 1000, 10, 2, 3); qkind_etf(&s);
+	qmsg(&s, 0, 0, 1, 0); qstats2(&s, 1000, 10, 2, 3);
+	qdone(&s);
+	qread(&s, QOP_STATE | QOP_CAP(9), 3, 1);
+	qchunk(&s, 3);
+	qmsg(&s, 0, 1, 1, 0); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 0, 2, 0); qstats2(&s, 1000, 10, 2, 3); qkind_etf(&s);
+	qdone(&s);
+	emit("qdisc", "kind-after-stats", &s);
+
+	/* 65 chunks, the DONE in the last: one read past the bound */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 0xc0 + 5);
+	qchunk(&s, 1);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	for (int c = 1; c < 64; c++)
+		qchunk(&s, 0);
+	qchunk(&s, 1);
+	qdone(&s);
+	emit("qdisc", "sixty-five-chunks", &s);
+
+	/* 64 chunks, the DONE in the last: the bound exactly */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, 0, 3, 0xc0 + 4);
+	qchunk(&s, 1);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	for (int c = 1; c < 63; c++)
+		qchunk(&s, 0);
+	qchunk(&s, 1);
+	qdone(&s);
+	emit("qdisc", "sixty-four-chunks", &s);
+
+	/* ---- state reads ---- */
+
+	/* a root etf: PRESENT, named */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_STATE | QOP_CAP(9), 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	qdone(&s);
+	emit("qdisc", "state-present", &s);
+
+	/* etf per queue under an mq root, the child dumped first: PRESENT, the root named */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_STATE | QOP_CAP(9), 3, 1);
+	qchunk(&s, 4);
+	qmsg(&s, 0, 0, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	qmsg(&s, 0, 1, 1, 0); qkind(&s, 5, 0);
+	qmsg(&s, 0, 0, 2, 0); qkind_etf(&s); qstats2(&s, 500, 5, 4, 1);
+	qdone(&s);
+	emit("qdisc", "state-etf-under-mq", &s);
+
+	/* a root fq_codel and another device's etf: NONE */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_STATE | QOP_CAP(9), 3, 1);
+	qchunk(&s, 3);
+	qmsg(&s, 0, 1, 1, 0); qkind(&s, 0, 0);
+	qmsg(&s, 1, 1, 1, 0); qkind_etf(&s);
+	qdone(&s);
+	emit("qdisc", "state-none", &s);
+
+	/* the root's name cut to the buffer: "fq" of fq_codel in three bytes */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_STATE | QOP_CAP(3), 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 1, 0); qkind(&s, 0, 0);
+	qdone(&s);
+	emit("qdisc", "state-kind-cut", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_STATE | QOP_NOSOCK | QOP_CAP(9), 3, 0);
+	emit("qdisc", "state-socket-fails", &s);
+
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_STATE | QOP_NOSEND | QOP_CAP(9), 3, 0);
+	emit("qdisc", "state-send-fails", &s);
+
+	/* no reply at all: UNREADABLE, not NONE */
+	s.n = 0;
+	put8(&s, 1);
+	qread(&s, QOP_STATE | QOP_CAP(9), 3, 0);
+	emit("qdisc", "state-no-reply", &s);
+
+	/* the dump errors after an etf was seen: still PRESENT; then no buffer, and a
+	 * buffer of no capacity */
+	s.n = 0;
+	put8(&s, 3);
+	qread(&s, QOP_STATE | QOP_CAP(9), 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 2, 0); qkind_etf(&s); qstats2(&s, 1000, 10, 2, 3);
+	qerror(&s, 1);     /* -EPERM */
+	qread(&s, QOP_STATE | QOP_NULL, 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 1, 0); qkind_etf(&s);
+	qdone(&s);
+	qread(&s, QOP_STATE, 3, 1);
+	qchunk(&s, 2);
+	qmsg(&s, 0, 1, 1, 0); qkind(&s, 0, 0);
+	qdone(&s);
+	emit("qdisc", "state-error-and-no-buffer", &s);
+}
+
 int main(int argc, char **argv)
 {
 	if (argc != 2) {
@@ -1256,5 +1630,6 @@ int main(int argc, char **argv)
 	gen_knock();
 	gen_grant();
 	gen_pcap();
+	gen_qdisc();
 	return 0;
 }

@@ -73,7 +73,10 @@ static int qdisc_dump(int ifindex, qdisc_each_fn each, void *ctx, int *readable)
 		}
 		*readable = 1;
 		size_t len = (size_t)n, off = 0;
-		while (len - off >= sizeof(struct nlmsghdr)) {
+		/* `off` steps by the ALIGNED length, so after an unpadded last message it
+		 * stands past `len`: the remainder is never subtracted, or it wraps and the
+		 * walk reads whatever the buffer held before the reply. */
+		while (off + sizeof(struct nlmsghdr) <= len) {
 			const struct nlmsghdr *nh = (const struct nlmsghdr *)(buf + off);
 			size_t l = nh->nlmsg_len;
 			if (l < sizeof(struct nlmsghdr) || l > len - off)

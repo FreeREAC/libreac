@@ -1,7 +1,8 @@
 # Fuzzing libreac
 
-libreac decodes Ethernet frames a stagebox or a desk sends, and the bytes it reads off a
-capture file. Every function that reads those bytes has a libFuzzer harness here, built with
+libreac decodes Ethernet frames a stagebox or a desk sends, the bytes it reads off a
+capture file, and the rtnetlink replies libreac-transport reads back from the kernel. Every
+function that reads those bytes has a libFuzzer harness here, built with
 clang under AddressSanitizer and UndefinedBehaviorSanitizer and run in CI on every push and
 pull request.
 
@@ -40,6 +41,7 @@ libreac/harness-fixes), taken in 1.8.0 with their modification notice, and exten
 | `fuzz_knock` | `reac_knock_init`, `_heard`, `_step` (`src/reac_knock.c`) | a start time, then up to 4096 events: the clock advances, a frame is heard, the knock is stepped |
 | `fuzz_grant` | `reac_grant_alloc_fits`, `reac_grant_allocate`, `reac_grant_build_sweep` (`src/reac_grant.c`); the head-amp table and scheduler (`src/reac_headamp_tx.c`) | a base, a width, a sweep buffer size, head-amp cells, a hand-built allocation, a scene replay, and scheduler frames |
 | `fuzz_pcap` | `pcap_source_open`, `pcap_source_next`, `pcap_source_close` (`src/pcap_source.c`) | a record-buffer capacity, then the pcap file itself |
+| `fuzz_qdisc` | `reac_etf_qdisc_state`, `reac_etf_qdisc_stats_read` and the RTM_GETQDISC dump walker under them (`transport/src/reac_etf_qdisc.c`) | up to three reads, each a device index, which calls fail, and the reply chunks the fake kernel hands out, message by message |
 
 `reac_scene_body.c` holds no parser: it is the 8904-byte body libreac ships. The code that
 indexes into a scene body is the transfer framing in `reac_ctrlblk.c`, so that is what
@@ -51,6 +53,14 @@ makes with those values chosen by the input.
 `pcap_source_open()` takes a path. `fuzz_pcap` is linked with `-Wl,--wrap=fopen`: the one path
 `<fuzz-input>` opens the input through `fmemopen()`, and every other path reaches the real
 `fopen()`. The library is unchanged and opens no file.
+
+`reac_etf_qdisc.c` talks to a netlink socket. For `fuzz_qdisc` that one file of libreac-transport
+is compiled with `socket`, `send`, `poll`, `recv` and `close` renamed (the Makefile's `FUZZ_NET`)
+to the fake kernel of `fuzz/netlink.h`, which hands the reply chunks the input spelled to each
+`recv()`, says through `poll()` whether one is queued, keeps every request sent, and fills the
+rest of the reader's buffer past each reply with error messages it never sent, so a walk that
+runs past the bytes read answers an error the harness can see instead of whatever was there.
+The source is unchanged; the three fuzz builds each have an object of it with the renames.
 
 ### What each harness checks
 
@@ -97,6 +107,13 @@ The header comment of every harness lists them; in short:
   and values with their DT1 sums closed, its group B the identity poll for the six addresses the
   header names; an unset cell carries the header's default; the scheduler only emits cells the
   table can hold, and an unset cell at most once.
+- **qdisc**: one request per read, a dump of every qdisc; the reader closes the socket it
+  opened and uses no other; a dump that reached `NLMSG_DONE` answers 0 and exactly the sums over
+  the device's `etf` qdiscs (`TCA_STATS2`, else `TCA_STATS`), another device, another kind and an
+  unterminated kind counting nothing; a dump that failed answers its error and leaves the
+  counters untouched, replies that stop are `-ETIMEDOUT` within 64 reads, and nothing past the
+  bytes read is walked; the state is `UNREADABLE` when no reply arrived, `PRESENT` when an `etf`
+  was seen anywhere on the device, else `NONE`, with the root qdisc named and cut to the buffer.
 - **pcap**: only the two classic magics open; a record handed back fits the buffer and equals the
   file's record, its 802.1Q tag stripped exactly when it carried one; the timestamp is the
   header's; a record of 0 bytes is skipped like one larger than the buffer, and the walk ends with
@@ -169,6 +186,7 @@ make fuzz-cov: RED -- harness checks with no mutant record: knock
 | knock | 28 | 100.00% | |
 | grant | 142 | 99.30% | `reac_grant_build_sweep`: the width re-check after `reac_grant_alloc_fits` has already refused that width |
 | pcap | 78 | 100.00% | |
+| qdisc | 160 | 98.12% | `qdisc_dump`: the `-EIO` for a `recv()` of 0 bytes, which a netlink socket never returns and the fake kernel does not either |
 
 ## The mutant records
 
@@ -237,8 +255,10 @@ above, so `make fuzz-records` proves its seed and its check.
 | knock | `reac_knock_step` compares against `opened_ns` instead of `due_ns` | the seed `silent-wire`, the silence property |
 | grant | `reac_grant_alloc_fits` lets a box's last slot reach `0x30` | the seed `box-base48-w1`, the admission property |
 | pcap | `pcap_source_next` reads a record one byte larger than the buffer | the seed `record-one-byte-over-cap`: the fit property (ASan in `fread` in its builds) |
+| qdisc | `qdisc_dump` subtracts the walk offset from the bytes read as `size_t`, so an unpadded last message wraps the remainder and the walk runs on into the buffer | the seed `unpadded-last`: the failure property reads the error the fake kernel planted past the reply |
 
-Every one of the nine is caught by a seed on its first execution. Four of them (decode, identity,
+Every one of the ten is caught by a seed on its first execution. The qdisc one is the bug the
+harness found when it arrived in 1.10.0, kept as the mutant. Four of them (decode, identity,
 grant, pcap) used to be found only by fuzzing, in under a second; each now has the seed that
 catches it.
 

@@ -1,3 +1,16 @@
+libreac (1.10.0) unstable; urgency=medium
+
+  * The etf qdisc read-back (reac_etf_qdisc_state, reac_etf_qdisc_stats_read)
+    has a fuzz harness, fuzz_qdisc, over a fake rtnetlink kernel, with 32
+    recorded breakages on 7 checks; it is the witness reac-pw's own copy of
+    the reader waited for (#8, R3).
+  * The dump walker under both reads stops at the bytes recv() returned: it
+    compared the remainder as size_t, so an unpadded last message wrapped it
+    and the walk ran on into the stale rest of the buffer. Found by the new
+    harness; a kernel pads every message, so no rig saw it.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Wed, 28 Oct 2026 02:00:00 +0000
+
 libreac (1.9.0) unstable; urgency=medium
 
   * reac_cfg.h declares the pace and role vocabulary libreac-transport used to
