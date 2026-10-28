@@ -28,8 +28,8 @@ restore() {
 trap 'restore' EXIT
 trap 'restore; exit 130' INT TERM
 
-if ! git diff --quiet -- src; then
-	echo "fuzz-sabotage: src/ has uncommitted changes; refusing to patch over them" >&2
+if ! git diff --quiet -- src transport/src; then
+	echo "fuzz-sabotage: src/ or transport/src/ has uncommitted changes; refusing to patch over them" >&2
 	exit 2
 fi
 
