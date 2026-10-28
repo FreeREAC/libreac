@@ -1,0 +1,11 @@
+Breaks the check of fuzz/fuzz_qdisc.c:459 (a dump that could not be made answers its error and walks no byte it did not read).
+Caught by the seed input "unpadded-last" of fuzz_qdisc.
+
+diff --git a/transport/src/reac_etf_qdisc.c b/transport/src/reac_etf_qdisc.c
+--- a/transport/src/reac_etf_qdisc.c
++++ b/transport/src/reac_etf_qdisc.c
+@@ -78,3 +78,3 @@
+ 		 * walk reads whatever the buffer held before the reply. */
+-		while (off + sizeof(struct nlmsghdr) <= len) {
++		while (len - off >= sizeof(struct nlmsghdr)) {
+ 			const struct nlmsghdr *nh = (const struct nlmsghdr *)(buf + off);

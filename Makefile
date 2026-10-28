@@ -473,7 +473,7 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 FUZZ_CC        ?= clang
 FUZZ_TIME      ?= 60
 FUZZ_BUILD     := $(BUILD_DIR)/fuzz
-FUZZ_HARNESSES := decode ctrl identity disco scene boxreg knock grant pcap
+FUZZ_HARNESSES := decode ctrl identity disco scene boxreg knock grant pcap qdisc
 FUZZ_SAN       := -fsanitize=address,undefined -fno-sanitize-recover=all
 FUZZ_CFLAGS    := -O1 -g -std=c11 -Wall -Wextra -fno-omit-frame-pointer $(FUZZ_SAN)
 FUZZ_BINS      := $(FUZZ_HARNESSES:%=$(FUZZ_BUILD)/fuzz_%)
@@ -496,6 +496,26 @@ $(FUZZ_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h $(FUZZ_BUILD)/libreac.a
 	    $(FUZZ_BUILD)/libreac.a -lm $(FUZZ_LDFLAGS_$*) -o $@
 
 -include $(FUZZ_BINS:=.d)
+
+# fuzz_qdisc drives transport/src/reac_etf_qdisc.c, the one reader of rtnetlink replies,
+# which lives in libreac-transport and talks to a socket. That one file is compiled, for
+# each of the three fuzz builds, with its socket calls renamed to the fake kernel of
+# fuzz/netlink.h (fuzz/fuzz_qdisc.c explains); the library is unchanged.
+FUZZ_NET       := -U_FORTIFY_SOURCE -Dsocket=fuzz_socket -Dsend=fuzz_send -Dpoll=fuzz_poll \
+                  -Drecv=fuzz_recv -Dclose=fuzz_close
+FUZZ_QDISC_SRC := transport/src/reac_etf_qdisc.c
+FUZZ_QDISC_HDR := fuzz/netlink.h include/reac/transport/reac_etf_qdisc.h
+
+$(FUZZ_BUILD)/obj/transport/reac_etf_qdisc.o: $(FUZZ_QDISC_SRC)
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(FUZZ_CFLAGS) -fsanitize=fuzzer-no-link $(FUZZ_NET) -MMD -MP $(INC) -c $< -o $@
+
+-include $(FUZZ_BUILD)/obj/transport/reac_etf_qdisc.d
+
+$(FUZZ_BUILD)/fuzz_qdisc: fuzz/fuzz_qdisc.c fuzz/fuzz.h $(FUZZ_QDISC_HDR) \
+                          $(FUZZ_BUILD)/obj/transport/reac_etf_qdisc.o $(FUZZ_BUILD)/libreac.a
+	$(FUZZ_CC) $(FUZZ_CFLAGS) -fsanitize=fuzzer -MMD -MP -MF $@.d $(INC) $< \
+	    $(FUZZ_BUILD)/obj/transport/reac_etf_qdisc.o $(FUZZ_BUILD)/libreac.a -lm -o $@
 
 fuzz: $(FUZZ_BUILD)/libreac.a $(FUZZ_BINS)
 
@@ -533,6 +553,19 @@ $(REC_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h fuzz/records-abort.h $(REC_BUILD)
 
 -include $(FUZZ_HARNESSES:%=$(REC_BUILD)/fuzz_%.d)
 
+$(REC_BUILD)/obj/transport/reac_etf_qdisc.o: $(FUZZ_QDISC_SRC)
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(REC_CFLAGS) $(FUZZ_NET) -MMD -MP $(INC) -c $< -o $@
+
+-include $(REC_BUILD)/obj/transport/reac_etf_qdisc.d
+
+$(REC_BUILD)/fuzz_qdisc: fuzz/fuzz_qdisc.c fuzz/fuzz.h fuzz/records-abort.h $(FUZZ_QDISC_HDR) \
+                         $(REC_BUILD)/records-main.o $(REC_BUILD)/obj/transport/reac_etf_qdisc.o \
+                         $(REC_BUILD)/libreac.a
+	$(FUZZ_CC) $(REC_CFLAGS) -include fuzz/records-abort.h -MMD -MP -MF $@.d $(INC) $< \
+	    $(REC_BUILD)/records-main.o $(REC_BUILD)/obj/transport/reac_etf_qdisc.o \
+	    $(REC_BUILD)/libreac.a -lm -o $@
+
 fuzz-records:
 	REC_BUILD=$(REC_BUILD) MAKE="$(MAKE)" fuzz/records.sh $(FUZZ_HARNESSES)
 
@@ -558,6 +591,17 @@ $(FUZZ_COV_BUILD)/libreac.a: $(FUZZ_COV_OBJS)
 $(FUZZ_COV_BUILD)/fuzz_%: fuzz/fuzz_%.c fuzz/fuzz.h $(FUZZ_COV_BUILD)/libreac.a
 	$(FUZZ_CC) $(FUZZ_COV_FLAGS) -fsanitize=fuzzer $(INC) $< $(FUZZ_COV_BUILD)/libreac.a -lm \
 	    $(FUZZ_LDFLAGS_$*) -o $@
+
+$(FUZZ_COV_BUILD)/obj/transport/reac_etf_qdisc.o: $(FUZZ_QDISC_SRC)
+	@mkdir -p $(dir $@)
+	$(FUZZ_CC) $(FUZZ_COV_FLAGS) $(FUZZ_NET) -MMD -MP $(INC) -c $< -o $@
+
+-include $(FUZZ_COV_BUILD)/obj/transport/reac_etf_qdisc.d
+
+$(FUZZ_COV_BUILD)/fuzz_qdisc: fuzz/fuzz_qdisc.c fuzz/fuzz.h $(FUZZ_QDISC_HDR) \
+                              $(FUZZ_COV_BUILD)/obj/transport/reac_etf_qdisc.o $(FUZZ_COV_BUILD)/libreac.a
+	$(FUZZ_CC) $(FUZZ_COV_FLAGS) -fsanitize=fuzzer $(INC) $< \
+	    $(FUZZ_COV_BUILD)/obj/transport/reac_etf_qdisc.o $(FUZZ_COV_BUILD)/libreac.a -lm -o $@
 
 # The floor's own guards (fuzz/checks.awk, fuzz/coverage.sh) on inputs built to break
 # them; needs no clang. fuzz-cov runs it first.
