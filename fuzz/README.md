@@ -78,9 +78,9 @@ The header comment of every harness lists them; in short:
   box classifier answers only for a Roland source that is not us and, FILLER aside, only when the
   block sums to zero (summed in the harness); an identity payload points inside its frame and
   comes only out of a record whose block and DT1 sums close; a port table is whole four-channel
-  slots; a catalogue row is the first whose declaration is the frame's block; and what
-  `reac_ctrl_build_as` emits for each catalogue row parses back as its kind, matches its row,
-  declares the row's widths and reassembles to the row's own identity.
+  slots; a catalogue row is the first whose declaration is the frame's block; and
+  `reac_ctrl_build_as` emits each block a catalogue row has and no other, which parses back as
+  its kind, matches its row, declares the row's widths and reassembles to the row's own identity.
 - **identity**: a well-formed record is accepted and an ignored one changes nothing; an accepted
   firmware is four decimal digits and prints as them; a model name is the payload's ASCII up to
   its first NUL, never empty, always terminated; the decode reads no byte past its length; the
@@ -150,7 +150,7 @@ The harnesses are held to a floor of their own. Every property check in `fuzz/fu
 fuzz-cov` is red on any check whose guard no seed executed, naming the file and the line:
 
 ```
-  CHECK: fuzz/fuzz_ctrl.c:136 no seed reaches (abort at line 137): if (reac_identity_ingest(id, addr, pl, pll) < 0)
+  CHECK: fuzz/fuzz_ctrl.c:352 no seed reaches (abort at line 353): if (reac_identity_ingest(id, addr, pl, pll) < 0)
 make fuzz-cov: RED -- harness checks no seed reaches: ctrl
 ```
 
