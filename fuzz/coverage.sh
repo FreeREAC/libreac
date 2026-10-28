@@ -75,6 +75,8 @@ funcs() {
 		reac_headamp_tx_set_resweep reac_headamp_tx_next ;;
 	pcap) echo src/pcap_source.c :: rd_u32 pcap_source_open pcap_source_next \
 		pcap_source_close ;;
+	qdisc) echo transport/src/reac_etf_qdisc.c :: qdisc_dump qdisc_kind state_each \
+		reac_etf_qdisc_state stats_take2 stats_take1 stats_each reac_etf_qdisc_stats_read ;;
 	*) echo "coverage.sh: no function list for harness '$1'" >&2; exit 2 ;;
 	esac
 }
