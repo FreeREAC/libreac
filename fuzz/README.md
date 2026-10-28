@@ -150,7 +150,7 @@ The harnesses are held to a floor of their own. Every property check in `fuzz/fu
 fuzz-cov` is red on any check whose guard no seed executed, naming the file and the line:
 
 ```
-  CHECK: fuzz/fuzz_ctrl.c:136 no seed reaches (abort at line 137): if (reac_identity_ingest(id, addr, pl, pll) < 0)
+  CHECK: fuzz/fuzz_ctrl.c:352 no seed reaches (abort at line 353): if (reac_identity_ingest(id, addr, pl, pll) < 0)
 make fuzz-cov: RED -- harness checks no seed reaches: ctrl
 ```
 
