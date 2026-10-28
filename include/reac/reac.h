@@ -280,6 +280,14 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.10.0: THE QDISC READ-BACK HAS A FUZZ WITNESS, AND WALKS NO BYTE IT DID NOT READ
+ *        (FreeREAC/libreac#8, R3). fuzz_qdisc drives reac_etf_qdisc_state and
+ *        reac_etf_qdisc_stats_read over a fake rtnetlink kernel; it found that the dump
+ *        walker compared the remaining bytes as size_t, so an unpadded last message wrapped
+ *        the remainder and the walk ran on into the stale rest of its buffer. A kernel pads
+ *        every message, so no rig saw it; the walker now stops at the bytes recv() returned.
+ *        What a public function returns for an input changes, so this is a minor; no struct
+ *        or symbol moves or changes size, and LIBREAC_ABI stays 6.
  * 1.9.0: THE PACE AND ROLE DECLARATIONS ARE LIBREAC'S (FreeREAC/libreac#8). reac_cfg.h gains
  *        enum reac_rate_refuse, enum reac_role_refuse, their REAC_*_REFUSE_CODES_INIT tables,
  *        the REAC_RATE_BIT_* / REAC_RATE_ALL_BITS drivable masks and REAC_ROLE_STATE_APPLIED /
@@ -394,7 +402,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 9
+#define LIBREAC_VERSION_MINOR 10
 #define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version

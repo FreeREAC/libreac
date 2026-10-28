@@ -2,7 +2,7 @@
 # libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.9.0
+Version:        1.10.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -179,6 +179,16 @@ make test
 %{_libexecdir}/libreac/tests/fake_box
 
 %changelog
+* Wed Oct 28 2026 Pau Aliagas <linuxnow@gmail.com> - 1.10.0-1
+- The etf qdisc read-back (reac_etf_qdisc_state, reac_etf_qdisc_stats_read)
+  has a fuzz harness, fuzz_qdisc, over a fake rtnetlink kernel, with 32
+  recorded breakages on 7 checks; it is the witness reac-pw's own copy of the
+  reader waited for (#8, R3).
+- The dump walker under both reads stops at the bytes recv() returned: it
+  compared the remainder as size_t, so an unpadded last message wrapped it and
+  the walk ran on into the stale rest of the buffer. Found by the new harness;
+  a kernel pads every message, so no rig saw it.
+
 * Tue Oct 27 2026 Pau Aliagas <linuxnow@gmail.com> - 1.9.0-1
 - reac_cfg.h declares the pace and role vocabulary libreac-transport used to
   take from reac-pw: enum reac_rate_refuse, enum reac_role_refuse, their
