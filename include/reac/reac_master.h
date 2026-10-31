@@ -524,6 +524,24 @@ void reac_master_tunables_set(const struct reac_master_tunables *t);
  * hold. */
 int reac_master_has_box(const struct reac_master *m);
 
+/* THE PEER BINDING. Once a box is latched (GRANTING) or established, the
+ * master answers to that box's source MAC and to nothing else on the wire: a
+ * frame from another source cannot drop it (BYE), re-declare its width or base
+ * (config-announce), accept a grant for it (unicast, heartbeat), reload its link
+ * budget, or, while ESTABLISHED, re-court it with a JOIN (MAC change). REAC is
+ * point-to-point and a box speaks from one MAC, so a real box never sees the
+ * difference; a host that forges REAC frames on the same wire no longer decides
+ * the segment by sending one. A box swap still works: the old box goes silent,
+ * the link budget drains to PROBING, and the next JOIN courts the new one. A
+ * different MAC's JOIN while GRANTING still re-latches (a box swapped mid-grant
+ * has no other way in), and PROBING binds nothing: the first box to JOIN wins.
+ *
+ * 1 when a box frame of kind `ev` from `src` is the bound peer's (or nothing is
+ * bound yet), 0 when the binding refuses it. Pure, no allocation, no lock: it
+ * runs on the pacer thread for every box frame. */
+int reac_master_peer_accepts(const struct reac_master *m, const uint8_t src[6],
+                             enum reac_master_rx_event ev);
+
 /* Allocate head-amp slots for the box THE WIRE DECLARED (the recognizer, #137)
  * and REGENERATE the grant sweep for that allocation. Keyed on the box's INPUT
  * width (the sweep enrolls the box's inputs; S-0808 and S-1608 are both 8-OUT, so

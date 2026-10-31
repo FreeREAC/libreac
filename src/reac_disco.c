@@ -9,6 +9,7 @@
 #include <reac/reac_ports.h>
 
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 const char *reac_disco_role_name(enum reac_disco_role r)
@@ -264,6 +265,8 @@ int reac_disco_table_observe(struct reac_disco_table *t,
 	struct reac_disco_entry *e = find(t, s->mac);
 	if (e) {
 		e->last_seen_ns = now_ns;        /* liveness always advances… */
+		if (e->frames != UINT32_MAX)
+			e->frames++;
 		int changed = 0;
 		/* …but only a real upgrade is a CHANGE. A re-sighting that bumped seq would
 		 * have a consumer re-reading an identical list at wire rate. Facts only ever
@@ -348,6 +351,7 @@ int reac_disco_table_observe(struct reac_disco_table *t,
 	e->announced_slots = s->announced_slots;
 	e->channels = s->channels;
 	e->owned = owned ? 1 : 0;
+	e->frames = 1;
 	e->first_seen_ns = now_ns;
 	e->last_seen_ns = now_ns;
 	t->seq++;

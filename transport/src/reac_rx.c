@@ -185,6 +185,29 @@ static int gate_accepts(struct reac_rx *rx, const uint8_t *frame, size_t len)
 	return memcmp(rx->up_src, frame + 6, 6) == 0;
 }
 
+/* THE COUNTER ONLY MOVES FORWARD. A box numbers its frames with a 16-bit counter that
+ * advances by one per frame; on a wired segment nothing reorders them, and a lost frame is
+ * a forward jump. A frame from the locked source whose counter is the last accepted one or
+ * behind it (serial-number arithmetic: half the counter space ahead is "ahead") is not the
+ * box's next frame. Either a copy of the stream arrived late, or another host is sending as
+ * the box's MAC. It is dropped and counted with the frames that are not ours, and never
+ * decoded. Equal counter, different bytes, is the one unambiguous sign of a second sender
+ * (byte-identical twins are caught by the duplicate guard before this) and is said once.
+ *
+ * A box that restarts numbers from wherever its firmware starts. REAC_RX_RESYNC_RUN
+ * consecutive frames that continue EACH OTHER (each one more than the last refused one),
+ * with no accepted frame in between, are a stream that has moved, and are followed. While
+ * the real box keeps streaming its frames are accepted between any forged ones, which
+ * breaks such a run, so a sender behind the box cannot buy a resync. A sender that races
+ * AHEAD of the box, frame by frame, is not stopped by this: the box's own frame then reads
+ * as the conflict. That is the limit of what a counter can prove. */
+#define REAC_RX_RESYNC_RUN 8u
+
+static int counter_ahead(uint16_t last, uint16_t cur)
+{
+	return reac_counter_gap(last, cur) < 0x8000u;
+}
+
 /* Slow PI-style slope filter: nominal pps vs observed counter advance per
  * second. Updates ppm_error_milli a few times a second. The source node turns
  * that into io_rate_match.rate. Kept deliberately gentle — locked to the
@@ -267,6 +290,9 @@ static void *rx_loop(void *arg)
 
 	uint16_t last_counter = 0;
 	int have_counter = 0;
+	uint16_t stale_last = 0;      /* the last refused counter, for the resync run */
+	unsigned stale_run = 0;       /* consecutive refused frames continuing each other */
+	int conflict_said = 0;
 	unsigned seen_epoch = atomic_load_explicit(&rx->peer_epoch, memory_order_acquire);
 	uint64_t pcap_first_ts = 0, wall_first_ns = 0;
 	uint64_t last_stat_ns = 0;   /* periodic RX telemetry (every ~2 s) */
@@ -332,7 +358,7 @@ static void *rx_loop(void *arg)
 			               * every loop after the first replays FLAT OUT (targets
 			               * land in the past), flooding the ring. */
 				pcap_source_close(&ps); pcap_source_open(&ps, rx->cfg.source);
-				have_counter = 0; wall_first_ns = 0;
+				have_counter = 0; wall_first_ns = 0; stale_run = 0;
 				rx->have_prev_frame = 0; /* no cross-loop-seam duplicate match */
 				rx->ppm_have_last = 0; rx->ppm_win_frames = 0; /* drop the stale ppm
 				               * window so the next loop doesn't spike one bogus ppm
@@ -394,12 +420,33 @@ static void *rx_loop(void *arg)
 		if (ep != seen_epoch) {
 			seen_epoch = ep;
 			have_counter = 0;
+			stale_run = 0;
 			rx->have_prev_frame = 0;
 			rx->ppm_have_last = 0;
 			rx->ppm_win_frames = 0;
 			atomic_store_explicit(&rx->ppm_error_milli, 0, memory_order_relaxed);
 			reac_pace_watch_reset(&rx->pace, mono_ns());
 		}
+		if (have_counter && !counter_ahead(last_counter, counter)) {
+			stale_run = (stale_run && counter == (uint16_t)(stale_last + 1)) ? stale_run + 1 : 1;
+			stale_last = counter;
+			if (stale_run < REAC_RX_RESYNC_RUN) {
+				if (counter == last_counter && !conflict_said) {
+					conflict_said = 1;
+					fprintf(stderr,
+					        "reac-pw: TWO DIFFERENT FRAMES CARRY COUNTER %u FROM "
+					        "%02x:%02x:%02x:%02x:%02x:%02x — something else on this "
+					        "wire is sending as that peer. The second is dropped and "
+					        "counted with the frames that are not ours; said once.\n",
+					        (unsigned)counter, frame[6], frame[7], frame[8],
+					        frame[9], frame[10], frame[11]);
+				}
+				atomic_fetch_add_explicit(&rx->frames_other, 1, memory_order_relaxed);
+				continue;
+			}
+			have_counter = 0;   /* the peer restarted its counter: follow, no gap */
+		}
+		stale_run = 0;
 		if (have_counter) {
 			uint16_t gap = reac_counter_gap(last_counter, counter);
 			if (gap)

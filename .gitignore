@@ -50,6 +50,8 @@ etf_probe
 topo_bind_probe
 test_no_getenv_conformance
 test_rx_twin
+test_rx_spoof
+test_peer_binding
 test_sniffer_binds_first
 test_reac_knock
 test_reac_tapwait
@@ -69,6 +71,7 @@ test_code
 test_etf_qdisc_stats
 test_desk_or_box
 test_hold
+test_hunt_one_frame
 
 # python bytecode embeds the build machine paths
 __pycache__/

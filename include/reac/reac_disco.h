@@ -180,6 +180,12 @@ struct reac_disco_entry {
 	 * what answer, and one stray short frame must not erase them. */
 	unsigned channels;
 	int owned;                 /* the peer THIS master established with */
+	/* How many observations this entry has taken, saturating. It sits in what was the
+	 * padding before first_seen_ns, so the struct keeps its size and every offset. The
+	 * hunt observes EVERY frame (reac_hunt_observe), so there it is a frame count, which
+	 * is what tells a peer streaming at wire cadence from one frame somebody sent; the
+	 * listener path observes through a refresh gate, so there it is not. */
+	uint32_t frames;
 	uint64_t first_seen_ns;
 	uint64_t last_seen_ns;
 };

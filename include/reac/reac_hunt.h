@@ -82,6 +82,22 @@
  * once, and it is the difference between hunting for three seconds and hunting forever.
  */
 #define REAC_HUNT_ANNOUNCES 3
+/* A RIVAL IS EVIDENCE ONLY ONCE IT STREAMS. A master on the wire, desk or box on M, fills
+ * every audio slot at wire cadence (at least ~3 700 frames/s), so within a few milliseconds
+ * of the sniffer opening it has been heard many times over a measurable span. One forged
+ * cfea announce is heard once. The hunt takes a rival's role into account only when the
+ * table holds at least REAC_HUNT_RIVAL_FRAMES frames from it over at least
+ * REAC_HUNT_RIVAL_SPAN_NS; until then a pinned segment and an undecided one keep the verdict
+ * they had (HUNTING at link, which reac-pw serves as a door with no engine) while it is
+ * still being heard, and drop it as no rival once it has been quiet for
+ * REAC_HUNT_RIVAL_QUIET_NS. A real master passes in ~20 ms. One forged frame, or a handful
+ * sent at once, never moves the role and cannot hold a pinned master off the wire. A host
+ * that keeps streaming as a master is still heard as one: that is what the bar is. */
+#define REAC_HUNT_RIVAL_FRAMES   8u
+#define REAC_HUNT_RIVAL_SPAN_NS  (20ULL * 1000000ULL)
+/* A rival not heard for this long is not streaming: it does not hold the verdict either. */
+#define REAC_HUNT_RIVAL_QUIET_NS (100ULL * 1000000ULL)
+
 #define REAC_HUNT_WINDOW_NS \
 	((uint64_t)REAC_HUNT_ANNOUNCES * (uint64_t)REAC_ANNOUNCE_PERIOD_MS * 1000000ULL)
 
