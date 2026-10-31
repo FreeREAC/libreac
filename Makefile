@@ -220,6 +220,10 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# protocol's REAC_ANNOUNCE_PERIOD_MS; then, with no master-only frame, it is a box.
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_hold.c libreac.a -lm -o test_hold
 	$(RUN_TEST) ./test_hold
+	# ONE FRAME DOES NOT DECIDE A SEGMENT'S ROLE: a forged cfea makes neither a pinned
+	# master nor an unpinned wire a slave; a box on M that streams is still joined.
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_hunt_one_frame.c libreac.a -lm -o test_hunt_one_frame
+	$(RUN_TEST) ./test_hunt_one_frame
 	$(CC) $(CFLAGS) $(INC) tests/test_master_carriers.c libreac.a -lm -o test_master_carriers
 	$(RUN_TEST) ./test_master_carriers
 	$(CC) $(CFLAGS) $(INC) tests/test_master_capture.c libreac.a -lm -o test_master_capture
@@ -419,7 +423,7 @@ transport: libreac-transport.a
 # 802.1Q tag). Absent, the test prints CORPUS ARM NOT RUN rather than passing quietly.
 REAC_TAP_CAPTURE ?=
 
-test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c libreac-transport.a libreac.a
+test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c tests/test_peer_binding.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c libreac-transport.a libreac.a
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
 	$(RUN_TEST) ./test_tap $(REAC_TAP_CAPTURE)
 	$(RUN_TEST) tools/conformance-tap-silent.sh
@@ -431,6 +435,19 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_topo_hears_vlan
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_rx_twin.c libreac-transport.a libreac.a \
 	    -lm -lpthread -o test_rx_twin
 	$(RUN_TEST) ./test_rx_twin
+	# A FRAME SENT AS THE BOX IS DECODED ONLY IF IT CONTINUES THE BOX'S COUNT: forged
+	# frames behind or equal to the box's counter, from the box's own MAC, replayed through
+	# reac_rx, are dropped and never decoded; a box restarting its counter is followed; the
+	# box alone drops nothing.
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_rx_spoof.c libreac-transport.a libreac.a \
+	    -lm -lpthread -o test_rx_spoof
+	$(RUN_TEST) ./test_rx_spoof
+	# THE MASTER ANSWERS TO ITS BOX: through the real pacer ingest, another MAC's
+	# config-announce, BYE, JOIN and heartbeat move nothing once a box is bound, with the
+	# box's own frames and a box swap as the controls.
+	$(CC) $(CFLAGS) -Itests $(INC) tests/test_peer_binding.c libreac-transport.a libreac.a \
+	    -lm -lpthread -o test_peer_binding
+	$(RUN_TEST) ./test_peer_binding
 	# THE TAP AGAINST A KERNEL THAT REALLY TAGS. Every other arm on reac_topo is fed
 	# buffers this repo builds, and a hand-built buffer cannot say whether the kernel
 	# accelerated the tag into tp_vlan_tci or left it in the bytes — the one question
@@ -629,8 +646,8 @@ fuzz-corpus: $(FUZZ_GEN)
 	$(FUZZ_GEN) fuzz/corpus
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
-	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_topo_hears_vlans test_etf_qdisc_stats
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_hunt_one_frame test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_rx_spoof test_peer_binding test_topo_hears_vlans test_etf_qdisc_stats
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \

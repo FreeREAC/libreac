@@ -158,6 +158,29 @@ static int desk_geometry_live(const struct reac_disco_table *t, const uint8_t ou
 	return 0;
 }
 
+/* What the rival the arbitration named has shown of itself (REAC_HUNT_RIVAL_*):
+ * RIVAL_STREAMS once it has streamed long enough to be a master; RIVAL_WAIT while it is
+ * still being heard but has not yet; RIVAL_QUIET when it is not streaming now (one frame,
+ * or a few, and then nothing for REAC_HUNT_RIVAL_QUIET_NS), which is no rival at all. */
+enum rival_evidence { RIVAL_QUIET, RIVAL_WAIT, RIVAL_STREAMS };
+
+static enum rival_evidence rival_evidence(const struct reac_hunt *h, uint64_t now_ns)
+{
+	if (!h->arb.have_mac)
+		return RIVAL_QUIET;
+	for (int i = 0; i < h->table.n; i++) {
+		const struct reac_disco_entry *e = &h->table.e[i];
+		if (memcmp(e->mac, h->arb.mac, 6) != 0)
+			continue;
+		if (e->frames >= REAC_HUNT_RIVAL_FRAMES && e->last_seen_ns >= e->first_seen_ns &&
+		    e->last_seen_ns - e->first_seen_ns >= REAC_HUNT_RIVAL_SPAN_NS)
+			return RIVAL_STREAMS;
+		return (now_ns >= e->last_seen_ns && now_ns - e->last_seen_ns <= REAC_HUNT_RIVAL_QUIET_NS)
+		       ? RIVAL_WAIT : RIVAL_QUIET;
+	}
+	return RIVAL_QUIET;
+}
+
 static enum reac_hunt_verdict decide(const struct reac_hunt *h, uint64_t now_ns)
 {
 	/* A PIN IS AN ANSWER ABOUT THIS WIRE AND OUTRANKS THE HUNT, AND IT WAITS ON NOTHING.
@@ -201,7 +224,16 @@ static enum reac_hunt_verdict decide(const struct reac_hunt *h, uint64_t now_ns)
 		 * geometry is unambiguous and is what earns it the right to outrank a pin. */
 		if (h->pin == REAC_ROLE_MASTER && h->arb.state == REAC_SEGMENT_FOREIGN &&
 		    h->arb.rival == REAC_RIVAL_BOX)
-			return REAC_HUNT_SLAVE;
+			/* ...once it has STREAMED (REAC_HUNT_RIVAL_*): a box on M fills its slots at
+			 * wire cadence, a forged announce is one frame. Until then the pin's verdict
+			 * stands as it was, so one frame never turns a pinned master into a slave. */
+		{
+			enum rival_evidence ev = rival_evidence(h, now_ns);
+			if (ev == RIVAL_STREAMS)
+				return REAC_HUNT_SLAVE;
+			if (ev == RIVAL_WAIT)
+				return h->verdict;
+		}
 		return h->pin == REAC_ROLE_SLAVE ? REAC_HUNT_SLAVE : REAC_HUNT_MASTER;
 	}
 
@@ -226,7 +258,13 @@ static enum reac_hunt_verdict decide(const struct reac_hunt *h, uint64_t now_ns)
 		 * being re-decided on a guess. */
 		if (h->arb.rival == REAC_RIVAL_PENDING)
 			return h->verdict;
-		return h->arb.rival == REAC_RIVAL_UNKNOWN ? REAC_HUNT_REFUSED : REAC_HUNT_SLAVE;
+		/* Nor on one that has not streamed (REAC_HUNT_RIVAL_*): wait while it is being
+		 * heard, and treat it as absent once it has gone quiet. */
+		enum rival_evidence ev = rival_evidence(h, now_ns);
+		if (ev == RIVAL_WAIT)
+			return h->verdict;
+		if (ev == RIVAL_STREAMS)
+			return h->arb.rival == REAC_RIVAL_UNKNOWN ? REAC_HUNT_REFUSED : REAC_HUNT_SLAVE;
 	}
 
 	/* No master evidence. Before calling the wire vacant, refuse to race a broadcast

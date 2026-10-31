@@ -122,6 +122,7 @@ ABI_MEMBER(reac_disco_entry, family, 15)
 ABI_MEMBER(reac_disco_entry, announced_slots, 16)
 ABI_MEMBER(reac_disco_entry, channels, 20)
 ABI_MEMBER(reac_disco_entry, owned, 24)
+ABI_MEMBER(reac_disco_entry, frames, 28)
 ABI_MEMBER(reac_disco_entry, first_seen_ns, 32)
 ABI_MEMBER(reac_disco_entry, last_seen_ns, 40)
 
