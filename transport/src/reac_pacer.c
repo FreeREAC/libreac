@@ -605,6 +605,12 @@ void reac_pacer_rx_ingest(struct reac_pacer *p, const uint8_t *frame, size_t len
 	if (reac_ctrl_classify_box_frame(frame, len, p->src, &parsed, &ev) != 0)
 		return;
 
+	/* THE PEER BINDING (reac_master_peer_accepts): once a box is latched or
+	 * established, a frame from any other source neither re-declares the box's
+	 * geometry below nor reaches the FSM. Counted nowhere as box traffic. */
+	if (!reac_master_peer_accepts(&p->master, parsed.src, ev))
+		return;
+
 	atomic_fetch_add_explicit(&p->rx_box_frames, 1, memory_order_relaxed);
 	if (parsed.kind != REAC_CTRL_FILLER)
 		atomic_fetch_add_explicit(&p->rx_box_ctrl, 1, memory_order_relaxed);

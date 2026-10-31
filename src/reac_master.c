@@ -808,6 +808,22 @@ int reac_master_has_box(const struct reac_master *m)
 	return m && m->alloc.width > 0;
 }
 
+int reac_master_peer_accepts(const struct reac_master *m, const uint8_t src[6],
+                             enum reac_master_rx_event ev)
+{
+	static const uint8_t none[6] = { 0 };
+	if (!m || !src)
+		return 0;
+	if (m->state != REAC_M_GRANTING && m->state != REAC_M_ESTABLISHED)
+		return 1;                          /* PROBING / IDLE: nothing bound yet */
+	if (memcmp(m->box_mac, none, 6) == 0 || memcmp(src, m->box_mac, 6) == 0)
+		return 1;
+	/* Another source while a box is bound. Only a JOIN while GRANTING still moves
+	 * the master: the latch is not a link yet, and a box swapped mid-grant has no
+	 * other door. */
+	return ev == REAC_M_RX_BOX_JOIN && m->state == REAC_M_GRANTING;
+}
+
 void reac_master_forget_box(struct reac_master *m)
 {
 	if (!m)
@@ -1127,6 +1143,11 @@ static void release_held_join(struct reac_master *m)
 int reac_master_rx(struct reac_master *m, enum reac_master_rx_event ev,
                    const uint8_t box_src[6], const uint8_t blk32[32])
 {
+	/* THE PEER BINDING FIRST: a frame the binding refuses is not presence, not a
+	 * link-budget reload and not an event (reac_master_peer_accepts). */
+	if (!reac_master_peer_accepts(m, box_src, ev))
+		return 0;
+
 	/* Any box frame is presence (diagnostic only — never gates the grant). */
 	m->box_seen = 1;
 	m->presence_tick = REAC_M_PRESENCE_TIMEOUT;
