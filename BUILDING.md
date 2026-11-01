@@ -54,7 +54,7 @@ One source builds two libraries, `libreac` and `libreac-transport`, as four bina
 
 | | Fedora | Debian |
 | --- | --- | --- |
-| libreac | `libreac`, `libreac-devel` | `libreac6`, `libreac-dev` |
+| libreac | `libreac`, `libreac-devel` | `libreac7`, `libreac-dev` |
 | libreac-transport | `libreac-transport`, `libreac-transport-devel` | `libreac-transport7`, `libreac-transport-dev` |
 
 `packaging/libreac.spec` and `debian/` describe them; both build the shared objects from every
