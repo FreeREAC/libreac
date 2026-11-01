@@ -13,15 +13,15 @@ pure functions over buffers, with a pkg-config file and an RPM. ctypes needs no
 build step and cannot drift out of step with the installed library, because it IS
 the installed library. An extension module would need rebuilding on every bump.
 
-Load by SONAME (`libreac.so.1`), never by the versioned filename: the soname is
-the compatibility promise, the filename is an implementation detail that moves on
-every release.
+Load by ABI SONAME (`libreac.so.7`), never by the versioned filename: the
+soname is the compatibility promise, the filename is an implementation detail
+that moves on every release.
 """
 
 import ctypes
 import ctypes.util
 
-_SONAME = "libreac.so.1"
+_SONAME = "libreac.so.7"
 
 
 def _load():
