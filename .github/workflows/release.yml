@@ -40,7 +40,7 @@ jobs:
     uses: FreeMixer/.github/.github/workflows/build-deb.yml@v1
     with:
       package-name: libreac
-      binary-names: libreac6 libreac-dev libreac-transport7 libreac-transport-dev
+      binary-names: libreac7 libreac-dev libreac-transport7 libreac-transport-dev
       publish: ${{ github.ref_type == 'tag' }}
       dependencies: ''
       requires: ''

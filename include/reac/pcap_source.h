@@ -40,9 +40,22 @@ struct pcap_source {
 	                          * every frame, silently.                        */
 	uint16_t last_vlan_id;    /* VID of that tag (TCI & 0x0fff), valid only
 	                          * when last_vlan_tagged is 1.                   */
+	uint32_t skipped_oversized; /* how many records larger than cap
+	                          * pcap_source_next has skipped since
+	                          * pcap_source_open set it to 0 (FreeREAC/libreac#35).
+	                          * The library never prints it: a tool reading a
+	                          * capture prints it, so a person is still told
+	                          * that frames were skipped (a jumbo or non-REAC
+	                          * packet, or a corrupt header). A record is
+	                          * counted when its header is read, before its body
+	                          * is skipped, so one whose skip ends the walk with
+	                          * -1 (a body cut short, or cap 0) counts too. A
+	                          * record of 0 bytes is not counted. It wraps at
+	                          * 2^32, and pcap_source_close leaves it as it is. */
 };
 
-/* Open a pcap file. Returns 0 on success, -1 on error. */
+/* Open a pcap file. Returns 0 on success, -1 on error. Either way it sets
+ * skipped_oversized to 0. */
 int pcap_source_open(struct pcap_source *ps, const char *path);
 
 /* Read the next packet into buf (capacity cap). Returns the packet length,
@@ -53,7 +66,8 @@ int pcap_source_open(struct pcap_source *ps, const char *path);
  * carries no frame and is skipped, like a record larger than cap, and the walk
  * goes on to the record after it; it changes none of the source's last_*
  * fields. Before 1.8.0 an empty record returned its length, 0, and ended the
- * walk. Both skips are silent: the reader prints nothing on stderr. With
+ * walk. Both skips are silent: the reader prints nothing on stderr. A record
+ * larger than cap adds 1 to skipped_oversized instead (#35). With
  * cap 0 no record with a body can be skipped (the skip reads through buf),
  * so the first such record gives -1. */
 long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t *ts_usec);

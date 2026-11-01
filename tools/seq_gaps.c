@@ -55,6 +55,11 @@ int main(int argc, char **argv)
 		       t[i].frames, t[i].gaps, t[i].missing);
 		any = 1;
 	}
+	/* pcap_source skips a record larger than buf without a word and counts it (#35):
+	 * this line is what tells a person that frames were skipped. */
+	if (ps.skipped_oversized)
+		fprintf(stderr, "seq_gaps: skipped_oversized=%" PRIu32 " (records larger than the %zu-byte buffer)\n",
+		        ps.skipped_oversized, sizeof buf);
 	if (!any) { fprintf(stderr, "seq_gaps: no talker — an empty scan is not a result\n"); return 1; }
 	return 0;
 }

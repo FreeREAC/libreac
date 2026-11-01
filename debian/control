@@ -7,7 +7,7 @@ Standards-Version: 4.6.2
 Homepage: https://github.com/FreeREAC/libreac
 Rules-Requires-Root: no
 
-Package: libreac6
+Package: libreac7
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -26,7 +26,7 @@ Package: libreac-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: libreac6 (= ${binary:Version}), ${misc:Depends}
+Depends: libreac7 (= ${binary:Version}), ${misc:Depends}
 Description: Roland REAC protocol library, development files
  Headers and the pkg-config file for building programs against libreac, such
  as a REAC endpoint for a sound server.

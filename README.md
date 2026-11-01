@@ -107,6 +107,11 @@ The analysis tools under `tools/` (built as [BUILDING.md](BUILDING.md) describes
 - `gen-facts-header.py` — regenerate `tests/reac_facts_assert.h` from a `reac-protocol`
   checkout's `spec/protocol-facts.yaml`; run by the Makefile, not by hand.
 
+`ctrl_delta`, `slotmap_watch` and `seq_gaps` end with a `skipped_oversized=N` line on stderr when
+the capture held records larger than their 4096-byte buffer (jumbo or non-REAC packets, or corrupt
+headers): pcap_source skips such a record without a word and counts it in
+`struct pcap_source`'s `skipped_oversized`.
+
 ## Licence
 
 GPL-3.0-or-later. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

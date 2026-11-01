@@ -10,7 +10,8 @@
  * lengths, correct timestamps, EOF -> 0. Negatives: a bad magic and a
  * truncated global header refuse to open; a truncated record body errors; an
  * oversized record is SKIPPED (not fatal) and the following frame still
- * arrives — the documented multi-thousand-frame-capture behavior.
+ * arrives — the documented multi-thousand-frame-capture behavior — and it is
+ * COUNTED in skipped_oversized while the library writes nothing (#35).
  *
  * reac_capture is the LIVE AF_PACKET reader (there is no pcap writer in
  * libreac); its open needs a real NIC + CAP_NET_RAW, so only the error
@@ -22,10 +23,12 @@
 #include "reac/reac_capture.h"
 #include "reac/reac.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int fails = 0;
@@ -81,6 +84,36 @@ static void write_pcap(const char *path, int swap, int with_oversized)
 		fwrite(frame, 1, FRAME_LEN, f);
 	}
 	fclose(f);
+}
+
+/* THE LIBRARY SAYS NOTHING (#35): between quiet_begin and quiet_end this
+ * process's stdout and stderr both go to `path`, and quiet_end returns how many
+ * bytes reached it. No CHECK may run in between: it prints. */
+static int quiet_fd = -1, saved_out = -1, saved_err = -1;
+
+static void quiet_begin(const char *path)
+{
+	fflush(stdout);
+	fflush(stderr);
+	quiet_fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+	saved_out = dup(1);
+	saved_err = dup(2);
+	dup2(quiet_fd, 1);
+	dup2(quiet_fd, 2);
+}
+
+static long quiet_end(void)
+{
+	fflush(stdout);
+	fflush(stderr);
+	dup2(saved_out, 1);
+	dup2(saved_err, 2);
+	close(saved_out);
+	close(saved_err);
+	struct stat st;
+	long n = fstat(quiet_fd, &st) == 0 ? (long)st.st_size : -1;
+	close(quiet_fd);
+	return n;
 }
 
 /* read `path` back and require the byte-equal frame sequence + timestamps */
@@ -146,6 +179,7 @@ int main(void)
 			got++;
 		}
 		CHECK(got == NFRAMES, "jumbo: all real frames delivered, jumbo dropped");
+		CHECK(ps.skipped_oversized == 1, "jumbo: the skipped record is counted");
 		pcap_source_close(&ps);
 	}
 
@@ -192,6 +226,86 @@ int main(void)
 		unlink(pv);
 	}
 
+	/* 3c. THE CONFORMANCE CASE OF #35: the oversized records are COUNTED, and the
+	 *     library says nothing about them. pcap_source printed one stderr line per
+	 *     record larger than the buffer until #33 removed it; a person reading a
+	 *     capture with a tool was then no longer told. skipped_oversized is the
+	 *     report now, and printing it is the caller's job. A capture with a jumbo
+	 *     record after each of its two frames (the second is the last record of the
+	 *     file): both frames still arrive, each jumbo is counted on the way past it,
+	 *     the count reads 2 at the end of the file, close leaves it there, and
+	 *     nothing reaches stdout or stderr from open to close. */
+	{
+		char po[256], pq[256];
+		snprintf(po, sizeof po, "%s/two-oversized.pcap", dir);
+		snprintf(pq, sizeof pq, "%s/two-oversized.out", dir);
+		FILE *f = fopen(po, "wb");
+		wr_u32(f, 0xA1B2C3D4u, 0);
+		wr_u32(f, 0x00040002u, 0);
+		wr_u32(f, 0, 0); wr_u32(f, 0, 0);
+		wr_u32(f, 65535, 0);
+		wr_u32(f, 1, 0);
+		static uint8_t jumbo[4096];
+		memset(jumbo, 0x55, sizeof jumbo);
+		uint8_t frame[FRAME_LEN];
+		for (int i = 0; i < 2; i++) {
+			mk_frame(frame, i);
+			wr_u32(f, 800, 0); wr_u32(f, (uint32_t)i, 0);
+			wr_u32(f, FRAME_LEN, 0); wr_u32(f, FRAME_LEN, 0);
+			fwrite(frame, 1, FRAME_LEN, f);
+			wr_u32(f, 801, 0); wr_u32(f, (uint32_t)i, 0);
+			wr_u32(f, sizeof jumbo, 0); wr_u32(f, sizeof jumbo, 0);
+			fwrite(jumbo, 1, sizeof jumbo, f);
+		}
+		fclose(f);
+
+		struct pcap_source ps;
+		memset(&ps, 0xa5, sizeof ps);   /* the 0 must come from open */
+		uint8_t buf[2048], want[FRAME_LEN];
+		int frame_ok[2];
+		uint32_t count[4];
+		quiet_begin(pq);
+		int r = pcap_source_open(&ps, po);
+		count[0] = ps.skipped_oversized;
+		for (int i = 0; i < 2; i++) {
+			long n = pcap_source_next(&ps, buf, sizeof buf, NULL);
+			mk_frame(want, i);
+			frame_ok[i] = n == FRAME_LEN && memcmp(buf, want, FRAME_LEN) == 0;
+			count[i + 1] = ps.skipped_oversized;
+		}
+		long end = pcap_source_next(&ps, buf, sizeof buf, NULL);
+		count[3] = ps.skipped_oversized;
+		pcap_source_close(&ps);
+		uint32_t closed = ps.skipped_oversized;
+		long written = quiet_end();
+
+		CHECK(r == 0, "two oversized: open");
+		CHECK(count[0] == 0, "two oversized: open sets the count to 0");
+		CHECK(frame_ok[0] && count[1] == 0,
+		      "two oversized: frame 0 comes back, nothing counted before it");
+		CHECK(frame_ok[1] && count[2] == 1,
+		      "two oversized: frame 1 comes back, the jumbo before it counted");
+		CHECK(end == 0, "two oversized: 0 at the end of the file (the skip is not an error)");
+		CHECK(count[3] == 2, "two oversized: the count reads 2 at the end of the file");
+		CHECK(closed == 2, "two oversized: close leaves the count");
+		CHECK(written == 0,
+		      "two oversized: the library wrote nothing to stdout or stderr");
+		unlink(po);
+		unlink(pq);
+	}
+
+	/* 3d. with a buffer of 0 bytes no record with a body can be skipped (the skip
+	 *     reads through buf), so the first one gives -1; it is counted all the same,
+	 *     at its header, before the skip is tried. */
+	{
+		struct pcap_source ps;
+		CHECK(pcap_source_open(&ps, p1) == 0, "cap 0: open");
+		uint8_t buf[1];
+		CHECK(pcap_source_next(&ps, buf, 0, NULL) == -1, "cap 0: the first record -> -1");
+		CHECK(ps.skipped_oversized == 1, "cap 0: the record it could not skip is counted");
+		pcap_source_close(&ps);
+	}
+
 	/* 4. malformed: bad magic refuses to open */
 	{
 		FILE *f = fopen(p3, "wb");
@@ -200,8 +314,10 @@ int main(void)
 		fwrite(junk, 1, sizeof junk, f);
 		fclose(f);
 		struct pcap_source ps;
+		memset(&ps, 0xa5, sizeof ps);
 		CHECK(pcap_source_open(&ps, p3) == -1, "bad magic -> open fails");
 		CHECK(ps.f == NULL, "bad magic -> handle closed");
+		CHECK(ps.skipped_oversized == 0, "bad magic -> the count is 0");
 	}
 
 	/* 5. malformed: truncated global header refuses to open */
@@ -211,7 +327,9 @@ int main(void)
 		fwrite(magic, 1, sizeof magic, f);   /* only 8 of the 24 bytes */
 		fclose(f);
 		struct pcap_source ps;
+		memset(&ps, 0xa5, sizeof ps);
 		CHECK(pcap_source_open(&ps, p3) == -1, "truncated global header -> open fails");
+		CHECK(ps.skipped_oversized == 0, "truncated global header -> the count is 0");
 	}
 
 	/* 6. malformed: a record body cut short mid-frame errors (-1, not 0) */
@@ -245,6 +363,7 @@ int main(void)
 			      "cut jumbo: frames before it intact");
 		CHECK(pcap_source_next(&ps, buf, sizeof buf, NULL) == -1,
 		      "cut jumbo: the cut oversized record -> -1, not EOF");
+		CHECK(ps.skipped_oversized == 1, "cut jumbo: the cut oversized record is counted");
 		pcap_source_close(&ps);
 	}
 
@@ -285,6 +404,7 @@ int main(void)
 		}
 		CHECK(pcap_source_next(&ps, buf, sizeof buf, NULL) == 0,
 		      "empty record: 0 at the end of the file");
+		CHECK(ps.skipped_oversized == 0, "empty record: a record of 0 bytes is not counted");
 		pcap_source_close(&ps);
 		unlink(pz);
 	}
@@ -292,9 +412,11 @@ int main(void)
 	/* 7. nonexistent file refuses to open */
 	{
 		struct pcap_source ps;
+		memset(&ps, 0xa5, sizeof ps);
 		char nope[300];
 		snprintf(nope, sizeof nope, "%s/does-not-exist.pcap", dir);
 		CHECK(pcap_source_open(&ps, nope) == -1, "missing file -> open fails");
+		CHECK(ps.skipped_oversized == 0, "missing file -> the count is 0");
 	}
 
 	/* 8. reac_capture (live AF_PACKET): the unprivileged error contract */
@@ -316,8 +438,8 @@ int main(void)
 	rmdir(dir);
 
 	if (fails == 0)
-		printf("OK: pcap_source round-trip (LE + swapped), jumbo skip, malformed "
-		       "rejects; reac_capture unprivileged error contract\n");
+		printf("OK: pcap_source round-trip (LE + swapped), jumbo skip and count, "
+		       "silent, malformed rejects; reac_capture unprivileged error contract\n");
 	else
 		printf("%d capture test(s) failed\n", fails);
 	return fails ? 1 : 0;
