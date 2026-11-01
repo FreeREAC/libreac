@@ -1,0 +1,104 @@
+# Differences between the base and the fixed libreac across the capture corpus,
+# each explained by the rule named (tools/peer-replay-compare.py). Empty of
+# data lines means the two builds agree on every frame. Regenerate with
+# tools/peer-replay.sh --write-expected, and read the diff.
+# capture stream frames differ first-frame rule [detail]
+box-to-box-2026-09-13_enrol-backup-port-slice.pcap master-020000000001 frames=631303 differ=18 first=167482 rule=peer-binding
+box-to-box-2026-09-13_enrol-main-port-slice.pcap master-020000000001 frames=692609 differ=15 first=396156 rule=peer-binding
+captures_deskc9919c-s1608-unk-clean__zoneA-48k.pcap master-020000000001 frames=2043 differ=750 first=513 rule=peer-binding
+captures_m200i-s0808-48k-mirror__m200-s0808-establish-switch-2026-07-11.pcap hunt frames=1705 differ=7 first=2 rule=rival-not-streaming unpinned=7 pinned-master=0 pinned-slave=0
+captures_m200i-s0808-48k-mirror__matrix-m200-s0808-2026-07-11.pcap hunt frames=3271 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+captures_m200i-s1608-48k-clean__reacpw-s1608-cfeatiming-2026-07-18.pcap hunt frames=787 differ=45 first=3 rule=rival-not-streaming unpinned=45 pinned-master=0 pinned-slave=0
+captures_m200i-s1608-48k-clean__reacpw-s1608-cfeatiming-2026-07-18.pcap rx-down frames=787 differ=693 first=4 rule=counter-not-ahead resyncs=0 longest-refused=693
+captures_m200i-s1608-48k-clean__reacpw-s1608-cfeatiming-2026-07-18.pcap rx-down-0040abc9cc03 frames=787 differ=693 first=4 rule=counter-not-ahead resyncs=0 longest-refused=693
+captures_m200i-s1608-48k-clean__reacpw-s1608-cfeatiming-2026-07-18.pcap rx-up-0040abc9cc03 frames=787 differ=693 first=4 rule=counter-not-ahead resyncs=0 longest-refused=693
+captures_m200i-s1608-48k-clean__reacpw-s1608-establish-2026-07-18.pcap hunt frames=799 differ=84 first=1 rule=rival-not-streaming unpinned=84 pinned-master=0 pinned-slave=0
+captures_m200i-s1608-48k-clean__reacpw-s1608-establish-2026-07-18.pcap rx-down frames=799 differ=692 first=4 rule=counter-not-ahead resyncs=0 longest-refused=692
+captures_m200i-s1608-48k-clean__reacpw-s1608-establish-2026-07-18.pcap rx-down-0040abc9cc03 frames=799 differ=692 first=4 rule=counter-not-ahead resyncs=0 longest-refused=692
+captures_m200i-s1608-48k-clean__reacpw-s1608-establish-2026-07-18.pcap rx-up-0040abc9cc03 frames=799 differ=692 first=4 rule=counter-not-ahead resyncs=0 longest-refused=692
+captures_m200i-s1608-48k-clean__reacpw-s1608-establish-acksweep-2026-07-18.pcap hunt frames=787 differ=99 first=3 rule=rival-not-streaming unpinned=99 pinned-master=0 pinned-slave=0
+captures_m200i-s1608-48k-clean__reacpw-s1608-establish-acksweep-2026-07-18.pcap rx-down frames=787 differ=344 first=4 rule=counter-not-ahead resyncs=0 longest-refused=344
+captures_m200i-s1608-48k-clean__reacpw-s1608-establish-acksweep-2026-07-18.pcap rx-down-0040abc9cc03 frames=787 differ=344 first=4 rule=counter-not-ahead resyncs=0 longest-refused=344
+captures_m200i-s1608-48k-clean__reacpw-s1608-establish-acksweep-2026-07-18.pcap rx-up-0040abc9cc03 frames=787 differ=344 first=4 rule=counter-not-ahead resyncs=0 longest-refused=344
+captures_m200i-s1608-48k-mirror__m200-s1608-establish-switch-2026-07-11.pcap master-020000000001 frames=5166 differ=500 first=4543 rule=peer-binding
+captures_m200i-s1608-48k-mirror__m200-s1608-establish-switch-2026-07-11.pcap rx-down frames=5166 differ=353 first=2518 rule=counter-not-ahead resyncs=1 longest-refused=353
+captures_m200i-s1608-48k-mirror__m200-s1608-establish-switch-2026-07-11.pcap rx-down-0040abc9cc03 frames=5166 differ=353 first=2518 rule=counter-not-ahead resyncs=1 longest-refused=353
+captures_m200i-s1608-48k-mirror__m200-s1608-establish-switch-2026-07-11.pcap rx-up-0040abc9cc03 frames=5166 differ=353 first=2518 rule=counter-not-ahead resyncs=1 longest-refused=353
+captures_m200i-s1608-48k-mirror__m200-s1608-handshake-ctrl-2026-07-11.pcap hunt frames=1225 differ=7 first=5 rule=rival-not-streaming unpinned=7 pinned-master=0 pinned-slave=0
+captures_m200i-s1608-48k-mirror__m200-s1608-handshake-ctrl-2026-07-11.pcap rx-down frames=1225 differ=696 first=18 rule=counter-not-ahead resyncs=0 longest-refused=696
+captures_m200i-s1608-48k-mirror__m200-s1608-handshake-ctrl-2026-07-11.pcap rx-down-0040abc9cc03 frames=1225 differ=696 first=18 rule=counter-not-ahead resyncs=0 longest-refused=696
+captures_m200i-s1608-48k-mirror__m200-s1608-handshake-ctrl-2026-07-11.pcap rx-up frames=1225 differ=40 first=1057 rule=counter-not-ahead resyncs=0 longest-refused=40
+captures_m200i-s1608-48k-mirror__m200-s1608-handshake-ctrl-2026-07-11.pcap rx-up-0040abc4803b frames=1225 differ=40 first=1057 rule=counter-not-ahead resyncs=0 longest-refused=40
+captures_m200i-s1608-48k-mirror__m200-s1608-handshake-ctrl-2026-07-11.pcap rx-up-0040abc9cc03 frames=1225 differ=696 first=18 rule=counter-not-ahead resyncs=0 longest-refused=696
+captures_m200i-s1608-48k-mirror__matrix-m200-s1608-2026-07-11.pcap hunt frames=3316 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+captures_m200i-s4000s-48k-mirror__matrix-m200-s4000-coldconnect-2026-07-24.pcap master-020000000001 frames=5744 differ=250 first=4535 rule=peer-binding
+captures_m200i-s4000s-48k-mirror__matrix-m200-s4000-coldconnect-2026-07-24.pcap rx-down frames=5744 differ=19 first=4880 rule=counter-not-ahead resyncs=0 longest-refused=1
+captures_m200i-s4000s-48k-mirror__matrix-m200-s4000-coldconnect-2026-07-24.pcap rx-down-0040abc9cc03 frames=5744 differ=19 first=4880 rule=counter-not-ahead resyncs=0 longest-refused=1
+captures_m200i-s4000s-48k-mirror__matrix-m200-s4000-coldconnect-2026-07-24.pcap rx-up-0040abc9cc03 frames=5744 differ=19 first=4880 rule=counter-not-ahead resyncs=0 longest-refused=1
+captures_m300-none-48k-clean__m300-coldboot-mirror-2026-07-10.pcap hunt frames=2986 differ=99 first=1314 rule=rival-not-streaming unpinned=99 pinned-master=0 pinned-slave=0
+captures_m300-s0808-48k-mirror__matrix-m300-s0808-2026-07-11.pcap hunt frames=3416 differ=8 first=2 rule=rival-not-streaming unpinned=8 pinned-master=0 pinned-slave=0
+captures_m300-s0808-48k-mirror__matrix-m300-s0808-2026-07-11.pcap rx-down frames=3416 differ=347 first=209 rule=counter-not-ahead resyncs=0 longest-refused=347
+captures_m300-s0808-48k-mirror__matrix-m300-s0808-2026-07-11.pcap rx-down-0040abc9d85b frames=3416 differ=347 first=209 rule=counter-not-ahead resyncs=0 longest-refused=347
+captures_m300-s0808-48k-mirror__matrix-m300-s0808-2026-07-11.pcap rx-up frames=3416 differ=14 first=3098 rule=counter-not-ahead resyncs=0 longest-refused=14
+captures_m300-s0808-48k-mirror__matrix-m300-s0808-2026-07-11.pcap rx-up-0040abc4dc9c frames=3416 differ=14 first=3098 rule=counter-not-ahead resyncs=0 longest-refused=14
+captures_m300-s0808-48k-mirror__matrix-m300-s0808-2026-07-11.pcap rx-up-0040abc9d85b frames=3416 differ=347 first=209 rule=counter-not-ahead resyncs=0 longest-refused=347
+captures_m300-s1608-48k-mirror__matrix-m300-s1608-2026-07-11.pcap hunt frames=2388 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+captures_m300-s1608-48k-mirror__matrix-m300-s1608-2026-07-11.pcap rx-down frames=2388 differ=345 first=343 rule=counter-not-ahead resyncs=0 longest-refused=345
+captures_m300-s1608-48k-mirror__matrix-m300-s1608-2026-07-11.pcap rx-down-0040abc9d85b frames=2388 differ=345 first=343 rule=counter-not-ahead resyncs=0 longest-refused=345
+captures_m300-s1608-48k-mirror__matrix-m300-s1608-2026-07-11.pcap rx-up frames=2388 differ=14 first=2079 rule=counter-not-ahead resyncs=0 longest-refused=14
+captures_m300-s1608-48k-mirror__matrix-m300-s1608-2026-07-11.pcap rx-up-0040abc4803b frames=2388 differ=14 first=2079 rule=counter-not-ahead resyncs=0 longest-refused=14
+captures_m300-s1608-48k-mirror__matrix-m300-s1608-2026-07-11.pcap rx-up-0040abc9d85b frames=2388 differ=345 first=343 rule=counter-not-ahead resyncs=0 longest-refused=345
+captures_m5000-none-96k-mirror__matrix-m5000-s4000-unit2-coldconnect-2026-07-11.pcap hunt frames=69676 differ=176 first=4 rule=rival-not-streaming unpinned=176 pinned-master=0 pinned-slave=0
+captures_m5000-s0808-96k-mirror__matrix-m5000-s0808-2026-07-11.pcap hunt frames=3224 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+captures_m5000-s1608-96k-mirror__matrix-m5000-s1608-2026-07-11.pcap hunt frames=5638 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+captures_m5000-s1608-96k-mirror__matrix-m5000-s1608-2026-07-11.pcap rx-down frames=5638 differ=345 first=233 rule=counter-not-ahead resyncs=0 longest-refused=345
+captures_m5000-s1608-96k-mirror__matrix-m5000-s1608-2026-07-11.pcap rx-down-0040abca154c frames=5638 differ=345 first=233 rule=counter-not-ahead resyncs=0 longest-refused=345
+captures_m5000-s1608-96k-mirror__matrix-m5000-s1608-2026-07-11.pcap rx-up-0040abca154c frames=5638 differ=345 first=233 rule=counter-not-ahead resyncs=0 longest-refused=345
+captures_m5000-s1608-96k-mirror__real-m200-s1608-alltraffic-2026-07-11.pcap hunt frames=167 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+captures_m5000-s1608-96k-mirror__real-s1608-alltraffic-m5000-2026-07-11.pcap hunt frames=12055 differ=12 first=4 rule=rival-not-streaming unpinned=12 pinned-master=0 pinned-slave=0
+captures_m5000-s1608-96k-mirror__real-s1608-coldboot-m5000-2026-07-11.pcap rx-up frames=10468 differ=7 first=7969 rule=counter-not-ahead resyncs=1 longest-refused=7
+captures_m5000-s1608-96k-mirror__real-s1608-coldboot-m5000-2026-07-11.pcap rx-up-0040abc4803b frames=10468 differ=7 first=7969 rule=counter-not-ahead resyncs=1 longest-refused=7
+captures_m5000-s4000s-96k-mirror__matrix-m5000-s4000-unit1-coldconnect-2026-07-11.pcap hunt frames=34710 differ=8 first=2 rule=rival-not-streaming unpinned=8 pinned-master=0 pinned-slave=0
+captures_m5000-s4000s-96k-mirror__matrix-m5000-s4000-unit1-coldconnect-2026-07-11.pcap rx-up frames=34710 differ=10 first=12696 rule=counter-not-ahead resyncs=0 longest-refused=9
+captures_m5000-s4000s-96k-mirror__matrix-m5000-s4000-unit1-coldconnect-2026-07-11.pcap rx-up-0040abc40680 frames=34710 differ=10 first=12696 rule=counter-not-ahead resyncs=0 longest-refused=9
+captures_reacpw-s0808-48k-mirror__s0808-reboot-enrollfix-2026-07-12.pcap rx-down frames=34337 differ=124 first=7972 rule=counter-not-ahead resyncs=0 longest-refused=1
+captures_reacpw-s0808-48k-mirror__s0808-reboot-enrollfix-2026-07-12.pcap rx-down-0040ab000001 frames=34337 differ=124 first=7972 rule=counter-not-ahead resyncs=0 longest-refused=1
+captures_reacpw-s0808-48k-mirror__s0808-reboot-enrollfix-2026-07-12.pcap rx-up-0040ab000001 frames=34337 differ=124 first=7972 rule=counter-not-ahead resyncs=0 longest-refused=1
+captures_role-m-boot-20260831-223528-ctrl.pcap hunt frames=45 differ=8 first=32 rule=rival-not-streaming unpinned=8 pinned-master=8 pinned-slave=0
+captures_role-m-boot-20260831-223528-ctrl.pcap rx-down frames=45 differ=18 first=9 rule=counter-not-ahead resyncs=0 longest-refused=18
+captures_role-m-boot-20260831-223528-ctrl.pcap rx-down-00145c9b282d frames=45 differ=18 first=9 rule=counter-not-ahead resyncs=0 longest-refused=18
+captures_role-m-boot-20260831-223528-ctrl.pcap rx-up frames=45 differ=21 first=6 rule=counter-not-ahead resyncs=0 longest-refused=21
+captures_role-m-boot-20260831-223528-ctrl.pcap rx-up-00145c9b282d frames=45 differ=18 first=9 rule=counter-not-ahead resyncs=0 longest-refused=18
+captures_role-m-boot-20260831-223528-ctrl.pcap rx-up-0040abc408bc frames=45 differ=21 first=6 rule=counter-not-ahead resyncs=0 longest-refused=21
+captures_role-rival-arrives-20260831-215902-ctrl.pcap hunt frames=42 differ=6 first=2 rule=rival-not-streaming unpinned=6 pinned-master=6 pinned-slave=0
+captures_role-rival-arrives-20260831-215902-ctrl.pcap rx-down frames=42 differ=18 first=8 rule=counter-not-ahead resyncs=0 longest-refused=18
+captures_role-rival-arrives-20260831-215902-ctrl.pcap rx-down-00145c9b282d frames=42 differ=18 first=8 rule=counter-not-ahead resyncs=0 longest-refused=18
+captures_role-rival-arrives-20260831-215902-ctrl.pcap rx-up-00145c9b282d frames=42 differ=18 first=8 rule=counter-not-ahead resyncs=0 longest-refused=18
+captures_role-rival-arrives-20260831-215902-ctrl.pcap rx-up-0040abc408bc frames=42 differ=18 first=6 rule=counter-not-ahead resyncs=0 longest-refused=18
+courtship-trial-2026-09-12_two-reboots-06h49-07h02-sampled.pcap master-020000000001 frames=780258 differ=58 first=13162 rule=peer-binding
+desk-arrival-q4-2026-09-14_desk-arrival-slice.pcap master-020000000001 frames=270594 differ=5531 first=93667 rule=peer-binding
+headamp-boxmaster-2026-09-11_segments_seg06-pad.pcap master-020000000001 frames=139687 differ=6399 first=19133 rule=peer-binding
+m200-enrol-441k-2026-09-13_enrol-bounce-slice.pcap master-020000000001 frames=295950 differ=5138 first=76969 rule=peer-binding
+m200-enrol-s4000-441k-2026-09-13_enrol-bounce-slice.pcap master-020000000001 frames=291525 differ=5531 first=70064 rule=peer-binding
+m200-headamp-re_m200i-s0808-48k-mirror__ctl-session1-precut.pcap hunt frames=4153 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+m200-headamp-re_m200i-s0808-48k-mirror__ctl-session1-precut.pcap rx-down frames=4153 differ=344 first=2536 rule=counter-not-ahead resyncs=0 longest-refused=344
+m200-headamp-re_m200i-s0808-48k-mirror__ctl-session1-precut.pcap rx-down-0040abc9cc03 frames=4153 differ=344 first=2536 rule=counter-not-ahead resyncs=0 longest-refused=344
+m200-headamp-re_m200i-s0808-48k-mirror__ctl-session1-precut.pcap rx-up frames=4153 differ=5 first=3355 rule=counter-not-ahead resyncs=0 longest-refused=5
+m200-headamp-re_m200i-s0808-48k-mirror__ctl-session1-precut.pcap rx-up-0040abc4dc9c frames=4153 differ=5 first=3355 rule=counter-not-ahead resyncs=0 longest-refused=5
+m200-headamp-re_m200i-s0808-48k-mirror__ctl-session1-precut.pcap rx-up-0040abc9cc03 frames=4153 differ=344 first=2536 rule=counter-not-ahead resyncs=0 longest-refused=344
+m200-headamp-re_m200i-s0808-48k-mirror__ctl2.pcap hunt frames=639166 differ=6513 first=5 rule=rival-not-streaming unpinned=6513 pinned-master=6508 pinned-slave=0
+m200-headamp-re_m200i-s0808-48k-mirror__ctl2.pcap rx-up-0040abc48041 frames=639166 differ=15 first=72029 rule=counter-not-ahead resyncs=0 longest-refused=15
+m200-headamp-re_m200i-s0808-48k-mirror__enrol-01-control.pcap hunt frames=75 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+m200-headamp-re_m200i-s0808-48k-mirror__enrol-02-control.pcap hunt frames=75 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+m200-headamp-re_m200i-s0808-48k-mirror__enrol-03-control.pcap hunt frames=73 differ=5 first=5 rule=rival-not-streaming unpinned=5 pinned-master=0 pinned-slave=0
+m200-headamp-re_m200i-s0808-48k-mirror__enrol-04-control.pcap hunt frames=72 differ=8 first=2 rule=rival-not-streaming unpinned=8 pinned-master=0 pinned-slave=0
+m200-headamp-re_m5000-s0808-96k-mirror__enrol-00-control.pcap hunt frames=1140 differ=8 first=2 rule=rival-not-streaming unpinned=8 pinned-master=0 pinned-slave=0
+m200-master-441k-2026-09-11_box-boot-with-our-slave-present-12h03-12h06.pcap master-020000000001 frames=1099402 differ=3989 first=774309 rule=peer-binding
+m200-s1608-headamp_m200i-s1608-48k-mirror__reacpw-establish-20260721-234355.pcap rx-down frames=5434 differ=7 first=308 rule=counter-not-ahead resyncs=1 longest-refused=7
+m200-s1608-headamp_m200i-s1608-48k-mirror__reacpw-establish-20260721-234355.pcap rx-down-0040abc9cc03 frames=5434 differ=7 first=308 rule=counter-not-ahead resyncs=1 longest-refused=7
+m200-s1608-headamp_m200i-s1608-48k-mirror__reacpw-establish-20260721-234355.pcap rx-up-0040abc9cc03 frames=5434 differ=7 first=308 rule=counter-not-ahead resyncs=1 longest-refused=7
+m200-s1608-headamp_m200i-s1608-48k-mirror__reacpw-estcommit-233158.pcap master-020000000001 frames=4768 differ=499 first=3991 rule=peer-binding
+m200-s1608-headamp_m200i-s1608-48k-mirror__reacpw-reconnect-20260722-000735.pcap master-020000000001 frames=27768 differ=84 first=19683 rule=peer-binding
+m200-s1608-headamp_m200i-s1608-48k-mirror__reacpw-reconnect-20260722-000735.pcap rx-down frames=27768 differ=1483 first=21 rule=counter-not-ahead resyncs=0 longest-refused=344
+m200-s1608-headamp_m200i-s1608-48k-mirror__reacpw-reconnect-20260722-000735.pcap rx-up frames=27768 differ=17 first=9272 rule=counter-not-ahead resyncs=2 longest-refused=8
+m200-s1608-headamp_m200i-s1608-48k-mirror__reacpw-reconnect-20260722-000735.pcap rx-up-0040abc48041 frames=27768 differ=17 first=9272 rule=counter-not-ahead resyncs=2 longest-refused=8
