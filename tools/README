@@ -4,3 +4,12 @@ reac-pw's own (wire_census/group_map_scan/ctrl_delta) into m200-vs-reac-pw.md.
 Subcommands: tap | capture | analyse | diff | all. `--help` is the usage banner
 at the top of the file; the fixture pair to try it on is two captures of an
 M-200 with an S-1608 at 48k (the real desk, and ours).
+
+peer-replay.sh, peer_replay.c, peer-replay-compare.py -- the peer-binding proof against
+the recorded sessions (make peer-replay / peer-attack / peer-sabotage). Every capture is
+replayed frame by frame through two builds (BASE, default origin/main, and this tree);
+tests/peer-replay-expected.txt lists each difference with the rule that explains it, and
+any other difference is red. The attack arm forges frames from three captures into the
+cases the peer binding refuses; the sabotage arm puts each check back and requires both
+arms to go red. peer-replay-selftest.sh proves the comparison refuses what nothing
+explains and runs in make test. Needs the capture corpus (REAC_CAPTURES).

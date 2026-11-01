@@ -306,6 +306,9 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) tests/conformance-packaging.sh
 	$(RUN_TEST) tests/conformance-public-docs.sh
 	$(RUN_TEST) tools/ops-slugs.sh --self-test
+	# THE PEER-BINDING COMPARISON REFUSES WHAT NOTHING EXPLAINS (no captures needed; the
+	# whole-corpus run is `make peer-replay`).
+	$(RUN_TEST) tools/peer-replay-selftest.sh
 	$(RUN_TEST) tools/ops-slugs.sh
 	@$(MAKE) --no-print-directory facts-drift-check
 	@echo "make test: PASS — every arm above ran to the end; make stops at the first red one;" \
@@ -645,10 +648,38 @@ $(FUZZ_GEN): fuzz/gen-corpus.c libreac.a
 fuzz-corpus: $(FUZZ_GEN)
 	$(FUZZ_GEN) fuzz/corpus
 
+# THE PEER-BINDING PROOF AGAINST THE RECORDED SESSIONS. Dev-only, like `corpus`: the
+# captures are not in this repo (REAC_CAPTURES, FreeREAC/reac-captures, git lfs pull).
+#   peer-replay          every capture, frame by frame, through the base (BASE, default
+#                        origin/main) and this tree; red on any difference
+#                        tests/peer-replay-expected.txt does not explain
+#   peer-attack          frames from three captures forged into findings M5, M6 and M8:
+#                        the base accepts each, this tree refuses each, the box's own
+#                        frames are taken by both
+#   peer-sabotage        each check put back the way it was in a scratch copy, one at a
+#                        time: the attack arm AND the replay comparison must go red
+# See tools/peer-replay.sh for the arms, and tools/peer_replay.c for how each is driven.
+BASE ?= origin/main
+PEER_REPLAY = tools/peer-replay.sh --base $(BASE) $(if $(REAC_CAPTURES),--captures $(REAC_CAPTURES)) --jobs $(or $(JOBS),4)
+
+peer-replay:
+	$(PEER_REPLAY)
+
+peer-attack:
+	$(PEER_REPLAY) --attack
+
+peer-sabotage:
+	$(PEER_REPLAY) --sabotage-replay
+
+# The comparison is an instrument too: it must refuse a difference nothing explains.
+peer-replay-selftest:
+	$(RUN_TEST) tools/peer-replay-selftest.sh
+
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_hunt_one_frame test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_rx_spoof test_peer_binding test_topo_hears_vlans test_etf_qdisc_stats
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \
+        peer-replay peer-attack peer-sabotage peer-replay-selftest \
         fuzz fuzz-run fuzz-sabotage fuzz-records fuzz-cov fuzz-checks-selftest fuzz-corpus
