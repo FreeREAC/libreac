@@ -103,7 +103,13 @@ EDGE[4 /* REAC_M_IDLE..REAC_M_ESTABLISHED */][REAC_M_EV_COUNT] = {
 	 * RX before stepping (budget mechanics, not a decision). BYE and the
 	 * drained budget drop to PROBING; a DIFFERENT box's JOIN re-courts it
 	 * (MAC change); the SAME box's JOINs while it settles its TX_MUTE dwell
-	 * hold the stream (rig 2026-07-12: re-granting tore it down forever). */
+	 * hold the stream (rig 2026-07-12: re-granting tore it down forever).
+	 *
+	 * The table sees only the bound box's frames here: reac_master_rx runs the
+	 * peer binding (reac_master_peer_accepts) before classifying, so a BYE, an
+	 * accept or a JOIN from another source never reaches these rows while a box
+	 * is latched or established, and JOIN_NEW is reached only after the old box
+	 * fell silent and the budget dropped the master to PROBING. */
 	[REAC_M_ESTABLISHED] = {
 		[REAC_M_EV_START]           = HOLD(REAC_M_ESTABLISHED),
 		[REAC_M_EV_PRESENCE]        = HOLD(REAC_M_ESTABLISHED),

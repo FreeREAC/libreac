@@ -238,6 +238,14 @@ int main(void)
 			memcpy(frame + 16, win, 34);                /* the M-200's own cfea */
 			CHK(reac_hunt_observe(&h, frame, l, 4000, NULL) >= 0);
 			reac_hunt_step(&h, 5000);
+			/* ONE announce is not a desk on the wire (REAC_HUNT_RIVAL_*): the role
+			 * waits for the stream every real master sends with it */
+			CHK(h.arb.rival == REAC_RIVAL_DESK && h.verdict == REAC_HUNT_HUNTING);
+			/* ...and a desk streams: its frames at wire cadence (one per 250 us,
+			 * 25 ms of them) and the segment is joined */
+			for (int i = 1; i <= 100; i++)
+				CHK(reac_hunt_observe(&h, frame, l, 4000 + (uint64_t)i * 250000, NULL) >= 0);
+			reac_hunt_step(&h, 4000 + 100ull * 250000);
 			CHK(h.arb.rival == REAC_RIVAL_DESK && h.verdict == REAC_HUNT_SLAVE);
 		}
 		/* 4b'. pending changes nothing: a wire already decided keeps its verdict */
