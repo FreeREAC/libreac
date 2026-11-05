@@ -23,6 +23,7 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  gcc
 BuildRequires:  make
 BuildRequires:  python3
+BuildRequires:  python3
 
 %description
 libreac speaks Roland REAC, the protocol between Roland digital consoles and their
