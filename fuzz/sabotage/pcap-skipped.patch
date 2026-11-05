@@ -1,0 +1,11 @@
+Breaks the check of fuzz/fuzz_pcap.c:299 (the source counts each record larger than the buffer that the reader meets, FreeREAC/libreac#35).
+Caught by the seed input "two-oversized" of fuzz_pcap.
+
+diff --git a/src/pcap_source.c b/src/pcap_source.c
+index 3d26c83..67602dc 100644
+--- a/src/pcap_source.c
++++ b/src/pcap_source.c
+@@ -74,3 +74,2 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
+ 			 * writes nothing to stderr: it is counted on the source. */
+-			ps->skipped_oversized++;
+ 			/* READ past it, don't seek: fseek beyond EOF succeeds, so a record

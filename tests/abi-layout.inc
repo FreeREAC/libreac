@@ -5,15 +5,16 @@
  * difference is an ABI break; see the generator's header for the
  * rig incident that bought this file.
  */
-ABI_GENERATED_FOR(6)
+ABI_GENERATED_FOR(7)
 ABI_STRUCT_COUNT(69)
 
-ABI_STRUCT(pcap_source, 24, 8)
+ABI_STRUCT(pcap_source, 32, 8)
 ABI_MEMBER(pcap_source, f, 0)
 ABI_MEMBER(pcap_source, swapped, 8)
 ABI_MEMBER(pcap_source, last_orig_len, 12)
 ABI_MEMBER(pcap_source, last_vlan_tagged, 16)
 ABI_MEMBER(pcap_source, last_vlan_id, 20)
+ABI_MEMBER(pcap_source, skipped_oversized, 24)
 
 ABI_STRUCT(reac_arbitration, 32, 4)
 ABI_MEMBER(reac_arbitration, state, 0)

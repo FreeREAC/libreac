@@ -117,7 +117,9 @@ The header comment of every harness lists them; in short:
 - **pcap**: only the two classic magics open; a record handed back fits the buffer and equals the
   file's record, its 802.1Q tag stripped exactly when it carried one; the timestamp is the
   header's; a record of 0 bytes is skipped like one larger than the buffer, and the walk ends with
-  0 exactly at the end of the file (since 1.8.0: 0 means the end of the file and nothing else).
+  0 exactly at the end of the file (since 1.8.0: 0 means the end of the file and nothing else);
+  `skipped_oversized` counts each record larger than the buffer the reader meets, also the one
+  whose skip gives -1, from 0 at open (#35).
 
 ## The seed corpus
 
@@ -185,7 +187,7 @@ make fuzz-cov: RED -- harness checks with no mutant record: knock
 | boxreg | 87 | 100.00% | |
 | knock | 28 | 100.00% | |
 | grant | 142 | 99.30% | `reac_grant_build_sweep`: the width re-check after `reac_grant_alloc_fits` has already refused that width |
-| pcap | 78 | 100.00% | |
+| pcap | 80 | 100.00% | |
 | qdisc | 160 | 98.12% | `qdisc_dump`: the `-EIO` for a `recv()` of 0 bytes, which a netlink socket never returns and the fake kernel does not either |
 
 ## The mutant records
@@ -238,9 +240,10 @@ lands with its breakage, or it does not land.
 
 `make fuzz-sabotage` proves each harness can find a bug in the code it covers by fuzzing, not
 only on its records. For every harness, `fuzz/sabotage/<harness>.patch` is a one-line change to
-the parser, with the check it breaks and the seed that catches it written above its
+the parser, and each `fuzz/sabotage/<harness>-<what>.patch` beside it is one more, each with the
+check it breaks and the seed that catches it written above its
 `diff --git` line (OSS Verify reads the directory as `mutants: fuzz/sabotage`); the target
-applies it, rebuilds, fuzzes for at most 30 s from the corpus, restores the source with
+applies each, rebuilds, fuzzes for at most 30 s from the corpus, restores the source with
 `git checkout --`, and is red unless the fuzzer crashed. Each patch is also one of the records
 above, so `make fuzz-records` proves its seed and its check.
 
@@ -255,9 +258,10 @@ above, so `make fuzz-records` proves its seed and its check.
 | knock | `reac_knock_step` compares against `opened_ns` instead of `due_ns` | the seed `silent-wire`, the silence property |
 | grant | `reac_grant_alloc_fits` lets a box's last slot reach `0x30` | the seed `box-base48-w1`, the admission property |
 | pcap | `pcap_source_next` reads a record one byte larger than the buffer | the seed `record-one-byte-over-cap`: the fit property (ASan in `fread` in its builds) |
+| pcap (`pcap-skipped.patch`) | `pcap_source_next` skips a record larger than the buffer without counting it in `skipped_oversized` | the seed `two-oversized`: the count property |
 | qdisc | `qdisc_dump` subtracts the walk offset from the bytes read as `size_t`, so an unpadded last message wraps the remainder and the walk runs on into the buffer | the seed `unpadded-last`: the failure property reads the error the fake kernel planted past the reply |
 
-Every one of the ten is caught by a seed on its first execution. The qdisc one is the bug the
+Every one of the eleven is caught by a seed on its first execution. The qdisc one is the bug the
 harness found when it arrived in 1.10.0, kept as the mutant. Four of them (decode, identity,
 grant, pcap) used to be found only by fuzzing, in under a second; each now has the seed that
 catches it.
