@@ -92,6 +92,11 @@ int main(int argc, char **argv)
 	for (int s = 0; s < NSLOT; s++)
 		if (visits[s]) { fprintf(stderr, " %02x(%lu)", s, visits[s]); nv++; }
 	fprintf(stderr, "%s\n", nv ? "" : " none");
+	/* pcap_source skips a record larger than buf without a word and counts it (#35):
+	 * this line is what tells a person that frames were skipped. */
+	if (ps.skipped_oversized)
+		fprintf(stderr, "slotmap_watch: skipped_oversized=%" PRIu32 " (records larger than the %zu-byte buffer)\n",
+		        ps.skipped_oversized, sizeof buf);
 	if (!msgs) {
 		fprintf(stderr, "slotmap_watch: no slot-map message — an empty scan is not a result\n");
 		return 1;

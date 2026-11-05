@@ -1236,6 +1236,21 @@ static void gen_pcap(void)
 	pcap_record(&s, 0, 1, 2, (const uint8_t *)"", 0, 0);
 	pcap_record(&s, 0, 1, 3, (const uint8_t *)"\x42", 1, 1);
 	emit("pcap", "empty-record-then-frame", &s);
+	/* two records larger than an 8-byte buffer, around one that fits: the reader counts
+	 * the first on the way to the record it hands back and the second on the way to
+	 * the end of the file, so skipped_oversized reads 2 (FreeREAC/libreac#35) */
+	put8(&s, 1);
+	pcap_header(&s, 0);
+	pcap_record(&s, 0, 1, 2, NINE, sizeof NINE, sizeof NINE);
+	pcap_record(&s, 0, 1, 3, (const uint8_t *)"\x42", 1, 1);
+	pcap_record(&s, 0, 1, 4, NINE, sizeof NINE, sizeof NINE);
+	emit("pcap", "two-oversized", &s);
+	/* a buffer of 0 bytes and a 1-byte record: the reader cannot skip it and gives -1,
+	 * and has counted it at its header first */
+	put8(&s, 0);
+	pcap_header(&s, 0);
+	pcap_record(&s, 0, 1, 2, (const uint8_t *)"\x42", 1, 1);
+	emit("pcap", "oversized-cap-0", &s);
 	free(s.p);
 }
 
