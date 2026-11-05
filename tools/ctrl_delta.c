@@ -143,6 +143,11 @@ int main(int argc, char **argv)
 			if (st[i].changes[b]) { fprintf(stderr, "%s%d(%lu)", any++ ? "," : "", b, st[i].changes[b]); }
 		fprintf(stderr, "%s\n", any ? "" : "none");
 	}
+	/* pcap_source skips a record larger than buf without a word and counts it (#35):
+	 * this line is what tells a person that frames were skipped. */
+	if (ps.skipped_oversized)
+		fprintf(stderr, "ctrl_delta: skipped_oversized=%" PRIu32 " (records larger than the %zu-byte buffer)\n",
+		        ps.skipped_oversized, sizeof buf);
 	if (!classified) {
 		fprintf(stderr, "ctrl_delta: nothing classified — an empty scan is not a result\n");
 		return 1;

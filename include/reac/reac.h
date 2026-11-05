@@ -415,7 +415,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *
  * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
  * number; tests/conformance-packaging.sh refuses a spec or debian/ copy that disagrees. */
-#define LIBREAC_ABI 6
+#define LIBREAC_ABI 7
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)
