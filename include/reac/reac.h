@@ -280,6 +280,15 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.11.0: AN ABI BREAK (LIBREAC_ABI 6 -> 7, libreac.so.7), AND THE BOUND BOX DECIDES.
+ *        struct pcap_source gains skipped_oversized (sizeof 24 -> 32): pcap_source_next
+ *        counts the records larger than the buffer it skips, and the capture tools print
+ *        the total (FreeREAC/libreac#35). A consumer allocates the struct, so the soname
+ *        moves. The master, the hunt and reac_rx are bound to their peer: once a box is
+ *        latched only its own source moves the master, one forged announce decides no
+ *        role (REAC_HUNT_RIVAL_FRAMES over REAC_HUNT_RIVAL_SPAN_NS), and a frame whose
+ *        counter is not ahead of the last accepted one is not decoded. The hunt's frame
+ *        count lives in reac_disco_entry's former padding, so nothing else moves.
  * 1.10.0: THE QDISC READ-BACK HAS A FUZZ WITNESS, AND WALKS NO BYTE IT DID NOT READ
  *        (FreeREAC/libreac#8, R3). fuzz_qdisc drives reac_etf_qdisc_state and
  *        reac_etf_qdisc_stats_read over a fake rtnetlink kernel; it found that the dump
@@ -402,7 +411,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 10
+#define LIBREAC_VERSION_MINOR 11
 #define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version

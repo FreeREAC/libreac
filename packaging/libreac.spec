@@ -2,7 +2,7 @@
 # libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.10.0
+Version:        1.11.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -181,6 +181,16 @@ make test
 %{_libexecdir}/libreac/tests/fake_box
 
 %changelog
+* Thu Nov 05 2026 Pau Aliagas <linuxnow@gmail.com> - 1.11.0-1
+- ABI break: struct pcap_source gains skipped_oversized, so libreac.so.6 becomes
+  libreac.so.7 (libreac7). pcap_source_next counts the records larger than the
+  buffer it skips, and the capture tools print the total (#35).
+- Peer binding: once a box is latched only its own source moves the master; the
+  hunt takes a rival into account only after several frames over a span; reac_rx
+  drops a frame whose counter is not ahead of the last accepted one.
+- The Python binding loads libreac.so.7; fuzz_ctrl's round trip requires each
+  block the row has.
+
 * Wed Oct 28 2026 Pau Aliagas <linuxnow@gmail.com> - 1.10.0-1
 - The etf qdisc read-back (reac_etf_qdisc_state, reac_etf_qdisc_stats_read)
   has a fuzz harness, fuzz_qdisc, over a fake rtnetlink kernel, with 32
