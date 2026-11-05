@@ -10,7 +10,8 @@
 #   ARM 1  the spec's Version and the top of debian/changelog equal the header's version;
 #   ARM 2  the spec's %global abi, and the libreac<N> package of debian/control, equal LIBREAC_ABI;
 #   ARM 3  the spec's %global tabi, debian/rules' TABI and the libreac-transport<N> package of
-#          debian/control agree (libreac-transport's soname is its own).
+#          debian/control agree (libreac-transport's soname is its own);
+#   ARM 4  debian/control builds the Python binding's conformance gate with python3.
 # It walks files, not `git ls-files`, so it also runs from the source tarball (%check). It carries a
 # planted good/bad pair, so it cannot pass (or fail) vacuously.
 #
@@ -36,6 +37,7 @@ check() {
 	deb_abi=$(sed -n 's/^Package: libreac\([0-9][0-9]*\)$/\1/p' "$t/debian/control")
 	deb_tabi=$(sed -n 's/^Package: libreac-transport\([0-9][0-9]*\)$/\1/p' "$t/debian/control")
 	rules_tabi=$(sed -n 's/^TABI *= *//p' "$t/debian/rules")
+	deb_python=$(sed -n '/^Build-Depends:/p' "$t/debian/control")
 
 	[ "$spec_ver" = "$ver" ] || { echo "  ARM 1: the spec says Version $spec_ver, reac.h says $ver"; bad=1; }
 	[ "$deb_ver" = "$ver" ] || { echo "  ARM 1: debian/changelog says $deb_ver, reac.h says $ver"; bad=1; }
@@ -43,6 +45,8 @@ check() {
 	[ "$deb_abi" = "$abi" ] || { echo "  ARM 2: debian/control names libreac$deb_abi, reac.h says LIBREAC_ABI $abi"; bad=1; }
 	[ -n "$spec_tabi" ] && [ "$spec_tabi" = "$deb_tabi" ] && [ "$spec_tabi" = "$rules_tabi" ] ||
 		{ echo "  ARM 3: libreac-transport's soname: spec '$spec_tabi', debian/control '$deb_tabi', debian/rules '$rules_tabi'"; bad=1; }
+	printf '%s\n' "$deb_python" | grep -Eq '^Build-Depends:.*(^|,)[[:space:]]*python3([[:space:]]*,|[[:space:]]*$)' ||
+		{ echo "  ARM 4: debian/control must Build-Depend on python3 for tests/conformance-python-soname.sh"; bad=1; }
 	return $bad
 }
 
@@ -65,6 +69,7 @@ plant() { # <name>: a copy of the files the arms read
 plant good
 plant bad
 sed -i 's/^Version: .*/Version:        0.0.1/; s/^%global abi .*/%global abi 99/; s/^%global tabi .*/%global tabi 98/' "$P/bad/packaging/libreac.spec"
+sed -i 's/\(^Build-Depends:.*\)python3/\1python3-missing/' "$P/bad/debian/control"
 if ! check "$P/good" >/dev/null; then
 	echo "NOT A RESULT: the planted conforming tree was refused"; check "$P/good"; exit 2
 fi
@@ -72,7 +77,7 @@ out=$(check "$P/bad")
 if [ $? -eq 0 ]; then
 	echo "NOT A RESULT: the planted drifted tree was accepted"; exit 2
 fi
-for arm in 1 2 3; do
+for arm in 1 2 3 4; do
 	echo "$out" | grep -q "ARM $arm" || { echo "NOT A RESULT: the planted tree did not trip ARM $arm"; exit 2; }
 done
 

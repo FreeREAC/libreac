@@ -23,6 +23,7 @@ int pcap_source_open(struct pcap_source *ps, const char *path)
 	ps->last_orig_len = 0;
 	ps->last_vlan_tagged = 0;
 	ps->last_vlan_id = 0;
+	ps->skipped_oversized = 0;
 	if (!ps->f)
 		return -1;
 	uint8_t gh[24];
@@ -70,7 +71,8 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
 			 * a corrupt header). Skip its body and keep going — returning -1
 			 * here is indistinguishable from a read error and would silently
 			 * abort the rest of a multi-thousand-frame capture. The skip
-			 * writes nothing to stderr. */
+			 * writes nothing to stderr: it is counted on the source. */
+			ps->skipped_oversized++;
 			/* READ past it, don't seek: fseek beyond EOF succeeds, so a record
 			 * cut short inside its own body read as a clean EOF (0) and a
 			 * truncated capture ended quietly. A short discard is the -1 a cut

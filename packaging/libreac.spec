@@ -9,7 +9,7 @@ Version:        1.10.0
 # instead of failing at exec time with `undefined symbol`. It tracks
 # LIBREAC_ABI in include/reac/reac.h -- tests/conformance-packaging.sh refuses a copy
 # that disagrees with the header, in `make test`, before a package is built.
-%global abi 6
+%global abi 7
 # libreac-transport's own soname major. It moves independently of libreac's: the two libraries
 # are built from this one source and share a version, not an ABI.
 %global tabi 7
@@ -22,6 +22,7 @@ Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  gcc
 BuildRequires:  make
+BuildRequires:  python3
 
 %description
 libreac speaks Roland REAC, the protocol between Roland digital consoles and their

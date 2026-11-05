@@ -18,10 +18,11 @@
 # seed no longer reaches the check, or whose breakage another check catches first is
 # red, with what happened instead.
 #
-# THE SABOTAGE PATCHES too: each fuzz/sabotage/<harness>.patch names above its
-# `diff --git` line the check it breaks (`Breaks the check of <file>:<line>`) and the
-# seed that catches it (`Caught by the seed input "<seed>"`); the patch alone must
-# make that seed stop that check, the same way.
+# THE SABOTAGE PATCHES too: each fuzz/sabotage/<harness>.patch, and each
+# fuzz/sabotage/<harness>-<what>.patch beside it, names above its `diff --git` line
+# the check it breaks (`Breaks the check of <file>:<line>`) and the seed that catches
+# it (`Caught by the seed input "<seed>"`); the patch alone must make that seed stop
+# that check, the same way.
 #
 # THE RATCHET. A check whose comment has no record and no `not a property: <reason>`
 # line is refused here, before anything is built (fuzz/checks.awk reads the comments;
@@ -158,9 +159,9 @@ done <"$B/records.txt"
 # that seed must stop THAT check, on the plain harness.
 pmet=0
 ptotal=0
-for h in "$@"; do
-	p=fuzz/sabotage/$h.patch
-	[ -f "$p" ] || continue
+for p in $(for h in "$@"; do ls "fuzz/sabotage/$h.patch" fuzz/sabotage/"$h"-*.patch 2>/dev/null; done); do
+	h=$(basename "$p" .patch)
+	h=${h%%-*}
 	ptotal=$((ptotal + 1))
 	at=$(sed -n 's/^Breaks the check of \(fuzz\/[^:]*:[0-9]*\) .*/\1/p' "$p")
 	seed=$(sed -n 's/^Caught by the seed input "\([^"]*\)" of fuzz_.*/\1/p' "$p")
