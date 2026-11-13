@@ -1,7 +1,7 @@
 name: release
 
-# Packages through the shared release workflows of FreeMixer/.github. A tag v<version> builds signed RPMs (Fedora 44, x86_64 and aarch64) and DEBs (Debian bookworm and
-# trixie, amd64 and arm64), publishes them to the FreeMixer channel and attaches them to the GitHub
+# Packages through the shared release workflows of Open-Mixer/.github. A tag v<version> builds signed RPMs (Fedora 44, x86_64 and aarch64) and DEBs (Debian bookworm and
+# trixie, amd64 and arm64), publishes them to the OpenMixer channel and attaches them to the GitHub
 # release. Any other run, a pull request or a branch, is a dry run: it
 # builds and lints everything and publishes nothing.
 #
@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   rpm:
-    uses: FreeMixer/.github/.github/workflows/build-rpm.yml@v1
+    uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@openmixer-v1
     with:
       package-name: libreac
       binary-names: libreac libreac-devel libreac-transport libreac-transport-devel
@@ -40,7 +40,7 @@ jobs:
   # failed RPM.
   deb:
     needs: rpm
-    uses: FreeMixer/.github/.github/workflows/build-deb.yml@v1
+    uses: Open-Mixer/.github/.github/workflows/build-deb.yml@openmixer-v1
     with:
       package-name: libreac
       binary-names: libreac7 libreac-dev libreac-transport7 libreac-transport-dev
