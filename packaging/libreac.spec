@@ -48,7 +48,7 @@ Headers and pkg-config for building against libreac.
 
 %package -n libreac-transport
 Summary:        The REAC transport layer: sockets, pacer, RT threads, VLAN scan (userspace backend)
-Requires:       libreac%{?_isa} >= 1.1.0
+Requires:       (libreac%{?_isa} >= 1.1.0 with libreac%{?_isa} < 2)
 
 %description -n libreac-transport
 libreac-transport is the REAC transport layer: AF_PACKET frame RX/TX over a lock-free
@@ -61,7 +61,7 @@ itself, that belongs to the process that links it.
 %package -n libreac-transport-devel
 Summary:        Development files for libreac-transport
 Requires:       libreac-transport%{?_isa} = %{version}-%{release}
-Requires:       pkgconfig(libreac) >= 1.1.0
+Requires:       (pkgconfig(libreac) >= 1.1.0 with pkgconfig(libreac) < 2)
 
 %description -n libreac-transport-devel
 Headers and pkg-config for building against libreac-transport.
