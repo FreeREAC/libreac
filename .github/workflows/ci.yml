@@ -16,12 +16,56 @@ jobs:
       - name: Transport tests
         run: make test-transport
 
+  # The same two suites in a Fedora container of each release the RPMs are built for (the shared build-rpm
+  # workflow's 44 and 45): the Ubuntu job above proves the sources, this proves the release's own target, its
+  # compiler and its libc. The container is --privileged because the transport suite mints user and net
+  # namespaces and veth pairs, which Docker's default seccomp profile refuses; the runner's kernel modules a
+  # namespace may not autoload are loaded on the host first, by name.
+  test-fedora:
+    name: test (fedora ${{ matrix.fedora }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora: [44, 45]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare the host for namespace tests
+        run: |
+          set -eux
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+          mods="veth dummy 8021q sch_etf"
+          if ! sudo modprobe -a $mods; then
+            sudo apt-get update -q
+            sudo apt-get install -y -q "linux-modules-extra-$(uname -r)"
+            sudo modprobe -a $mods
+          fi
+          lsmod | grep -E '^(veth|dummy|8021q|sch_etf) '
+      - name: Build + unit tests, then the transport tests, in fedora:${{ matrix.fedora }}
+        run: |
+          docker run --rm --privileged -v "$GITHUB_WORKSPACE:/w" -w /w fedora:${{ matrix.fedora }} bash -euxo pipefail -c '
+            dnf install -y -q --setopt=install_weak_deps=False --setopt=retries=10 \
+              gcc make python3 git iproute iproute-tc util-linux procps-ng libcap findutils diffutils gawk sed grep coreutils
+            git config --global --add safe.directory "*"
+            echo "fedora $(rpm -E %fedora), gcc $(gcc -dumpfullversion)"
+            make test
+            make test-transport
+          '
+
   # The package that carries fake_box for the programs that test against it (reac-pw): built the way the release
-  # builds it, and its file list is exactly the one binary, which needs no libreac package to run.
+  # builds it, on each Fedora release the release builds for, and its file list is exactly the one binary, which
+  # needs no libreac package to run.
   tests-package:
+    name: tests-package (fedora ${{ matrix.fedora }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    container: fedora:44
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora: [44, 45]
+    container: fedora:${{ matrix.fedora }}
     steps:
       - name: Install the build tools
         run: dnf install -y --setopt=install_weak_deps=False git rpm-build dnf5-plugins gcc make tar gzip
