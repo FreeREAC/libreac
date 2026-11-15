@@ -250,21 +250,72 @@ for both arms, one S-4000S-3208 per link, 60 s at 8000 fps, `pace_hist` at 1 µs
 Both NICs are software-only (no PHC), so the etf rows measure the kernel's hrtimer release, not a
 hardware launch. The daemon's own CPU did not rise (1275 vs 1612 process jiffies on the PCI pair).
 
-## Hardware launch: not implemented
+## Hardware launch (reac-pw#98)
 
-Everything measured above is **software ETF**. On an i225/i226 (`igc`) the etf qdisc would sit on
-a hardware TX queue of the physical NIC under an `mqprio` parent with `offload`, with the NIC's
-PHC disciplined to `CLOCK_TAI`; a VLAN sub-interface has no TX queue of its own to offload onto.
-The daemon does not install that form today, and the `delta` and lead above are derived for the
-software path only.
+Everything measured above is **software ETF**. On an i225/i226 (`igc`) the launch instant moves
+into the NIC, and the daemon chooses that form itself when the device can take it.
+
+**The form.** The qdisc goes on the **physical NIC**, never on a VLAN sub-interface (which has no
+TX queue of its own to offload onto, so a VLAN keeps the software form above):
+
+    tc qdisc add dev <nic> root handle 100: mqprio num_tc 2 \
+        map 1 1 1 0 1 1 1 1 1 1 1 1 1 1 1 1 queues 1@0 3@1 hw 0
+    tc qdisc add dev <nic> parent 100:1 etf clockid CLOCK_TAI delta <d> offload skip_sock_check
+
+The pacer's socket carries its own priority (`SO_PRIORITY` 3), which the map sends to traffic
+class 0: hardware queue 0, the only queue with a launch-time qdisc. Everything else on the NIC
+rides class 1 on queues 1-3. So an unstamped packet never reaches the launch-time queue, which
+removes the `skip_sock_check` hazard above for this form. The daemon builds both messages over
+rtnetlink, byte for byte as iproute2 does, and never runs `tc`.
+
+**When the daemon chooses it.** All three must hold, each checked rather than assumed:
+
+1. `ETHTOOL_GET_TS_INFO` on the TX device reports a PHC (`phc_index >= 0`);
+2. the device accepts `etf ... offload` on queue 0 under the mqprio parent. A device that cannot
+   do it answers `-EOPNOTSUPP` ("Specified device does not support ETF offload": a veth does
+   exactly this);
+3. the PHC is aligned to `CLOCK_TAI` by the `phc2sys` that reac-pw's packaging owns (one PHC
+   owner: where `ptp4l` runs for AES67 on the same NIC, ptp4l owns the PHC and phc2sys only
+   aligns the system clock to it, never the reverse).
+
+Otherwise the daemon installs the software form, as today, and says once in the journal which
+condition failed. The health line names the backend in use: hardware launch time, software ETF
+or wake (the thread).
+
+**`delta` and the lead are re-measured** for this form. Both present values come from a thread's
+wake tail and a software qdisc, and neither term means the same thing once the NIC owns the
+instant.
+
+### Acceptance: hardware stamps are the instrument of record
+
+**A capture on the transmitting device cannot judge the offload.** tcpdump stamps a sent frame
+in software when it reaches the driver, and under offload that is *before* the NIC holds the
+frame for its launch time. A TX-side capture would therefore read the same for the software and
+the hardware arm, and prove nothing about the second.
+
+So the two arms are judged by different instruments, and **their figures are never compared
+across arms**:
+
+- **Software-ETF arm (the baseline):** the capture on the transmitting device above, the same
+  instrument as the table in *Measured on the transmitting device*, on the same ports.
+- **Hardware arm:** the i226's own **TX hardware timestamps** (`SOF_TIMESTAMPING_TX_HARDWARE`).
+  The launch error is the hardware stamp minus the frame's `SCM_TXTIME`. The NIC stamps only a
+  few outstanding frames at a time, so this is a **sample**, and every figure states its sample
+  count. The error includes phc2sys's residual between the PHC and `CLOCK_TAI`, which is read
+  and stated beside it.
+- Each arm is read idle and under a CPU load. The hardware arm passes when its launch error is
+  well under 1 µs and does not move with the load.
+- A wire capture with **hardware receive stamps** on a second i226 port (`tcpdump -j
+  adapter_unsynced`, the omx-wire tier) is the cross-check, when a port and a cable are free.
 
 ## What this does not prove
 
 - **The daemon-installed qdisc is proven on a veth in a private namespace**
   (`tests/etf-qdisc-owned.sh` in reac-pw) and by the byte-exact builder test; the pacing arms in
   the table above were measured with the qdisc put there by hand.
-- **Software ETF only.** The NICs measured have no PTP hardware clock and no ETF offload, so every
-  figure here is about the kernel's hrtimer release, not about a NIC's.
+- **Software ETF only, so far.** The NICs in the table have no PTP hardware clock and no ETF
+  offload, so every figure there is about the kernel's hrtimer release. The hardware arm's figures
+  are recorded under *Hardware launch* once measured.
 - **`skip_sock_check`'s effect on the segment's other transmitters is unverified**, as above.
 - **No veth arm of `tools/etf-veth-probe.sh` has run.** It submits a burst with launch times and
   requires it to ARRIVE as a grid, with an unstamped burst as its control; it needs iproute2 and
