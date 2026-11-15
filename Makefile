@@ -143,7 +143,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
 	@mkdir -p $(BUILD_DIR); rm -f $(SKIP_LOG)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	$(RUN_TEST) ./test_reac
@@ -250,6 +250,13 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	    tests/test_reac_etf_qdisc.c transport/src/reac_etf_qdisc.c \
 	    -o test_reac_etf_qdisc
 	$(RUN_TEST) ./test_reac_etf_qdisc
+	# THE HARDWARE LAUNCH'S INSTRUMENT OF RECORD: a sampled frame's NIC TX stamp paired
+	# with the launch time it carried, by the grid (a skipped stamp shifts nothing), and
+	# the error-queue reader taking the raw hardware stamp and nothing else.
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) -Itransport/src \
+	    tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c -lm \
+	    -o test_reac_etf_hwstamp
+	$(RUN_TEST) ./test_reac_etf_hwstamp
 	# THE ABI RATCHET. Every other test is rebuilt against the headers it is
 	# testing and therefore cannot see a struct member move; reac-pw is not.
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests $(INC) \
@@ -687,7 +694,7 @@ peer-replay-selftest:
 	$(RUN_TEST) tools/peer-replay-selftest.sh
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_hunt_one_frame test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_reac_etf_hwstamp test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_hunt_one_frame test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_rx_spoof test_peer_binding test_topo_hears_vlans test_etf_qdisc_stats test_etf_qdisc_offload
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 

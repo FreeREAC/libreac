@@ -46,6 +46,7 @@ test_tap
 pace_hist
 test_reac_etf
 test_reac_etf_qdisc
+test_reac_etf_hwstamp
 etf_probe
 topo_bind_probe
 test_no_getenv_conformance
