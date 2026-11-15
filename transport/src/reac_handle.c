@@ -25,6 +25,7 @@ void reac_handle_close(struct reac_handle **h)
 		return;
 	if ((*h)->fd >= 0)
 		close((*h)->fd);
+	free((*h)->etf_hw);
 	free(*h);
 	*h = NULL;
 }

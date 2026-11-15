@@ -167,6 +167,12 @@ enum reac_etf_refusal reac_etf_socket_arm(int fd, int tai_offset_s,
 
 unsigned reac_etf_drain_errors(int fd, unsigned budget, uint8_t *first_code)
 {
+	return reac_etf_drain(fd, budget, first_code, NULL, NULL);
+}
+
+unsigned reac_etf_drain(int fd, unsigned budget, uint8_t *first_code,
+                        void (*on_msg)(struct msghdr *m, void *ctx), void *ctx)
+{
 	unsigned n = 0;
 	uint8_t seen = 0;
 	uint8_t ctl[512];
@@ -181,6 +187,8 @@ unsigned reac_etf_drain_errors(int fd, unsigned budget, uint8_t *first_code)
 		m.msg_controllen = sizeof ctl;
 		if (recvmsg(fd, &m, MSG_ERRQUEUE | MSG_DONTWAIT) < 0)
 			break;                       /* EAGAIN: the queue is empty */
+		if (on_msg)
+			on_msg(&m, ctx);
 		for (struct cmsghdr *c = CMSG_FIRSTHDR(&m); c; c = CMSG_NXTHDR(&m, c)) {
 			/* The pacer's socket is AF_PACKET, so packet_recvmsg puts the
 			 * error at SOL_PACKET/PACKET_TX_TIMESTAMP. Anything else on this

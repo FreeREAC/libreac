@@ -303,6 +303,13 @@ across arms**:
   few outstanding frames at a time, so this is a **sample**, and every figure states its sample
   count. The error includes phc2sys's residual between the PHC and `CLOCK_TAI`, which is read
   and stated beside it.
+  The instrument runs inside the pacer, on the daemon's own frames:
+  `reac_pacer_launch_stamps_arm(p, every)` (after open, before start, ETF backend only) makes
+  every `every`th frame carry a `SO_TIMESTAMPING` request beside its `SCM_TXTIME`, the error-queue
+  drain pairs each stamp with the sampled launch time within half a slot period of it, and
+  `reac_pacer_launch_stamps()` reads paired and unpaired counts, mean, sd, min, max and
+  p50/p99/p99.9 (10 ns bins over ±10 µs). Unpaired stamps are counted, not dropped: many unpaired
+  and few paired is a PHC that phc2sys is not aligning to `CLOCK_TAI`.
 - Each arm is read idle and under a CPU load. The hardware arm passes when its launch error is
   well under 1 µs and does not move with the load.
 - A wire capture with **hardware receive stamps** on a second i226 port (`tcpdump -j

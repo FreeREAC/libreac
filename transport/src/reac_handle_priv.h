@@ -40,6 +40,12 @@ struct reac_handle {
 	 * daemon publishes it (reac_pacer_backend_refusal), because a fallback the
 	 * operator cannot see is a silent no-op with extra steps. */
 	const char          *etf_refusal;
+	/* THE HARDWARE LAUNCH'S INSTRUMENT OF RECORD (reac_etf_hwstamp.h), NULL unless
+	 * reac_pacer_launch_stamps_arm asked for it: every `etf_hw_every`th frame asks
+	 * the NIC for its TX stamp. Allocated before the pacer thread starts, freed
+	 * with the handle. */
+	struct reac_etf_hw  *etf_hw;
+	unsigned             etf_hw_every;
 };
 
 /* Wrap an open descriptor. NULL on ENOMEM — the caller still owns `fd` then and must
