@@ -22,6 +22,17 @@
  * (comma-separated, or "*" for all — reac_ifscan_wireless_allowed). Unset/empty = every
  * wireless NIC excluded, which is the default and the common case.
  *
+ * A SEGMENT IS A PHYSICAL NIC, OR A VLAN ON ONE. Never a bridge, a veth, a tun/tap, a
+ * macvlan/ipvlan, a bond, or any other interface with no device of its own behind it: a REAC
+ * box is cabled to a port. Found 2026-11-15 on a host running rootless containers: the daemon
+ * listened on and knocked (347 control frames per hunting cycle) on podman0 and its veth0..2,
+ * so every container on that bridge received REAC control frames. The kernel says which an
+ * interface is, in sysfs (reac_ifscan_is_physical): `<if>/device` exists for a PCI or USB NIC;
+ * a VLAN (`uevent` DEVTYPE=vlan) has no device and is physical when its one `lower_*` is. A
+ * virtual interface never reaches the `ether` gate unless its name is listed by
+ * reac_ifscan_set_allow_virtual (comma-separated, or "*"): the namespace test suites, whose
+ * segments ARE veths, opt in; nothing else should. Each exclusion is said once per name.
+ *
  * A SEGMENT DROPS ON LINK LOSS, WITH HYSTERESIS. Carrier gone starts a hold; carrier back inside
  * it cancels the hold and the segment keeps its FSM, ring and nodes — a box power-cycle, a PHY
  * renegotiation and a re-seated plug are all shorter than the hold and must not churn the graph.
@@ -169,6 +180,19 @@ int reac_ifscan_is_wireless(const char *root, const char *ifname);
  * in? "*" opts in every wireless NIC; otherwise a comma-separated list of exact interface
  * names. Pure string matching, no I/O. */
 int reac_ifscan_wireless_allowed(const char *allowlist, const char *ifname);
+
+/* ---- physical only (opt-in for virtual) --------------------------------------------------- */
+
+/* Whether `ifname` is a physical NIC or a VLAN on one, read from `<root ?: "/sys/class/net">`:
+ * 1 yes; 0 no, with `why` (may be NULL) naming what it is instead ("a bridge", "a veth or
+ * other virtual interface: no device behind it", "a VLAN on <lower>, which is ...", "not in
+ * <root>"). A VLAN stack is followed down to its device, at most 4 levels (QinQ is two). */
+int reac_ifscan_is_physical(const char *root, const char *ifname, char *why, size_t cap);
+
+/* Opt virtual interfaces INTO the scan: "*" for all, or a comma-separated list of exact names
+ * (reac_ifscan_wireless_allowed's grammar). NULL or "" (the default) opts none in. The string
+ * is copied. Main loop only, before the scan starts. */
+void reac_ifscan_set_allow_virtual(const char *allowlist);
 
 /* ---- the netlink shell ------------------------------------------------------------------ */
 
