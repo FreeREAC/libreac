@@ -28,6 +28,7 @@
 #define _GNU_SOURCE
 #endif
 #include "reac_etf.h"
+#include <reac/transport/reac_etf_qdisc.h>   /* REAC_ETF_QDISC_PRIO */
 
 #include <inttypes.h>
 #include <errno.h>
@@ -203,10 +204,13 @@ static int fake_setopt_eperm(int fd, int level, int optname,
 static int fake_setopt_accepts_calls;
 static int fake_setopt_clockid;
 static unsigned fake_setopt_flags;
+static int fake_setopt_priority = -1;
 static int fake_setopt_accepts(int fd, int level, int optname,
                                const void *val, socklen_t len)
 {
-	(void)fd; (void)level;
+	(void)fd;
+	if (level == SOL_SOCKET && optname == SO_PRIORITY && len == sizeof(int) && val)
+		fake_setopt_priority = *(const int *)val;
 	if (optname == SO_TXTIME && len >= 8 && val) {
 		const int32_t *p = val;
 		fake_setopt_clockid = p[0];
@@ -261,6 +265,14 @@ static void test_refusals(void)
 	      "SOF_TXTIME_DEADLINE_MODE is set; the qdisc may then release EARLY");
 	CHECK((fake_setopt_flags & 2u) != 0,
 	      "SOF_TXTIME_REPORT_ERRORS is clear; a dropped frame would vanish silently");
+	/* THE HARDWARE FORM'S QUEUE IS CHOSEN BY THE SOCKET'S PRIORITY. mqprio maps
+	 * REAC_ETF_QDISC_PRIO to the one traffic class whose hardware queue carries the
+	 * offloaded etf; a socket left at priority 0 rides class 1, a queue with no
+	 * launch-time qdisc, and every launch time it carries is ignored without a word. */
+	CHECK(fake_setopt_priority == (int)REAC_ETF_QDISC_PRIO,
+	      "the armed socket's SO_PRIORITY is %d, want REAC_ETF_QDISC_PRIO (%u): its frames "
+	      "would ride a queue with no launch-time qdisc", fake_setopt_priority,
+	      REAC_ETF_QDISC_PRIO);
 
 	/* Every refusal has a name. A code an operator cannot read is a code they guess. */
 	for (int i = REAC_ETF_OK; i <= REAC_ETF_REFUSE_BAD_LEAD; i++)

@@ -162,6 +162,15 @@ enum reac_etf_refusal reac_etf_socket_arm(int fd, int tai_offset_s,
 		return errno == EPERM ? REAC_ETF_REFUSE_TXTIME_EPERM
 		                      : REAC_ETF_REFUSE_NO_TXTIME;
 	}
+	/* THE QUEUE THE HARDWARE FORM LAUNCHES FROM. Under mqprio (reac_etf_qdisc.h) the
+	 * socket's priority picks the traffic class, and only REAC_ETF_QDISC_PRIO's class
+	 * has the offloaded etf; at priority 0 every frame would ride a queue that ignores
+	 * its launch time. Harmless under the software form (one root qdisc, no classes),
+	 * and a priority 0-6 needs no capability, so a refusal here is not expected; if
+	 * one comes it is not fatal to the software form and is left to the health line,
+	 * which reads where the frames actually went. */
+	int prio = (int)REAC_ETF_QDISC_PRIO;
+	(void)setopt(fd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof prio);
 	return REAC_ETF_OK;
 }
 
