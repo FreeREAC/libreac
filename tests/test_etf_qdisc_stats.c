@@ -39,47 +39,17 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "netns_veth.h"
+
 #define IF_A      "rqsA"
 #define IF_B      "rqsB"
 #define N_FRAMES  64
-#define INNER_ENV "REAC_ETF_QDISC_STATS_INNER"
 
 static int fails;
 #define CHECK(cond, ...) do { \
 	if (!(cond)) { fails++; printf("FAIL %s:%d: ", __FILE__, __LINE__); \
 	               printf(__VA_ARGS__); printf("\n"); } \
 } while (0)
-
-static int capability_missing(const char *why)
-{
-	printf("SKIP: test_etf_qdisc_stats — %s.\n", why);
-	printf("  NOTHING WAS TESTED (exit 77). This is a missing capability in this environment,\n"
-	       "  never a verdict about reac_etf_qdisc. Run it on a host shell with iproute2,\n"
-	       "  user namespaces and sch_etf.\n");
-	return 77;
-}
-
-static int run(char *const argv[])
-{
-	pid_t pid = fork();
-	if (pid < 0)
-		return -1;
-	if (pid == 0) {
-		int devnull = open("/dev/null", O_WRONLY);
-		if (devnull >= 0) {
-			dup2(devnull, STDOUT_FILENO);
-			dup2(devnull, STDERR_FILENO);
-			if (devnull > STDERR_FILENO)
-				close(devnull);
-		}
-		execvp(argv[0], argv);
-		_exit(127);
-	}
-	int st = 0;
-	if (waitpid(pid, &st, 0) < 0)
-		return -1;
-	return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
-}
 
 /* N unstamped frames out of `ifname`. Returns how many reached the device's qdisc:
  * a frame etf drops comes back from sendto as ENOBUFS, and that is still a frame the
@@ -115,7 +85,7 @@ static int measure(void)
 {
 	int idx = (int)if_nametoindex(IF_A);
 	if (idx <= 0)
-		return capability_missing("the veth pair did not appear");
+		return netns_skip("the veth pair did not appear");
 
 	/* refusals by argument */
 	struct reac_etf_qdisc_stats st;
@@ -131,7 +101,7 @@ static int measure(void)
 	/* 1 INSTALL */
 	rc = reac_etf_qdisc_install(idx, 0);
 	if (rc == -ENOENT || rc == -EOPNOTSUPP)
-		return capability_missing("the kernel has no sch_etf for a veth");
+		return netns_skip("the kernel has no sch_etf for a veth");
 	CHECK(rc == 0, "the install is ACKed (rc %d)", rc);
 	if (rc != 0)
 		return 1;
@@ -173,53 +143,11 @@ static int measure(void)
 
 static int setup_and_measure(void)
 {
-	char *const add[]  = { "ip", "link", "add", IF_A, "type", "veth", "peer", "name", IF_B, NULL };
-	char *const gen[]  = { "ip", "link", "set", IF_A, "addrgenmode", "none", NULL };
-	char *const genb[] = { "ip", "link", "set", IF_B, "addrgenmode", "none", NULL };
-	char *const upa[]  = { "ip", "link", "set", IF_A, "up", NULL };
-	char *const upb[]  = { "ip", "link", "set", IF_B, "up", NULL };
-	int rc = run(add);
-	if (rc == 127)
-		return capability_missing("`ip` (iproute2) is not installed");
-	if (rc != 0)
-		return capability_missing("this kernel cannot make a veth pair here");
-	if (run(gen) != 0 || run(genb) != 0 || run(upa) != 0 || run(upb) != 0)
-		return capability_missing("the veth pair could not be brought up");
-	return measure();
+	int rc = netns_veth_up(IF_A, IF_B, 1);
+	return rc ? rc : measure();
 }
 
 int main(void)
 {
-	if (getenv(INNER_ENV) != NULL)
-		return setup_and_measure();
-
-	char self[4096];
-	ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
-	if (n <= 0)
-		return capability_missing("/proc/self/exe is unreadable");
-	self[n] = '\0';
-	if (setenv(INNER_ENV, "1", 1) != 0)
-		return capability_missing("setenv failed");
-
-	char *const probe[] = { "unshare", "-Ur", "-n", "true", NULL };
-	int prc = run(probe);
-	if (prc == 127)
-		return capability_missing("`unshare` is not installed");
-	if (prc != 0)
-		return capability_missing("this environment cannot make a user+net namespace");
-
-	char *const argv[] = { "unshare", "-Ur", "-n", self, NULL };
-	pid_t pid = fork();
-	if (pid < 0)
-		return capability_missing("fork failed");
-	if (pid == 0) {
-		execvp(argv[0], argv);
-		_exit(127);
-	}
-	int st = 0;
-	if (waitpid(pid, &st, 0) < 0 || !WIFEXITED(st)) {
-		printf("NOTHING WAS TESTED: the namespaced child did not exit normally\n");
-		return 2;
-	}
-	return WEXITSTATUS(st);
+	return netns_main("test_etf_qdisc_stats", setup_and_measure);
 }

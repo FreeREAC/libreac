@@ -265,8 +265,11 @@ static char *put_attr(char *p, unsigned short type, const void *val, unsigned sh
 	return p + RTA_SPACE(len);
 }
 
-static size_t qdisc_msg(void *buf, size_t cap, int add, int ifindex,
-                        uint32_t delta_ns, uint32_t seq)
+/* One etf add or root delete. `parent` is TC_H_ROOT for the software form and
+ * REAC_ETF_QDISC_OFFLOAD_PARENT for the hardware one; `flags` is TCA_ETF_PARMS' own. The
+ * add is 64 bytes either way (REAC_ETF_QDISC_ADD_LEN == REAC_ETF_QDISC_OFFLOAD_LEN). */
+static size_t qdisc_msg(void *buf, size_t cap, int add, int ifindex, uint32_t parent,
+                        uint32_t flags, uint32_t delta_ns, uint32_t seq)
 {
 	const size_t need = add ? REAC_ETF_QDISC_ADD_LEN : REAC_ETF_QDISC_DEL_LEN;
 	if (!buf || cap < need || ifindex <= 0)
@@ -284,7 +287,7 @@ static size_t qdisc_msg(void *buf, size_t cap, int add, int ifindex,
 	tcm->tcm_family  = AF_UNSPEC;
 	tcm->tcm_ifindex = ifindex;
 	tcm->tcm_handle  = 0;           /* the kernel allocates it, as it does for tc */
-	tcm->tcm_parent  = TC_H_ROOT;
+	tcm->tcm_parent  = parent;
 	tcm->tcm_info    = 0;
 
 	char *p = (char *)buf + NLMSG_ALIGN(NLMSG_LENGTH(sizeof *tcm));
@@ -300,7 +303,7 @@ static size_t qdisc_msg(void *buf, size_t cap, int add, int ifindex,
 		memset(&q, 0, sizeof q);
 		q.delta   = (int32_t)(delta_ns ? delta_ns : REAC_ETF_QDISC_DELTA_NS);
 		q.clockid = REAC_ETF_QDISC_CLOCKID_TAI;
-		q.flags   = REAC_ETF_QDISC_FLAG_SKIP_SOCK_CHECK;
+		q.flags   = (int32_t)flags;
 		(void)put_attr((char *)RTA_DATA(opts), TCA_ETF_PARMS, &q, sizeof q);
 		opts->rta_len = (unsigned short)RTA_LENGTH(RTA_SPACE(sizeof q));
 		p += RTA_SPACE(RTA_SPACE(sizeof q));
@@ -312,26 +315,59 @@ static size_t qdisc_msg(void *buf, size_t cap, int add, int ifindex,
 size_t reac_etf_qdisc_add_msg(void *buf, size_t cap, int ifindex,
                               uint32_t delta_ns, uint32_t seq)
 {
-	return qdisc_msg(buf, cap, 1, ifindex, delta_ns, seq);
+	return qdisc_msg(buf, cap, 1, ifindex, TC_H_ROOT, REAC_ETF_QDISC_FLAG_SKIP_SOCK_CHECK,
+	                 delta_ns, seq);
 }
 
 size_t reac_etf_qdisc_del_msg(void *buf, size_t cap, int ifindex, uint32_t seq)
 {
-	return qdisc_msg(buf, cap, 0, ifindex, 0, seq);
+	return qdisc_msg(buf, cap, 0, ifindex, TC_H_ROOT, 0, 0, seq);
 }
 
-/* The hardware-launch form: not built yet (red). */
+/* The hardware-launch form. The mqprio root's options are struct tc_mqprio_qopt itself,
+ * not a nest, and tc writes the attribute's length after padding the struct (82 bytes)
+ * to 84: so TCA_OPTIONS is 88 long, as the golden has it. */
 size_t reac_etf_qdisc_mqprio_msg(void *buf, size_t cap, int ifindex, uint32_t seq)
 {
-	(void)buf; (void)cap; (void)ifindex; (void)seq;
-	return 0;
+	if (!buf || cap < REAC_ETF_QDISC_MQPRIO_LEN || ifindex <= 0)
+		return 0;
+	memset(buf, 0, REAC_ETF_QDISC_MQPRIO_LEN);
+
+	struct nlmsghdr *nh = (struct nlmsghdr *)buf;
+	nh->nlmsg_type  = RTM_NEWQDISC;
+	nh->nlmsg_flags = (unsigned short)(NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE);
+	nh->nlmsg_seq   = seq;
+
+	struct tcmsg *tcm = (struct tcmsg *)((char *)buf + NLMSG_HDRLEN);
+	tcm->tcm_family  = AF_UNSPEC;
+	tcm->tcm_ifindex = ifindex;
+	tcm->tcm_handle  = REAC_ETF_QDISC_MQPRIO_HANDLE;
+	tcm->tcm_parent  = TC_H_ROOT;
+
+	char *p = (char *)buf + NLMSG_ALIGN(NLMSG_LENGTH(sizeof *tcm));
+	p = put_attr(p, TCA_KIND, "mqprio", 7);
+
+	struct tc_mqprio_qopt q;
+	memset(&q, 0, sizeof q);
+	q.num_tc = 2;
+	for (unsigned prio = 0; prio <= TC_PRIO_MAX; prio++)
+		q.prio_tc_map[prio] = prio == REAC_ETF_QDISC_PRIO ? 0 : 1;
+	q.hw = 0;
+	q.count[0] = 1;  q.offset[0] = 0;   /* class 0: queue 0 alone, the launch-time queue */
+	q.count[1] = 3;  q.offset[1] = 1;   /* class 1: queues 1-3, everything else */
+	p = put_attr(p, TCA_OPTIONS, &q, sizeof q);
+	((struct rtattr *)(p - RTA_SPACE(sizeof q)))->rta_len = (unsigned short)RTA_SPACE(sizeof q);
+
+	nh->nlmsg_len = (uint32_t)(p - (char *)buf);
+	return (size_t)nh->nlmsg_len;
 }
 
 size_t reac_etf_qdisc_offload_msg(void *buf, size_t cap, int ifindex,
                                   uint32_t delta_ns, uint32_t seq)
 {
-	(void)buf; (void)cap; (void)ifindex; (void)delta_ns; (void)seq;
-	return 0;
+	return qdisc_msg(buf, cap, 1, ifindex, REAC_ETF_QDISC_OFFLOAD_PARENT,
+	                 REAC_ETF_QDISC_FLAG_OFFLOAD | REAC_ETF_QDISC_FLAG_SKIP_SOCK_CHECK,
+	                 delta_ns, seq);
 }
 
 /* ---- the one round trip --------------------------------------------------- *
@@ -403,14 +439,75 @@ int reac_etf_qdisc_install(int ifindex, uint32_t delta_ns)
 
 int reac_etf_qdisc_install_offload(int ifindex, uint32_t delta_ns)
 {
-	(void)ifindex; (void)delta_ns;
-	return -ENOSYS;
+	char msg[REAC_ETF_QDISC_MQPRIO_LEN];
+	char root[16];
+
+	/* Removed only what is ours to remove: an etf anywhere on the device, or an mqprio
+	 * root (this form's own parent, left by an earlier run). Anything else is somebody
+	 * else's root and the add below meets it, refused, rather than stripping it. */
+	enum reac_etf_qdisc_state st = reac_etf_qdisc_state(ifindex, root, sizeof root);
+	if (st == REAC_ETF_QDISC_UNREADABLE)
+		return -EIO;
+	if (st == REAC_ETF_QDISC_PRESENT || !strcmp(root, "mqprio"))
+		(void)reac_etf_qdisc_remove(ifindex);
+
+	size_t n = reac_etf_qdisc_mqprio_msg(msg, sizeof msg, ifindex, 1);
+	if (!n)
+		return -EINVAL;
+	int rc = qdisc_send(msg, n);
+	if (rc)
+		return rc;
+
+	n = reac_etf_qdisc_offload_msg(msg, sizeof msg, ifindex, delta_ns, 2);
+	rc = n ? qdisc_send(msg, n) : -EINVAL;
+	/* ALL OR NOTHING: an mqprio root with no launch-time qdisc under it is a device
+	 * neither form describes, so a refused offload takes its parent away again and
+	 * the caller's software install finds the device at its default. */
+	if (rc)
+		(void)reac_etf_qdisc_remove(ifindex);
+	return rc;
+}
+
+/* ---- whether the launch is the NIC's ---------------------------------------- */
+
+struct offload_walk {
+	int offloaded;
+};
+
+static void offload_each(const struct tcmsg *tcm, const struct rtattr *rta, int rlen, void *ctx)
+{
+	(void)tcm;
+	struct offload_walk *w = ctx;
+	const char *k = qdisc_kind(rta, rlen);
+	if (!k || strcmp(k, "etf"))
+		return;
+	for (; RTA_OK(rta, rlen); rta = RTA_NEXT(rta, rlen)) {
+		if (rta->rta_type != TCA_OPTIONS)
+			continue;
+		const struct rtattr *in = (const struct rtattr *)RTA_DATA(rta);
+		int ilen = (int)RTA_PAYLOAD(rta);
+		for (; RTA_OK(in, ilen); in = RTA_NEXT(in, ilen))
+			if (in->rta_type == TCA_ETF_PARMS && RTA_PAYLOAD(in) >= sizeof(struct tc_etf_qopt)) {
+				struct tc_etf_qopt q;
+				memcpy(&q, RTA_DATA(in), sizeof q);
+				if ((uint32_t)q.flags & REAC_ETF_QDISC_FLAG_OFFLOAD)
+					w->offloaded = 1;
+			}
+	}
 }
 
 int reac_etf_qdisc_offloaded(int ifindex)
 {
-	(void)ifindex;
-	return -ENOSYS;
+	if (ifindex <= 0)
+		return -EINVAL;
+	struct offload_walk w = { 0 };
+	int readable = 0;
+	int rc = qdisc_dump(ifindex, offload_each, &w, &readable);
+	if (!readable)
+		return rc ? rc : -EIO;
+	if (rc)
+		return rc;  /* a dump that ended early under-reports: not an answer */
+	return w.offloaded;
 }
 
 int reac_etf_qdisc_remove(int ifindex)

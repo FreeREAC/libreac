@@ -69,6 +69,7 @@ test_identity_cksum
 test_decode_plain_le
 test_code
 test_etf_qdisc_stats
+test_etf_qdisc_offload
 test_desk_or_box
 test_hold
 test_hunt_one_frame
