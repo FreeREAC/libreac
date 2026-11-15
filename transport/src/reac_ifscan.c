@@ -7,6 +7,7 @@
 #include "reac_handle_priv.h"
 #include "reac_transport_tunables_priv.h"  /* the daemon's REAC_IFACES_ALLOW_WIRELESS */
 
+#include <dirent.h>
 #include <errno.h>
 #include <poll.h>
 #include <stdio.h>
@@ -284,6 +285,141 @@ int reac_ifscan_wireless_allowed(const char *allowlist, const char *ifname)
 	return 0;
 }
 
+/* ---- physical only ----------------------------------------------------------------------- */
+
+static char g_allow_virtual[256];
+
+void reac_ifscan_set_allow_virtual(const char *allowlist)
+{
+	snprintf(g_allow_virtual, sizeof g_allow_virtual, "%s", allowlist ? allowlist : "");
+}
+
+/* `<root>/<if>/uevent`'s DEVTYPE, or "" when there is none (a veth, a NIC). */
+static void devtype_of(const char *root, const char *ifname, char *out, size_t cap)
+{
+	out[0] = '\0';
+	char path[512];
+	int n = snprintf(path, sizeof path, "%s/%s/uevent", root, ifname);
+	if (n <= 0 || (size_t)n >= sizeof path)
+		return;
+	FILE *f = fopen(path, "r");
+	if (!f)
+		return;
+	char line[128];
+	while (fgets(line, sizeof line, f)) {
+		if (strncmp(line, "DEVTYPE=", 8) == 0) {
+			line[strcspn(line, "\r\n")] = '\0';
+			size_t l = strlen(line + 8);
+			if (l >= cap)
+				l = cap - 1;            /* a DEVTYPE longer than any the kernel names */
+			memcpy(out, line + 8, l);
+			out[l] = '\0';
+			break;
+		}
+	}
+	fclose(f);
+}
+
+/* The one `lower_<name>` of `<root>/<if>`: 1 and its name, or 0 (none, or more than one). */
+static int sole_lower(const char *root, const char *ifname, char *out, size_t cap)
+{
+	char path[512];
+	int n = snprintf(path, sizeof path, "%s/%s", root, ifname);
+	if (n <= 0 || (size_t)n >= sizeof path)
+		return 0;
+	DIR *d = opendir(path);
+	if (!d)
+		return 0;
+	int found = 0;
+	struct dirent *e;
+	while ((e = readdir(d))) {
+		if (strncmp(e->d_name, "lower_", 6) != 0)
+			continue;
+		if (++found == 1)
+			snprintf(out, cap, "%s", e->d_name + 6);
+	}
+	closedir(d);
+	return found == 1;
+}
+
+static int physical_at(const char *root, const char *ifname, char *why, size_t cap, int depth)
+{
+	char path[512];
+	struct stat st;
+	int n = snprintf(path, sizeof path, "%s/%s", root, ifname);
+	if (n <= 0 || (size_t)n >= sizeof path || stat(path, &st) != 0) {
+		if (why)
+			snprintf(why, cap, "not in %s", root);
+		return 0;
+	}
+	/* THE LINK ITSELF is the kernel's statement (lstat): it exists for a NIC on a bus and
+	 * for nothing virtual, whatever it points at. */
+	n = snprintf(path, sizeof path, "%s/%s/device", root, ifname);
+	if (n > 0 && (size_t)n < sizeof path && lstat(path, &st) == 0)
+		return 1;                                   /* a PCI or USB NIC */
+	char type[32];
+	devtype_of(root, ifname, type, sizeof type);
+	if (!strcmp(type, "vlan")) {
+		char lower[IFNAMSIZ + 8];
+		if (depth >= 4 || !sole_lower(root, ifname, lower, sizeof lower)) {
+			if (why)
+				snprintf(why, cap, "a VLAN whose lower device cannot be read");
+			return 0;
+		}
+		char sub[160];
+		if (physical_at(root, lower, sub, sizeof sub, depth + 1))
+			return 1;
+		if (why)
+			snprintf(why, cap, "a VLAN on %s, which is %s", lower, sub);
+		return 0;
+	}
+	if (!why)
+		return 0;
+	n = snprintf(path, sizeof path, "%s/%s/tun_flags", root, ifname);
+	if (type[0])
+		snprintf(why, cap, "a %s", type);              /* bridge, bond, macvlan, ... */
+	else if (n > 0 && (size_t)n < sizeof path && stat(path, &st) == 0)
+		snprintf(why, cap, "a tun/tap");
+	else
+		snprintf(why, cap, "a veth or other virtual interface: no device behind it");
+	return 0;
+}
+
+int reac_ifscan_is_physical(const char *root, const char *ifname, char *why, size_t cap)
+{
+	if (why && cap)
+		why[0] = '\0';
+	if (!ifname || !ifname[0])
+		return 0;
+	if (!root || !root[0])
+		root = "/sys/class/net";
+	return physical_at(root, ifname, why, cap, 0);
+}
+
+/* SAID ONCE PER NAME: the scan sees every link event, and a line per event would be the
+ * chattering port's own denial of service; never silent the first time. */
+static char g_said_virtual[REAC_IFSCAN_MAX * 2][IFNAMSIZ];
+
+static int physical_or_allowed(const char *name)
+{
+	char why[200];
+	if (reac_ifscan_is_physical(NULL, name, why, sizeof why))
+		return 1;
+	if (reac_ifscan_wireless_allowed(g_allow_virtual, name))
+		return 1;
+	for (size_t i = 0; i < sizeof g_said_virtual / sizeof g_said_virtual[0]; i++) {
+		if (!strcmp(g_said_virtual[i], name))
+			return 0;
+		if (!g_said_virtual[i][0]) {
+			snprintf(g_said_virtual[i], IFNAMSIZ, "%s", name);
+			fprintf(stderr, "reac-ifscan: %s is not a REAC segment and is not listened "
+			        "on: %s. A segment is a physical NIC or a VLAN on one\n", name, why);
+			return 0;
+		}
+	}
+	return 0;
+}
+
 /* ---- netlink ----------------------------------------------------------------------------- */
 
 /* One RTM_NEWLINK/RTM_DELLINK into the table. Anything else is not ours. */
@@ -332,6 +468,10 @@ static void msg_link(struct reac_ifscan *s, const struct nlmsghdr *nh, uint64_t 
 	                  reac_ifscan_wireless_allowed(
 	                          reac_transport_tunables_get()->allow_wireless, name);
 	int ether = ifi->ifi_type == ARPHRD_ETHER && !(ifi->ifi_flags & IFF_LOOPBACK) && wireless_ok;
+	/* AND PHYSICAL: a NIC with a device, or a VLAN on one (reac_ifscan.h). Asked only of
+	 * an Ethernet candidate, so a loopback or a wireless NIC is not said twice. */
+	if (ether && nh->nlmsg_type == RTM_NEWLINK)
+		ether = physical_or_allowed(name);
 	reac_ifscan_observe(s, name, ifi->ifi_index, ether,
 	                    (ifi->ifi_flags & IFF_LOWER_UP) ? 1 : 0, now_ns);
 }
