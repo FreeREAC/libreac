@@ -320,6 +320,20 @@ size_t reac_etf_qdisc_del_msg(void *buf, size_t cap, int ifindex, uint32_t seq)
 	return qdisc_msg(buf, cap, 0, ifindex, 0, seq);
 }
 
+/* The hardware-launch form: not built yet (red). */
+size_t reac_etf_qdisc_mqprio_msg(void *buf, size_t cap, int ifindex, uint32_t seq)
+{
+	(void)buf; (void)cap; (void)ifindex; (void)seq;
+	return 0;
+}
+
+size_t reac_etf_qdisc_offload_msg(void *buf, size_t cap, int ifindex,
+                                  uint32_t delta_ns, uint32_t seq)
+{
+	(void)buf; (void)cap; (void)ifindex; (void)delta_ns; (void)seq;
+	return 0;
+}
+
 /* ---- the one round trip --------------------------------------------------- *
  *
  * NLM_F_ACK IS THE WHOLE POINT. A write that the kernel refuses returns the byte
@@ -385,6 +399,18 @@ int reac_etf_qdisc_install(int ifindex, uint32_t delta_ns)
 	if (!n)
 		return -EINVAL;
 	return qdisc_send(msg, n);
+}
+
+int reac_etf_qdisc_install_offload(int ifindex, uint32_t delta_ns)
+{
+	(void)ifindex; (void)delta_ns;
+	return -ENOSYS;
+}
+
+int reac_etf_qdisc_offloaded(int ifindex)
+{
+	(void)ifindex;
+	return -ENOSYS;
 }
 
 int reac_etf_qdisc_remove(int ifindex)
