@@ -143,7 +143,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh tests/conformance-no-compat.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
 	@mkdir -p $(BUILD_DIR); rm -f $(SKIP_LOG)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	$(RUN_TEST) ./test_reac
@@ -311,6 +311,10 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# THE VERSION AND THE SONAMES HAVE ONE DEFINITION (reac.h); the spec and debian/ copy
 	# them, and a copy that lags is refused here instead of shipping a package that loads a stale ABI.
 	$(RUN_TEST) tests/conformance-packaging.sh
+	# NO BACKWARD-COMPATIBILITY MECHANISM IS KEPT: each arm names one that is gone (the ABI promise,
+	# the append-only enum rule, the pre-0.5.0 decoder, the width-keyed announce, two aliases, an old
+	# option spelling, an old-kernel fallback).
+	$(RUN_TEST) tests/conformance-no-compat.sh
 	$(RUN_TEST) tests/conformance-public-docs.sh
 	# THE PYTHON BINDING LOADS THE CURRENT ABI SONAME. This runs with only the
 	# versioned shared object and the libreac.so.<ABI> link present, so an old
