@@ -452,12 +452,12 @@ static void bm_mark_descriptor(uint8_t *frame, uint8_t d)
  * this protocol. The two control frames the enrolment needs — the config-announce and the
  * cold-connect burst — are UNICAST to the box, because that is how the S-1608 sent them to
  * this very chassis and what came back was a grant. */
-static size_t bm_downstream(struct reac_slave *s, uint8_t *frame,
+static size_t bm_downstream(struct reac_slave *s, uint8_t *frame, size_t frame_cap,
                             float *const planar[REAC_MAX_CHANNELS], uint16_t counter)
 {
 	/* Channels beyond box_channels are silent by the builder's contract, so the box's
 	 * outputs land in slots 0..width-1 of the fabric and nothing else is claimed. */
-	return (size_t)reac_downstream_build(frame, (float *const *)planar,
+	return (size_t)reac_downstream_build(frame, frame_cap, (float *const *)planar,
 	                                     s->box_channels, REAC_SAMPLES_PER_PKT,
 	                                     counter, s->src);
 }
@@ -551,7 +551,7 @@ static void emit_decision(struct reac_slave *s, const struct reac_slave_decision
 			 * the mixer carrier is already honest before the grant; the claim is
 			 * ADDED once the pairing is real. Same state, same field, either
 			 * geometry. */
-			len = bm_downstream(s, frame, planar, counter);
+			len = bm_downstream(s, frame, sizeof frame, planar, counter);
 			if (len && linked)
 				bm_mark_descriptor(frame, REAC_BM_DESC_ESTABLISHED);
 			else if (len && s->bm_announce_sent)

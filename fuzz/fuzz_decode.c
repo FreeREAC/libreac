@@ -174,7 +174,7 @@ static void fuzz_downstream(const uint8_t *frame, size_t len, const struct reac_
 	}
 
 	memset(out, 0xa5, olen);
-	int r = reac_decode(frame, len, mode, out);
+	int r = reac_decode(frame, len, mode, out, olen);
 	/* The braid needs an even width and a geometry inside the region.
 	 * mutant: src/reac_decode.c:84 `return ns;` -> `return ns - 1;`
 	 * input: downstream-program-48k

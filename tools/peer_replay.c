@@ -317,7 +317,7 @@ static uint32_t master_slot(struct reac_pacer *p, uint32_t h, struct emitdump *d
 	enum reac_master_emit emit = reac_master_next(&p->master, &counter, &tmpl);
 	if (emit == REAC_M_EMIT_FILLER)
 		return fnv(h, &emit, 1);
-	reac_downstream_build(fr, planar, REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT, counter, p->src);
+	reac_downstream_build(fr, sizeof fr, planar, REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT, counter, p->src);
 	reac_master_stamp(&p->master, fr, emit, tmpl);
 	if (d && d->f && d->n < d->max && first_sight(fr, sizeof fr)) {
 		pcap_rec(d->f, fr, sizeof fr, ts_us);

@@ -47,9 +47,16 @@ void reac_braid_encode(uint8_t *audio, int n_ch,
 	}
 }
 
-int reac_downstream_build(uint8_t *out, float *const *planar, int nch, int ns,
-                          uint16_t counter, const uint8_t src[6])
+int reac_downstream_build(uint8_t *out, size_t out_cap, float *const *planar,
+                          int nch, int ns, uint16_t counter, const uint8_t src[6])
 {
+	/* THE CAPACITY IS CHECKED, NOT TRUSTED. The frame is REAC_FRAME_BYTES long and
+	 * the whole of it is written; a smaller buffer is an overwrite of the caller's
+	 * memory. Refuse before the first byte. Allocates nothing, takes no lock,
+	 * never aborts: safe on an RT thread. */
+	if (!out || !src || out_cap < REAC_FRAME_BYTES)
+		return -1;
+
 	memset(out, 0, REAC_FRAME_BYTES);
 
 	/* L2: broadcast dst (the master's program goes to the whole fabric), our

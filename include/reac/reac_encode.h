@@ -77,7 +77,9 @@ void reac_braid_encode(uint8_t *audio, int n_ch,
                        float *const *planar, int n_src, int ns);
 
 /* Build one complete DOWNSTREAM (master -> fabric) broadcast frame into
- * out[REAC_FRAME_BYTES]. Returns REAC_FRAME_BYTES (1492).
+ * out. `out_cap` is how many bytes the caller owns at `out`. Returns
+ * REAC_FRAME_BYTES (1492), or -1 when it REFUSED: a NULL out or src, or an
+ * out_cap below REAC_FRAME_BYTES. A refusal writes nothing.
  *
  * The frame, byte for byte:
  *   [0:6]     broadcast destination — the master's program goes to the fabric;
@@ -106,8 +108,8 @@ void reac_braid_encode(uint8_t *audio, int n_ch,
  * content") — it fixed nothing. The A/B env override that kept plain selectable
  * was removed once the Stage B listen test settled it. Do not reintroduce a
  * layout switch here: there is one wire format, and reac_braid_pos() is it. */
-int reac_downstream_build(uint8_t *out, float *const *planar, int nch, int ns,
-                          uint16_t counter, const uint8_t src[6]);
+int reac_downstream_build(uint8_t *out, size_t out_cap, float *const *planar,
+                          int nch, int ns, uint16_t counter, const uint8_t src[6]);
 
 #ifdef __cplusplus
 }

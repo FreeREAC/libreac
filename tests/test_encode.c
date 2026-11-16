@@ -116,7 +116,7 @@ static uint64_t downstream_corpus(void)
 					float *const *pl = fill(seed++, SCALES[si], nch == 0);
 					uint8_t src[6] = { 0x00, 0x40, 0xab,
 					                   (uint8_t)si, (uint8_t)ci, (uint8_t)(ni * 8 + ti) };
-					int len = reac_downstream_build(frame, pl, nch, NS[ni], CNT[ti], src);
+					int len = reac_downstream_build(frame, sizeof frame, pl, nch, NS[ni], CNT[ti], src);
 					absorb_len((size_t)len);
 					absorb(frame, (size_t)len);
 				}
@@ -252,7 +252,7 @@ int main(void)
 		for (int s = 0; s < REAC_SAMPLES_PER_PKT; s++)
 			sig[s] = 0.5f;
 
-		CHK(reac_downstream_build(f, pl, 1, REAC_SAMPLES_PER_PKT, 0xBEEF, src)
+		CHK(reac_downstream_build(f, sizeof f, pl, 1, REAC_SAMPLES_PER_PKT, 0xBEEF, src)
 		    == REAC_FRAME_BYTES);
 		for (int i = 0; i < 6; i++)
 			CHK(f[i] == 0xFF);                      /* broadcast dst */

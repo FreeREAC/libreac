@@ -180,7 +180,7 @@ int main(void)
 				pcm[c][s] = (float)(c + 1) / 64.0f;
 		}
 		uint8_t down[2048], up[2048], down0[2048], up0[2048];
-		int dn = reac_downstream_build(down, (float *const *)planar,
+		int dn = reac_downstream_build(down, sizeof down, (float *const *)planar,
 		                               REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT, 0x1234, S);
 		size_t un = reac_ctrl_build_upstream_filler(up, M, S, 0x1234, 16, planar,
 		                                            REAC_SAMPLES_PER_PKT);

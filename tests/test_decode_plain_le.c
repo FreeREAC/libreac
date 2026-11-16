@@ -62,7 +62,7 @@ static uint8_t out[42 * 12 * 3];
 static int braid_refuses(void)
 {
 	uint8_t *f = guarded_frame();
-	return f && reac_decode(f, REAC_FRAME_BYTES, &WIDE, out) == -1 ? 0 : 1;
+	return f && reac_decode(f, REAC_FRAME_BYTES, &WIDE, out, sizeof out) == -1 ? 0 : 1;
 }
 
 static int plain_refuses(void)

@@ -154,7 +154,7 @@ static void feed(struct tally *t, uint8_t *f, size_t len, int truncated, int cor
 	 * residue length rather than stripping it again (<reac/reac.h>). */
 	size_t clean = reac_frame_clean_len(len);
 	if (clean == REAC_FRAME_BYTES) {
-		if (reac_decode(f, clean, &REAC_MODE_48K, pcm) == REAC_SAMPLES_PER_PKT)
+		if (reac_decode(f, clean, &REAC_MODE_48K, pcm, sizeof pcm) == REAC_SAMPLES_PER_PKT)
 			t->audio_dn_ok++;
 		else
 			t->audio_dn_bad++;
