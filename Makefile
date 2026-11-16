@@ -114,6 +114,16 @@ $(BUILD_DIR)/reac_facts_master_cadence.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_T
 	python3 $(FACTS_TOOL) $(FACTS_SCHEMA) $(FACTS_GEN) $@ \
 	  --groups master_cadence --guard REAC_FACTS_MASTER_CADENCE_H
 
+# The FULL generated reac_facts.h, and the undef header derived from it, that the moved tests
+# include (tests/reac_test_facts.h). Committed under tests/facts/ so a standalone build has
+# them; the drift gate holds both to what reac-protocol generates.
+$(BUILD_DIR)/tests-facts/reac_facts.h: $(FACTS_SCHEMA) $(FACTS_GEN)
+	@mkdir -p $(BUILD_DIR)/tests-facts
+	python3 $(FACTS_GEN) --outdir $(BUILD_DIR)/tests-facts
+
+$(BUILD_DIR)/tests-facts/reac_facts_undef.h: $(BUILD_DIR)/tests-facts/reac_facts.h tools/facts-undef.py
+	python3 tools/facts-undef.py $< $@
+
 # The drift gate: only meaningful when the schema is reachable (nothing to
 # compare the fallback against otherwise). Regenerates and diffs against the
 # committed tests/reac_facts_assert.h; a difference fails the build rather
@@ -121,7 +131,16 @@ $(BUILD_DIR)/reac_facts_master_cadence.h: $(FACTS_SCHEMA) $(FACTS_GEN) $(FACTS_T
 .PHONY: facts-drift-check
 ifeq ($(HAVE_SCHEMA),1)
 facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_width.h \
-                   $(BUILD_DIR)/reac_facts_timing.h $(BUILD_DIR)/reac_facts_master_cadence.h
+                   $(BUILD_DIR)/reac_facts_timing.h $(BUILD_DIR)/reac_facts_master_cadence.h \
+                   $(BUILD_DIR)/tests-facts/reac_facts.h $(BUILD_DIR)/tests-facts/reac_facts_undef.h
+	@diff -u tests/facts/reac_facts.h $(BUILD_DIR)/tests-facts/reac_facts.h || \
+	  { echo "tests/facts/reac_facts.h has drifted from $(FACTS_SCHEMA)."; \
+	    echo "Refresh it: cp $(BUILD_DIR)/tests-facts/reac_facts.h tests/facts/reac_facts.h"; \
+	    exit 1; }
+	@diff -u tests/facts/reac_facts_undef.h $(BUILD_DIR)/tests-facts/reac_facts_undef.h || \
+	  { echo "tests/facts/reac_facts_undef.h has drifted from tests/facts/reac_facts.h."; \
+	    echo "Refresh it: cp $(BUILD_DIR)/tests-facts/reac_facts_undef.h tests/facts/reac_facts_undef.h"; \
+	    exit 1; }
 	@diff -u tests/reac_facts_assert.h $(BUILD_DIR)/reac_facts_assert.h || \
 	  { echo "tests/reac_facts_assert.h has drifted from $(FACTS_SCHEMA)."; \
 	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_assert.h tests/reac_facts_assert.h"; \
@@ -149,7 +168,36 @@ else
 endif
 endif
 
-test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
+# --- THE LIBRARY'S OWN TESTS, MOVED HERE FROM reac-pw ---------------------------------------
+# These programs compile no reac-pw source: they test libreac (the master, hunt, clock, pacer,
+# grant, control blocks, discovery, ...) and lived in the consumer's tree after the code moved
+# into the library, so a libreac change was never run against them. They now run with the code
+# they test. Each is tests/test_reac_<name>.c, and takes the protocol's numbers from
+# tests/reac_test_facts.h (tests/facts/reac_facts.h, held to reac-protocol by facts-drift-check).
+# MOVED_UNIT links libreac.a only and runs in `make test`; MOVED_TRANSPORT also needs
+# libreac-transport.a and runs in `make test-transport`.
+MOVED_UNIT := ctrl headamp fsm master_no_enroll ohrca_chanmap master_fsm clock link_state disco hunt  \
+    role arbitration headamp_tx grant
+MOVED_TRANSPORT := conf pacer_knob rt ring tx box_master_audio rx_dup carrier linkmon ifscan topo ifname  \
+    rx_live_iface master s1608 pacer_clock slave vboxgain courtship box_badge box_identity  \
+    box_master_identity mac pace_watch headamp_live role_swap conformance
+MOVED_UNIT_BINS := $(addprefix test_reac_,$(MOVED_UNIT) grant_dwell)
+MOVED_TRANSPORT_BINS := $(addprefix test_reac_,$(MOVED_TRANSPORT) hunt_captures)
+MOVED_TEST_DEPS := tests/reac_test_facts.h tests/facts/reac_facts.h tests/facts/reac_facts_undef.h $(wildcard tests/reac_*_golden.inc) tests/upstream_fixtures.inc
+
+$(MOVED_UNIT_BINS): test_reac_%: tests/test_reac_%.c $(MOVED_TEST_DEPS) libreac.a
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests -Itests/facts $(INC) $< libreac.a -lm -lpthread -o $@
+
+$(MOVED_TRANSPORT_BINS): test_reac_%: tests/test_reac_%.c $(MOVED_TEST_DEPS) libreac-transport.a libreac.a
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests -Itests/facts $(INC) $< libreac-transport.a libreac.a -lm -lpthread -o $@
+
+# The one moved test that needs the capture corpus (not in this repo): dev-only like `make corpus`;
+# it exits 77 (SKIP) without the corpus, so it is not an arm of the CI suites.
+.PHONY: hunt-captures
+hunt-captures: test_reac_hunt_captures
+	$(RUN_TEST) ./test_reac_hunt_captures
+
+test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H) $(filter-out test_reac_hunt_captures,$(MOVED_UNIT_BINS))
 	@mkdir -p $(BUILD_DIR); rm -f $(SKIP_LOG)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	$(RUN_TEST) ./test_reac
@@ -329,6 +377,10 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# whole-corpus run is `make peer-replay`).
 	$(RUN_TEST) tools/peer-replay-selftest.sh
 	$(RUN_TEST) tools/ops-slugs.sh
+	# THE MOVED UNIT TESTS (see MOVED_UNIT above); grant_dwell is one program run under two environments.
+	@for t in $(addprefix test_reac_,$(MOVED_UNIT)); do $(RUN_TEST) ./$$t || exit 1; done
+	REACPW_GRANT_DWELL_MS=5000 $(RUN_TEST) ./test_reac_grant_dwell
+	REACPW_GRANT_DWELL_MS=5000 REACPW_GRANT_ON_DECLARE=0 $(RUN_TEST) ./test_reac_grant_dwell
 	@$(MAKE) --no-print-directory facts-drift-check
 	@echo "make test: PASS — every arm above ran to the end; make stops at the first red one;" \
 	  "skipped (exit 77, nothing tested): $$(if [ -s $(SKIP_LOG) ]; then tr '\n' ' ' < $(SKIP_LOG); else echo none; fi)"
@@ -445,7 +497,7 @@ transport: libreac-transport.a
 # 802.1Q tag). Absent, the test prints CORPUS ARM NOT RUN rather than passing quietly.
 REAC_TAP_CAPTURE ?=
 
-test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c tests/test_peer_binding.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c tests/test_etf_qdisc_offload.c tests/test_ifscan_physical.c tests/netns_veth.h libreac-transport.a libreac.a
+test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c tests/test_peer_binding.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c tests/test_etf_qdisc_offload.c tests/test_ifscan_physical.c tests/netns_veth.h libreac-transport.a libreac.a $(addprefix test_reac_,$(MOVED_TRANSPORT))
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
 	$(RUN_TEST) ./test_tap $(REAC_TAP_CAPTURE)
 	$(RUN_TEST) tools/conformance-tap-silent.sh
@@ -502,6 +554,8 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c test
 	$(CC) $(CFLAGS) $(INC) tests/test_ifscan_physical.c libreac-transport.a libreac.a \
 	    -lm -lpthread -o test_ifscan_physical
 	$(RUN_TEST) ./test_ifscan_physical
+	# THE MOVED TRANSPORT TESTS (see MOVED_TRANSPORT above).
+	@for t in $(addprefix test_reac_,$(MOVED_TRANSPORT)); do $(RUN_TEST) ./$$t || exit 1; done
 
 # --- fuzzing: libFuzzer harnesses for every parser of wire bytes ---
 # One harness per parser in fuzz/, each a plain C LLVMFuzzerTestOneInput, linked
@@ -710,6 +764,7 @@ peer-replay-selftest:
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_reac_etf_hwstamp test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_hunt_one_frame test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_rx_spoof test_peer_binding test_topo_hears_vlans test_etf_qdisc_stats test_etf_qdisc_offload test_ifscan_physical
+	rm -f $(MOVED_UNIT_BINS) $(MOVED_TRANSPORT_BINS)
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \

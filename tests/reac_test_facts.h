@@ -1,0 +1,147 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+ *
+ * reac_test_facts.h — THE ONE DOOR TO THE REAC PROTOCOL'S NUMBERS.
+ *
+ * Every protocol number these tests use is read from reac-protocol's declaration
+ * (spec/protocol-facts.yaml -> spec/gen-facts.py -> reac_facts.h), never spelled
+ * here. The operator's ruling of 2026-09-25: "declare only once and use it
+ * everywhere — a single source of truth; hardcoded constants are the worst
+ * practice and a source of nasty bugs". A fact that is not declared there is not
+ * declared here either: reac-protocol owns declarations.
+ *
+ * WHERE THE HEADER COMES FROM. tests/facts/reac_facts.h is a verbatim copy of the
+ * generated header, held to reac-protocol by `make facts-drift-check`.
+ *
+ * WHY THIS ORDER. libreac's public headers still define about fifty of the same
+ * names by hand, some spelled differently (0xC2 / 0xc2, 0x0600u / 0x0600). They
+ * are included first, then reac_facts_undef.h clears every fact name (it is derived
+ * from reac_facts.h by name, by the same tool), and reac_facts.h defines them last.
+ * So the tests compile against the generated value, with no redefinition diagnosed,
+ * and a later #include of those libreac headers is a no-op behind their guards. */
+#ifndef REAC_TEST_FACTS_H
+#define REAC_TEST_FACTS_H
+
+#include <reac/reac.h>
+#include <reac/reac_ctrlblk.h>
+#include <reac/reac_identity.h>
+#include <reac/reac_ports.h>
+#include <reac/reac_master.h>
+
+#include "reac_facts_undef.h"
+#include "reac_facts.h"
+
+/* A ROW HANDED TO libreac IS libreac's ROW. libreac's grant-sweep builders take
+ * `uint8_t [][34]` and struct reac_master holds its blocks in that width: libreac's own
+ * copy of TYPED_BLOCK_LEN, until libreac reads reac_facts.h. A buffer passed across that
+ * boundary takes the type from libreac's struct, never from the fact (which a perturbed
+ * build moves) and never from a typed 34. */
+typedef __typeof__(((struct reac_master *)0)->announce_blk) reactest_libreac_row;
+
+/* A FACT INSIDE A STRING. A help text or a log line that states a protocol number
+ * spells it through this, so the text is the generated value too:
+ *   "rates: " REACT_STR(REAC_SAMPLE_RATE_48K)  ->  "rates: 48000"
+ * (two levels, so the macro's VALUE is stringified and not its name). */
+#define REACT_STR_(x) #x
+#define REACT_STR(x)  REACT_STR_(x)
+
+/* A frame's length at n channels: the protocol's one geometry law, 52 + n*36, from its
+ * facts (REAC_FRAME_OVERHEAD, REAC_BYTES_PER_CHANNEL). */
+#define REACT_FRAME_LEN(n) (REAC_FRAME_OVERHEAD + (n) * REAC_BYTES_PER_CHANNEL)
+
+/* A sample's width in bits (24 today): its sign bit, its mask and its full scale follow. */
+#define REACT_SAMPLE_BITS  (8 * REAC_RESOLUTION)
+#define REACT_SAMPLE_SIGN  (1LL << (REACT_SAMPLE_BITS - 1))
+#define REACT_SAMPLE_MASK  ((1LL << REACT_SAMPLE_BITS) - 1)
+
+/* Head-amp channel space: the highest wire channel, and the S-1608's base —
+ * its strap (2; the per-model strap is not declared in reac-protocol) times the
+ * declared multiplier. */
+#define REACT_HEADAMP_TOP_CH      (REAC_HEADAMP_CH_SPAN - 1)
+#define REACT_S1608_HEADAMP_BASE  (2 * REAC_HEADAMP_BASE_MULTIPLIER)
+/* A w-wide box's grant sweep: 2 head frames + 6 group-B records (neither count
+ * is declared in reac-protocol yet) + one group-A record per input per param. */
+#define REACT_GRANT_SWEEP_LEN(w)  (8 + (w) * REAC_HEADAMP_SWEEP_RECORDS_PER_CH)
+/* The declared sensitivity rule, in centi-dB: step 0 is the reference, each
+ * step one STEP_CDB lower, the pad adds PAD_CDB. */
+#define REACT_SENS_CDB(step, pad) (REAC_HEADAMP_SENS_REF_CDB - (step) * REAC_HEADAMP_SENS_STEP_CDB \
+                                    + ((pad) ? REAC_HEADAMP_PAD_CDB : 0))
+
+/* Where a scene-body offset lands on the wire: which chunk (0-based, step - 1)
+ * and how far into that chunk's payload. */
+#define REACT_SCENE_CHUNK_OF(off) (((off) - REAC_SCENE_HEAD_BYTES) / REAC_SCENE_CHUNK_BYTES)
+#define REACT_SCENE_IN_CHUNK(off) (((off) - REAC_SCENE_HEAD_BYTES) % REAC_SCENE_CHUNK_BYTES)
+
+/* A big-endian u16 at p: the type word, the opcode (link, segment) and the length. */
+#define REACT_BE16(p) ((unsigned)((const uint8_t *)(p))[0] << 8 | ((const uint8_t *)(p))[1])
+
+/* The legal paces, as text: "44100, 48000 or 96000" and "44100|48000|96000". */
+#define REACT_RATES_OR   REACT_STR(REAC_SAMPLE_RATE_44K1) ", " \
+                          REACT_STR(REAC_SAMPLE_RATE_48K) " or " \
+                          REACT_STR(REAC_SAMPLE_RATE_96K)
+#define REACT_RATES_BAR  REACT_STR(REAC_SAMPLE_RATE_44K1) "|" \
+                          REACT_STR(REAC_SAMPLE_RATE_48K) "|" \
+                          REACT_STR(REAC_SAMPLE_RATE_96K)
+
+/* A control-block offset seen from the frame, and from the typed window (the
+ * type word first) — the two indexings tests and sweeps use. */
+#define REACT_FRAME_OF(blk_off) (REAC_CTRL_BLOCK_OFF + (blk_off))
+#define REACT_TYPED_OF(blk_off) (REAC_TYPE_WORD_BYTES + (blk_off))
+
+/* Inside a DT1 record: the 4-byte address is the page tag then addr_lo, and the
+ * data follows it. On the head-amp page addr_lo is (CH, PARAM), then one VALUE
+ * byte and the inner checksum. */
+#define REACT_DT1_ADDR_OFF  (REAC_DT1_TAG_OFF + REAC_IDENTITY_ADDR_BYTES - REAC_IDENTITY_ADDR_LO_BYTES)
+#define REACT_DT1_DATA_OFF  (REAC_DT1_TAG_OFF + REAC_IDENTITY_ADDR_BYTES)
+#define REACT_HA_CH_OFF     REACT_DT1_ADDR_OFF
+#define REACT_HA_PARAM_OFF  (REACT_DT1_ADDR_OFF + 1)
+#define REACT_HA_VALUE_OFF  REACT_DT1_DATA_OFF
+#define REACT_HA_CKSUM_OFF  (REACT_DT1_DATA_OFF + 1)
+#define REACT_HA_REC_LEN    (REACT_HA_CKSUM_OFF + 1 - REAC_DT1_TAG_OFF)   /* TAG..CKSUM */
+
+/* One Roland DT1 record, laid into the control block at blk the way reac.ksy's
+ * dt1_record spells it: link 4 single, rec_len, the wrapper, the SysEx length
+ * echo, F0 41 <dev> <model> 12, the page tag, addr_lo, n payload bytes, a
+ * stand-in inner checksum and F7. Every offset and byte is a declared fact;
+ * callers own the rest of the frame. */
+static inline void reactest_dt1_record(uint8_t *blk, unsigned tag, unsigned addr_lo,
+                                     const uint8_t *pl, size_t n)
+{
+	const unsigned data = REAC_IDENTITY_ADDR_LO_BYTES + (unsigned)n;
+	const unsigned rec_len = REAC_DT1_DATA_OVERHEAD + data;
+	const unsigned a = REACT_DT1_ADDR_OFF;
+	const unsigned d = REACT_DT1_DATA_OFF;
+	blk[REAC_HDR_LINK_OFF] = REAC_LINK_RECORD;
+	blk[REAC_HDR_SEG_OFF] = REAC_SEG_SINGLE;
+	blk[REAC_HDR_LEN_OFF] = (uint8_t)(rec_len >> 8);
+	blk[REAC_HDR_LEN_OFF + 1] = (uint8_t)rec_len;
+	for (int i = 0; i < REAC_DT1_WRAPPER_BYTES; i++)
+		blk[REAC_HDR_OPCODE_OFF + i] =
+			(uint8_t)(REAC_DT1_WRAPPER >> (8 * (REAC_DT1_WRAPPER_BYTES - 1 - i)));
+	blk[REAC_DT1_LEN_ECHO_OFF] = (uint8_t)(rec_len - (REAC_DT1_SYSEX_OFF - REAC_HDR_OPCODE_OFF));
+	blk[REAC_DT1_SYSEX_OFF] = REAC_SYSEX_START;
+	blk[REAC_DT1_SYSEX_OFF + 1] = REAC_ROLAND_ID;
+	blk[REAC_DT1_SYSEX_OFF + 2] = REAC_DT1_DEVICE_ID;
+	blk[REAC_DT1_MODEL_LO_OFF] = REAC_DT1_MODEL_ID_LO;
+	blk[REAC_DT1_CMD_OFF] = REAC_DT_CMD_DT1;
+	blk[REAC_DT1_TAG_OFF] = (uint8_t)(tag >> 8);
+	blk[REAC_DT1_TAG_OFF + 1] = (uint8_t)tag;
+	blk[a] = (uint8_t)(addr_lo >> 8);
+	blk[a + 1] = (uint8_t)addr_lo;
+	for (size_t i = 0; i < n; i++)
+		blk[d + i] = pl[i];
+	/* BOTH CHECKSUMS, because libreac (1.6.0 on) refuses a reply that fails either:
+	 * the Roland inner one over TAG..data, then the block's own, so the 32 bytes sum
+	 * to 0 mod 256. */
+	unsigned sum = 0;
+	for (unsigned i = REAC_DT1_TAG_OFF; i < d + n; i++)
+		sum += blk[i];
+	blk[d + n] = (uint8_t)((128 - sum % 128) % 128);
+	blk[d + n + 1] = REAC_SYSEX_END;
+	unsigned bsum = 0;
+	for (int i = 0; i < 31; i++)
+		bsum += blk[i];
+	blk[31] = (uint8_t)(256 - bsum % 256);
+}
+
+#endif /* REAC_TEST_FACTS_H */
