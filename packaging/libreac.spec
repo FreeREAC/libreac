@@ -2,7 +2,7 @@
 # libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.11.0
+Version:        1.12.0
 # THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
 # `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
 # from it, so bumping it is what makes a mismatched pair refuse to install
@@ -181,6 +181,19 @@ make test
 %{_libexecdir}/libreac/tests/fake_box
 
 %changelog
+* Mon Nov 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.12.0-1
+- The hardware launch (#64): reac_etf_qdisc_install_offload and
+  reac_etf_qdisc_offloaded install and read back mqprio + etf offload, all or
+  nothing; the ETF socket carries REAC_ETF_QDISC_PRIO; and
+  reac_pacer_launch_stamps_arm / reac_pacer_launch_stamps sample the NIC's TX
+  hardware stamps against each frame's launch time.
+- A REAC segment is a physical NIC or a VLAN on one (#65): reac_ifscan reads it
+  from sysfs (reac_ifscan_is_physical) and never listens on a bridge, veth,
+  tun/tap or macvlan unless reac_ifscan_set_allow_virtual names it.
+- The head-amp record is role-blind; libreac-transport's dependency on libreac
+  carries a ceiling (#57).
+- Added symbols only: LIBREAC_ABI stays 7, both sonames unchanged.
+
 * Thu Nov 05 2026 Pau Aliagas <linuxnow@gmail.com> - 1.11.0-1
 - ABI break: struct pcap_source gains skipped_oversized, so libreac.so.6 becomes
   libreac.so.7 (libreac7). pcap_source_next counts the records larger than the

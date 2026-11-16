@@ -1,3 +1,20 @@
+libreac (1.12.0) unstable; urgency=medium
+
+  * The hardware launch (#64): reac_etf_qdisc_install_offload and
+    reac_etf_qdisc_offloaded install and read back mqprio + etf offload, all
+    or nothing; the ETF socket carries REAC_ETF_QDISC_PRIO; and
+    reac_pacer_launch_stamps_arm / reac_pacer_launch_stamps sample the NIC's
+    TX hardware stamps against each frame's launch time.
+  * A REAC segment is a physical NIC or a VLAN on one (#65): reac_ifscan
+    reads it from sysfs (reac_ifscan_is_physical) and never listens on a
+    bridge, veth, tun/tap or macvlan unless reac_ifscan_set_allow_virtual
+    names it.
+  * The head-amp record is role-blind; libreac-transport's dependency on
+    libreac carries a ceiling (#57).
+  * Added symbols only: LIBREAC_ABI stays 7, both sonames unchanged.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Mon, 16 Nov 2026 12:00:00 +0000
+
 libreac (1.11.0) unstable; urgency=medium
 
   * ABI break: struct pcap_source gains skipped_oversized, so libreac.so.6
