@@ -15,7 +15,7 @@
  * revision 0x0000 at 48 kHz and 0x0002 at 44.1 kHz).
  *
  * WHAT WENT WRONG AND WHY A 48/96 kHz TEST COULD NOT SEE IT: the scene revision
- * was stamped `cfg.console_field ? 1 : 0`. A boolean squash is INVISIBLE while
+ * was stamped `cfg.pace_code ? 1 : 0`. A boolean squash is INVISIBLE while
  * the field only ever holds 0 or 1 — every existing test runs at 48 or 96 kHz —
  * and turns the 44.1 kHz code 2 into 1, i.e. into the 96 kHz class, so a 44.1 kHz
  * master announced 44.1 and recorded 96. The 44.1 kHz case below is the one that
@@ -57,7 +57,7 @@ static int block_closes(const uint8_t tmpl[34])
 
 static int carriers(int fps, uint8_t code)
 {
-	struct reac_console_cfg cfg = { .out_channels = 8, .console_field = code };
+	struct reac_console_cfg cfg = { .out_channels = 8, .pace_code = code };
 	struct reac_master m;
 	reac_master_init(&m, OUR, &cfg, fps);
 
@@ -123,7 +123,7 @@ static int announce_width_and_count(void)
 	static const uint8_t BOX[6] = { 0x00, 0x40, 0xab, 0xc4, 0x80, 0x3b };
 	uint8_t join[32];
 	struct reac_console_cfg cfg = { .out_channels = 8,
-	                                .console_field = reac_pace_code(4000) };
+	                                .pace_code = reac_pace_code(4000) };
 	struct reac_master m;
 	uint16_t c;
 	int ix;
@@ -218,7 +218,7 @@ int main(void)
 		for (size_t i = 0; i < sizeof RATE / sizeof RATE[0]; i++) {
 			struct reac_console_cfg cfg = {
 				.out_channels  = 8,
-				.console_field = reac_pace_code(RATE[i].fps),
+				.pace_code = reac_pace_code(RATE[i].fps),
 			};
 			struct reac_master m;
 			reac_master_init(&m, OUR, &cfg, RATE[i].fps);
@@ -233,8 +233,8 @@ int main(void)
 	 * constant would pass on a generator that had stopped reading the pace code at
 	 * all, which is exactly the defect this file exists for. */
 	{
-		struct reac_console_cfg a = { .out_channels = 8, .console_field = 0 };
-		struct reac_console_cfg b = { .out_channels = 8, .console_field = 2 };
+		struct reac_console_cfg a = { .out_channels = 8, .pace_code = 0 };
+		struct reac_console_cfg b = { .out_channels = 8, .pace_code = 2 };
 		struct reac_master ma, mb;
 		reac_master_init(&ma, OUR, &a, 4000);
 		reac_master_init(&mb, OUR, &b, 3675);
@@ -271,7 +271,7 @@ int main(void)
 			{ 32, "cdea0103000d100400414141410000000000c3000000000000000000000000000014" },
 		};
 		for (size_t i = 0; i < sizeof WIRE / sizeof WIRE[0]; i++) {
-			struct reac_console_cfg cfg = { .out_channels = 8, .console_field = 0 };
+			struct reac_console_cfg cfg = { .out_channels = 8, .pace_code = 0 };
 			struct reac_master m;
 			char got[80];
 			reac_master_init(&m, OUR, &cfg, 4000);

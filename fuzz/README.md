@@ -32,7 +32,7 @@ libreac/harness-fixes), taken in 1.8.0 with their modification notice, and exten
 
 | Harness | Parsers it feeds | Input |
 | --- | --- | --- |
-| `fuzz_decode` | `reac_frame_inspect`, `reac_decode`, `reac_decode_plain_le` (`src/reac_decode.c`); `reac_upstream_channels`, `reac_upstream_decode` (`src/reac_upstream.c`); the frame helpers of `src/reac.c` | a mode selector (three shipped descriptors, or one built from the next two bytes), then one frame |
+| `fuzz_decode` | `reac_frame_inspect`, `reac_decode` (`src/reac_decode.c`); `reac_upstream_channels`, `reac_upstream_decode` (`src/reac_upstream.c`); the frame helpers of `src/reac.c` | a mode selector (three shipped descriptors, or one built from the next two bytes), then one frame |
 | `fuzz_ctrl` | `reac_ctrl_parse`, `reac_ctrl_identity_reply`, `reac_ctrl_identity_fragment`, `reac_ctrl_headamp_record_verify`, `reac_box_catalogue_match`, the two checksums (`src/reac_ctrlblk.c`); `reac_ctrl_classify_box_frame` (`src/reac_ctrl.c`); `reac_ports_parse`, `reac_ports_unknown` (`src/reac_ports.c`) | our MAC, a flag for the builder round trip, then up to 256 length-prefixed frames, with the identity fragments reassembled across them |
 | `fuzz_identity` | `reac_identity_ingest` and the two formatters (`src/reac_identity.c`); `reac_box_family_of`, `reac_box_name`, `reac_box_catalogue_defect` (`src/reac_box_facts.c`) | up to 64 identity-page replies (address, length, payload), then widths and output capacities |
 | `fuzz_disco` | `reac_disco_classify`, `reac_disco_classify_on_segment`, the announce gate, the table and its JSON (`src/reac_disco.c`); `reac_hunt_observe`, `reac_hunt_step` (`src/reac_hunt.c`) | our MAC, a pin, then up to 512 timed operations: a frame through one of three doors, or an age, serialise and step |
@@ -71,8 +71,8 @@ The header comment of every harness lists them; in short:
   marker, in both directions; a frame decodes exactly when it is valid and the geometry fits;
   a refused decode leaves its output untouched; decoding and re-encoding through
   `reac_braid_encode` gives back the audio region byte for byte, and every decoded sample is
-  the three bytes the braid map of `reac_braid.h` names, written out in the harness; plain LE is
-  a straight copy, sample by sample; a box return's width is its length's, at a box width only;
+  the three bytes the braid map of `reac_braid.h` names, written out in the harness;
+  a box return's width is its length's, at a box width only;
   `reac_frame_clean_len` only strips the two-byte FCS residue.
 - **ctrl**: `reac_ctrl_parse` reads the addresses and counter where the frame carries them; the
   box classifier answers only for a Roland source that is not us and, FILLER aside, only when the

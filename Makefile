@@ -5,7 +5,7 @@
 # is under openwrt/libreac/ (built via scripts/build-apk.sh against the SDK).
 #
 # libreac is the shared REAC byte-layout core: wire constants + rate detect
-# (reac.c), the braided downstream decode + its plain-LE diagnostic
+# (reac.c), the braided downstream decode
 # (reac_decode.c), the braided box-upstream decode (reac_upstream.c) and the
 # braided ENCODE + downstream frame builder (reac_encode.c), all over the
 # braid/sample header oracles
@@ -143,7 +143,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh tests/conformance-no-compat.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
 	@mkdir -p $(BUILD_DIR); rm -f $(SKIP_LOG)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	$(RUN_TEST) ./test_reac
@@ -257,11 +257,6 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	    tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c -lm \
 	    -o test_reac_etf_hwstamp
 	$(RUN_TEST) ./test_reac_etf_hwstamp
-	# THE ABI RATCHET. Every other test is rebuilt against the headers it is
-	# testing and therefore cannot see a struct member move; reac-pw is not.
-	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests $(INC) \
-	    tests/test_abi_layout.c libreac.a -lm -o test_abi_layout
-	$(RUN_TEST) ./test_abi_layout
 	# A SOURCE-SHAPE ARM, not a value arm. The head-amp base must have exactly
 	# one source in the code — the announced strap. A per-width table agrees
 	# with the announce on every chassis we own, so no test built from our own
@@ -288,15 +283,13 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# on ee205b6 and each with a control arm that exits 2 (NOT A RESULT) if its own
 	# harness is broken. Rate detection measures one stream (M1); a new clock reference
 	# is acquired before it is locked (M2); an identity reply must close both checksums
-	# (M3); the plain-LE diagnostic refuses a geometry wider than the region (M6).
+	# (M3).
 	$(CC) $(CFLAGS) $(INC) tests/test_rate_detect.c libreac.a -lm -lpthread -o test_rate_detect
 	$(RUN_TEST) ./test_rate_detect
 	$(CC) $(CFLAGS) $(INC) tests/test_clock.c libreac.a -lm -o test_clock
 	$(RUN_TEST) ./test_clock
 	$(CC) $(CFLAGS) $(INC) tests/test_identity_cksum.c libreac.a -lm -o test_identity_cksum
 	$(RUN_TEST) ./test_identity_cksum
-	$(CC) $(CFLAGS) $(INC) tests/test_decode_plain_le.c libreac.a -lm -o test_decode_plain_le
-	$(RUN_TEST) ./test_decode_plain_le
 	# THE CODE LIST IS ONE LIST (reac_code.h): every token is its enumerator's name and
 	# unique, and reac-pw's tokens are declared here, so its copy becomes an include.
 	$(CC) $(CFLAGS) $(INC) tests/test_code.c -o test_code
@@ -311,6 +304,10 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# THE VERSION AND THE SONAMES HAVE ONE DEFINITION (reac.h); the spec and debian/ copy
 	# them, and a copy that lags is refused here instead of shipping a package that loads a stale ABI.
 	$(RUN_TEST) tests/conformance-packaging.sh
+	# NO BACKWARD-COMPATIBILITY MECHANISM IS KEPT: each arm names one that is gone (the ABI promise,
+	# the append-only enum rule, the pre-0.5.0 decoder, the width-keyed announce, two aliases, an old
+	# option spelling, an old-kernel fallback).
+	$(RUN_TEST) tests/conformance-no-compat.sh
 	$(RUN_TEST) tests/conformance-public-docs.sh
 	# THE PYTHON BINDING LOADS THE CURRENT ABI SONAME. This runs with only the
 	# versioned shared object and the libreac.so.<ABI> link present, so an old
@@ -700,7 +697,7 @@ peer-replay-selftest:
 	$(RUN_TEST) tools/peer-replay-selftest.sh
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_reac_etf_hwstamp test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_hunt_one_frame test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
+	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_reac_etf_hwstamp test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_hunt_one_frame test_rate_detect test_clock test_identity_cksum test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_rx_spoof test_peer_binding test_topo_hears_vlans test_etf_qdisc_stats test_etf_qdisc_offload test_ifscan_physical
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 

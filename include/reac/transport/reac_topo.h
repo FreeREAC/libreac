@@ -91,9 +91,7 @@
  * frame on that VID retries at wire speed. */
 #define REAC_TOPO_RETRY_NS (10ULL * 1000000000ULL)
 
-/* What one frame on a parent's tap turned out to be. APPEND ONLY: the values cross the
- * library boundary as plain ints and a binding built against an older header passes one
- * through unchanged. */
+/* What one frame on a parent's tap turned out to be. */
 enum reac_topo_kind {
 	REAC_TOPO_NOT_REAC = 0, /* untagged and not 0x8819 — the BPF should have dropped it */
 	REAC_TOPO_UNTAGGED,     /* 0x8819, no VLAN: the parent itself may be the segment */

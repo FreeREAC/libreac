@@ -6,15 +6,11 @@
 #include <string.h>
 
 #define PCAP_MAGIC      0xA1B2C3D4u
-#define PCAP_MAGIC_SWAP 0xD4C3B2A1u
 
-static uint32_t rd_u32(const uint8_t *p, int swap)
+static uint32_t rd_u32(const uint8_t *p)
 {
-	uint32_t v = (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
-	             ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-	if (swap)
-		v = __builtin_bswap32(v);
-	return v;
+	return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+	       ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
 int pcap_source_open(struct pcap_source *ps, const char *path)
@@ -34,11 +30,9 @@ int pcap_source_open(struct pcap_source *ps, const char *path)
 	}
 	uint32_t magic = (uint32_t)gh[0] | ((uint32_t)gh[1] << 8) |
 	                 ((uint32_t)gh[2] << 16) | ((uint32_t)gh[3] << 24);
-	if (magic == PCAP_MAGIC)
-		ps->swapped = 0;
-	else if (magic == PCAP_MAGIC_SWAP)
-		ps->swapped = 1;
-	else {
+	/* Only a little-endian classic pcap: a capture written in the opposite byte order
+	 * (or a pcapng) has any other magic and is refused here. */
+	if (magic != PCAP_MAGIC) {
 		fclose(ps->f);
 		ps->f = NULL;
 		return -1;
@@ -57,15 +51,15 @@ long pcap_source_next(struct pcap_source *ps, uint8_t *buf, size_t cap, uint64_t
 			return 0; /* EOF */
 		if (got != 16)
 			return -1;
-		uint32_t sec = rd_u32(ph, ps->swapped);
-		uint32_t usec = rd_u32(ph + 4, ps->swapped);
-		uint32_t incl = rd_u32(ph + 8, ps->swapped);
+		uint32_t sec = rd_u32(ph);
+		uint32_t usec = rd_u32(ph + 4);
+		uint32_t incl = rd_u32(ph + 8);
 		/* An empty record carries no frame. Its length, 0, is what the end of the
 		 * file returns, so handing it back would end the walk on it: it is skipped,
 		 * and 0 means the end of the file and nothing else. */
 		if (incl == 0)
 			continue;
-		ps->last_orig_len = rd_u32(ph + 12, ps->swapped);
+		ps->last_orig_len = rd_u32(ph + 12);
 		if (incl > cap) {
 			/* Frame larger than the caller buffer (a jumbo/non-REAC packet, or
 			 * a corrupt header). Skip its body and keep going — returning -1

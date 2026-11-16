@@ -181,10 +181,6 @@ enum reac_role_refuse {
 #define REAC_CFG_ROLE_REFUSED_PROP          "reac.cfg.role.refused"
 #define REAC_CFG_ROLE_STATE_APPLIED         "applied"
 #define REAC_CFG_ROLE_STATE_PENDING         "role_reestablish_pending"
-/* The names the role answer is read under in libreac-transport (reac_role_swap.c) and in
- * reac-pw: aliases of the two above, never a second spelling. */
-#define REAC_ROLE_STATE_APPLIED             REAC_CFG_ROLE_STATE_APPLIED
-#define REAC_ROLE_STATE_REESTABLISH_PENDING REAC_CFG_ROLE_STATE_PENDING
 /* The swap landed on a slave that no master has enrolled yet: the role is right, the
  * job it names is not being done (reac_role_swap.h). */
 #define REAC_CFG_ROLE_STATE_HUNTING         "role_hunting"

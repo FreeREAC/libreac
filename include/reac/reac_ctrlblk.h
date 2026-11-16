@@ -516,11 +516,11 @@ int reac_box_model_block(const struct reac_box_model *m, enum reac_box_block b,
 int reac_box_model_upstream_width(const struct reac_box_model *m);
 
 /* Build one of a model's box->master control frames AS THAT MODEL — the door a
- * box-role daemon announces itself through. The existing width-keyed builders
- * (reac_ctrl_build_config_announce and friends) resolve the row from `in_ch` and
- * therefore can only ever emit a CAPTURED model; this one takes the row, so a
- * model nobody has seen — or one whose width another row already claims — can
- * declare itself. `planar`/`ns` carry audio for the rows that place any (the
+ * box-role daemon announces itself through. The remaining width-keyed
+ * builders resolve the row from `in_ch` and therefore can only ever emit a CAPTURED
+ * model; this one takes the row, so a model nobody has seen — or one whose width
+ * another row already claims — can declare itself. THE CONFIG ANNOUNCE HAS NO
+ * WIDTH-KEYED BUILDER: it is this function with REAC_BOX_BLOCK_CONFIG. `planar`/`ns` carry audio for the rows that place any (the
  * cold-connect variants); NULL/0 is silence. Returns the frame length, or 0 when
  * the row does not emit that block (the name record on a family whose selector
  * names it) or the geometry cannot reach the wire. */
@@ -580,11 +580,6 @@ size_t reac_ctrl_build_flood_filler(uint8_t *out, const uint8_t bcast[6],
  * in reac.env for a session. PURE: no I/O, the caller does the printing. */
 int reac_box_pin_notice(const char **pin, const char *recognized_token);
 
-/* Config-announce (cdea 01 03 0010) — the SETUP DECLARATION the master enrolls
- * the box from. Byte-verified per model; the selector byte sets the displayed
- * model family. in_ch selects the fixed-matrix row (falls back to S-1608). */
-size_t reac_ctrl_build_config_announce(uint8_t *out, const uint8_t master[6],
-                                       const uint8_t src[6], uint16_t counter, int in_ch);
 /* The identity record's two fragments. THEY ARE ONE MESSAGE AND MUST BOTH GO OUT,
  * in this order: the FIRST fragment carries the DT1 preamble, TAG 0x0500 and the
  * ASCII model name, and the LAST one carries the SysEx checksum that closes over
@@ -651,7 +646,7 @@ size_t reac_ctrl_build_coldconnect(uint8_t *out, const uint8_t master[6],
  * box. Emitted raw (the 0013 block is not sum-to-0). */
 /* THE CONFIG-ANNOUNCE A BOX SENDS WHEN IT JOINS A STAGEBOX ON M (added 0.7.2).
  *
- * `reac_ctrl_build_config_announce` emits the matrix row's own `config_block`, which is what
+ * The row's own `config_block` (reac_ctrl_build_as, REAC_BOX_BLOCK_CONFIG) is what
  * that model declares TO A DESK and is byte-verified against M-200/M-5000 establishes. A real
  * S-1608 joining a real S-0808 in master mode declares something DIFFERENT, and both blocks
  * are 32 bytes with the same `01 01` and six `03` tail:

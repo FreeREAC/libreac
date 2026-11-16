@@ -143,7 +143,7 @@ static size_t box_frame(uint8_t *out, const uint8_t blk[32], int n_ch)
 static int burst_geometry(int fps, int want_head_to_last)
 {
 	struct reac_console_cfg cfg = { .out_channels = 8,
-	                                .console_field = reac_pace_code(fps) };
+	                                .pace_code = reac_pace_code(fps) };
 	struct reac_master m;
 	reac_master_init(&m, OUR, &cfg, fps);
 
@@ -211,7 +211,7 @@ static int burst_geometry(int fps, int want_head_to_last)
 static int warm_relink(int fps)
 {
 	struct reac_console_cfg cfg = { .out_channels = 8,
-	                                .console_field = reac_pace_code(fps) };
+	                                .pace_code = reac_pace_code(fps) };
 	struct reac_master m;
 	reac_master_init(&m, OUR, &cfg, fps);
 

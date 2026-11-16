@@ -1,3 +1,19 @@
+libreac (1.12.0) unstable; urgency=medium
+
+  * The soname of both libraries is the release version (libreac.so.1.12.0,
+    libreac-transport.so.1.12.0), so dpkg ties each program to the libreac it
+    was built against; the packages are libreac1.12.0 and
+    libreac-transport1.12.0. The ABI promise is gone: LIBREAC_ABI, the layout
+    table with its test and generator, and the version ranges that served it.
+  * Removed: the append-only enum rule, reac_decode_plain_le, the width-keyed
+    reac_ctrl_build_config_announce (use reac_ctrl_build_as with a catalogue
+    row), the REAC_ROLE_STATE_APPLIED / _REESTABLISH_PENDING aliases, the
+    console_field member name (pace_code), the byte-swapped pcap reader and
+    the fallback for kernels older than 4.20.
+  * The Python binding loads the soname of its own release.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Mon, 16 Nov 2026 20:00:00 +0000
+
 libreac (1.11.0) unstable; urgency=medium
 
   * ABI break: struct pcap_source gains skipped_oversized, so libreac.so.6

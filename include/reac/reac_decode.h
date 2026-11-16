@@ -20,12 +20,7 @@
  * without a source change. Both directions decode the same braid through the
  * same oracle: reac_decode() here (downstream, 40 ch), reac_upstream_decode()
  * in <reac/reac_upstream.h> (box return, box-width sized).
- *
- * The plain-LE layout survives under its own explicit name,
- * reac_decode_plain_le(), byte-identical to the pre-0.5.0 reac_decode(). It is
- * a DIAGNOSTIC: it reads historical captures decoded that way, and it is how
- * the mid-byte lane shift that once made plain-LE look coherent is reproduced.
- * It is not a layout the wire ever carried. */
+ */
 #ifndef REAC_DECODE_H
 #define REAC_DECODE_H
 
@@ -62,23 +57,5 @@ struct reac_frame reac_frame_inspect(const uint8_t *raw, size_t len,
  * On -1, out is untouched: every refusal comes before the first byte is written. */
 int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
                 uint8_t *out);
-
-/* DIAGNOSTIC ONLY — the pre-0.5.0 reac_decode(), unchanged.
- *
- * Reads the audio region as PLAIN LE sample-major: channel ch / time-sample s
- * starting at (s*n_channels + ch)*REAC_RESOLUTION, a straight copy. That is not
- * the wire format; a real frame decoded this way is the sign-extension smear
- * the braid evidence trail describes. Kept reachable for exactly two jobs:
- * reading back historical captures that were stored under this layout, and
- * reproducing the mid-byte lane shift that amplified quiet braided audio 256x
- * into the "coherence 0.999" reading which once argued for it.
- *
- * Same arguments, same planar output shape and same return contract as
- * reac_decode(), minus the braid's even-width check (a linear index does not pair
- * channels). The SIZE check stays: a geometry wider than the 1440-byte region
- * returns -1 here too. On -1, out is untouched.
- * Do not build new code on this layout. */
-int reac_decode_plain_le(const uint8_t *raw, size_t len,
-                         const struct reac_mode *mode, uint8_t *out);
 
 #endif /* REAC_DECODE_H */

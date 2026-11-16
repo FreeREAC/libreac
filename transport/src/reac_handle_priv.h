@@ -4,11 +4,10 @@
  * Private to transport/src — never installed (include/reac/transport/reac_handle.h
  * carries only the incomplete type).
  *
- * WHY THE ETF STATE LIVES HERE AND NOT IN struct reac_pacer. That struct's memory
- * layout is an INTERFACE — reac-pw embeds it and reads its members directly, and
- * tests/abi-layout.inc records the offset of every one of them. A field added there
- * moves everything behind it and segfaults an installed daemon built against the
- * previous header (the 2026-09-14 rollback, 99 restarts). The handle is the
+ * WHY THE ETF STATE LIVES HERE AND NOT IN struct reac_pacer. That struct is public —
+ * reac-pw embeds it and reads its members directly, and a field added there moves
+ * everything behind it for a daemon built against the previous header (the 2026-09-14
+ * rollback, 99 restarts; the soname now moves with every release). The handle is the
  * transport spec's declared home for backend-private state precisely so a second
  * backend costs no public struct a single byte: it is an incomplete type, it
  * appears in no ABI table, and the seven objects that hold one hold only a pointer.

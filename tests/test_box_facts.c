@@ -176,7 +176,7 @@ int main(void)
 	 * the firmware and hw block are in, at most REAC_M_IDENTITY_POLLS times. */
 	{
 		const int fps = 8000;
-		struct reac_console_cfg cfg = { .out_channels = 8, .console_field = 1 };
+		struct reac_console_cfg cfg = { .out_channels = 8, .pace_code = 1 };
 		struct reac_master m;
 		reac_master_init(&m, US, &cfg, fps);
 		m.state = REAC_M_ESTABLISHED;

@@ -217,10 +217,9 @@ struct reac_slave {
 	_Atomic uint64_t tx_frames;         /* upstream frames we emitted */
 	_Atomic uint64_t tx_errors;
 	_Atomic int      established;        /* 1 once the FSM reaches ESTABLISHED */
-	/* THE ROW WE DECLARE (1.2.0), appended rather than placed: a new member in the
-	 * middle moves every one behind it, and this struct is public. NULL is every
-	 * caller before the box role — the declaration is then keyed by box_channels
-	 * through the captured matrix, exactly as it always was. */
+	/* THE ROW WE DECLARE (1.2.0). With a row, the width, the declaration and the head-amp
+	 * strap are all the row's. NULL: the row is the captured one whose width is
+	 * box_channels. */
 	const struct reac_box_model *model;
 };
 
