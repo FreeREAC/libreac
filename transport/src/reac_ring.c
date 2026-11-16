@@ -4,6 +4,46 @@
 #include <reac/transport/reac_ring.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef REAC_RING_CHECK_SPSC
+#include <pthread.h>
+#endif
+
+/* THE SINGLE-WRITER / SINGLE-READER INVARIANT IS CHECKED, not just documented.
+ * Two writers corrupt `head` silently; two readers corrupt `tail`.
+ *
+ *   always on, RT-safe: one atomic exchange on entry and one store on exit per
+ *   side. A second writer (or reader) that arrives while the first is inside the
+ *   ring finds the flag set, is turned away (returns 0, nothing touched) and
+ *   counted in `spsc_violations`. No lock, no log, no allocation, never aborts.
+ *
+ *   REAC_RING_CHECK_SPSC (test and fuzz builds only, never shipped): the first
+ *   thread to write (read) is recorded and any other thread on that side is a
+ *   violation even when the two never overlap in time, which is what a test
+ *   needs to be deterministic. */
+static int side_enter(_Atomic uint32_t *busy, _Atomic uint64_t *tid,
+                      _Atomic uint64_t *violations)
+{
+	if (atomic_exchange_explicit(busy, 1, memory_order_acquire)) {
+		atomic_fetch_add_explicit(violations, 1, memory_order_relaxed);
+		return 0;
+	}
+#ifdef REAC_RING_CHECK_SPSC
+	uint64_t me = (uint64_t)pthread_self(), none = 0;
+	if (!atomic_compare_exchange_strong(tid, &none, me) && none != me) {
+		atomic_store_explicit(busy, 0, memory_order_release);
+		atomic_fetch_add_explicit(violations, 1, memory_order_relaxed);
+		return 0;
+	}
+#else
+	(void)tid;
+#endif
+	return 1;
+}
+
+static void side_leave(_Atomic uint32_t *busy)
+{
+	atomic_store_explicit(busy, 0, memory_order_release);
+}
 
 static uint32_t next_pow2(uint32_t v)
 {
@@ -63,8 +103,8 @@ uint32_t reac_ring_writable(const struct reac_ring *r)
 	return r->mask - reac_ring_readable(r);
 }
 
-uint32_t reac_ring_write(struct reac_ring *r, const float *planar, uint32_t n,
-                         uint32_t src_channels)
+static uint32_t ring_write(struct reac_ring *r, const float *planar, uint32_t n,
+                           uint32_t src_channels)
 {
 	if (src_channels > r->channels)
 		src_channels = r->channels;
@@ -119,8 +159,8 @@ uint32_t reac_ring_write(struct reac_ring *r, const float *planar, uint32_t n,
 	return w;
 }
 
-uint32_t reac_ring_read_planar(struct reac_ring *r, float *const *dst,
-                               uint32_t channels, uint32_t n)
+static uint32_t ring_read_planar(struct reac_ring *r, float *const *dst,
+                                 uint32_t channels, uint32_t n)
 {
 	uint32_t avail = reac_ring_readable(r);
 	uint32_t real = avail < n ? avail : n;
@@ -145,7 +185,7 @@ uint32_t reac_ring_read_planar(struct reac_ring *r, float *const *dst,
 	return real;
 }
 
-uint32_t reac_ring_trim(struct reac_ring *r, uint32_t keep)
+static uint32_t ring_trim(struct reac_ring *r, uint32_t keep)
 {
 	uint32_t avail = reac_ring_readable(r);
 	if (avail <= keep)
@@ -154,4 +194,60 @@ uint32_t reac_ring_trim(struct reac_ring *r, uint32_t keep)
 	uint32_t t = atomic_load_explicit(&r->tail, memory_order_relaxed);
 	atomic_store_explicit(&r->tail, (t + drop) & r->mask, memory_order_release);
 	return drop;
+}
+
+/* ---- the doors: refuse a NULL the caller handed us, enforce SPSC ---------- *
+ * A refusal returns 0, moves neither head nor tail, writes nothing and counts in
+ * `refused`; it never logs, allocates or aborts, so it is safe on the RT thread.
+ * The ring cannot see how long a caller's planes are (n floats each, planar
+ * holding src_channels * n) -- the length is the caller's own n -- so the door
+ * checks what it can see: the pointers. */
+
+uint32_t reac_ring_write(struct reac_ring *r, const float *planar, uint32_t n,
+                         uint32_t src_channels)
+{
+	if (!r || !r->buf)
+		return 0;
+	if (n > 0 && src_channels > 0 && !planar) {
+		atomic_fetch_add_explicit(&r->refused, 1, memory_order_relaxed);
+		return 0;
+	}
+	if (!side_enter(&r->writer_busy, &r->writer_tid, &r->spsc_violations))
+		return 0;
+	uint32_t w = ring_write(r, planar, n, src_channels);
+	side_leave(&r->writer_busy);
+	return w;
+}
+
+uint32_t reac_ring_read_planar(struct reac_ring *r, float *const *dst,
+                               uint32_t channels, uint32_t n)
+{
+	if (!r || !r->buf)
+		return 0;
+	uint32_t nch = channels < r->channels ? channels : r->channels;
+	if (n > 0 && nch > 0) {
+		int bad = dst == NULL;
+		for (uint32_t c = 0; !bad && c < nch; c++)
+			bad = dst[c] == NULL;
+		if (bad) {
+			atomic_fetch_add_explicit(&r->refused, 1, memory_order_relaxed);
+			return 0;
+		}
+	}
+	if (!side_enter(&r->reader_busy, &r->reader_tid, &r->spsc_violations))
+		return 0;
+	uint32_t got = ring_read_planar(r, dst, channels, n);
+	side_leave(&r->reader_busy);
+	return got;
+}
+
+uint32_t reac_ring_trim(struct reac_ring *r, uint32_t keep)
+{
+	if (!r || !r->buf)
+		return 0;
+	if (!side_enter(&r->reader_busy, &r->reader_tid, &r->spsc_violations))
+		return 0;
+	uint32_t d = ring_trim(r, keep);
+	side_leave(&r->reader_busy);
+	return d;
 }
