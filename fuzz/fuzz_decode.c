@@ -105,7 +105,10 @@ static void check_round_trip(const uint8_t *audio, const uint8_t *pcm, int nch, 
 	size_t region = (size_t)nch * (size_t)ns * REAC_RESOLUTION;
 	float *planes = malloc((size_t)nch * (size_t)ns * sizeof *planes);
 	float **planar = malloc((size_t)nch * sizeof *planar);
-	uint8_t *again = calloc(region ? region : 1, 1);
+	/* the encoder is handed, and checks, the whole nch-wide region: a short ns
+	 * writes only the leading bytes of it and the rest stays zero */
+	size_t full = (size_t)nch * REAC_SAMPLES_PER_PKT * REAC_RESOLUTION;
+	uint8_t *again = calloc(full ? full : 1, 1);
 	/* not a property: an allocation failed */
 	if (!planes || !planar || !again)
 		abort();
@@ -114,7 +117,13 @@ static void check_round_trip(const uint8_t *audio, const uint8_t *pcm, int nch, 
 		for (int s = 0; s < ns; s++)
 			planar[ch][s] = reac_s24le_to_f32(pcm + ((size_t)ch * (size_t)ns + (size_t)s) * 3);
 	}
-	reac_braid_encode(again, nch, planar, nch, ns);
+	if (reac_braid_encode(again, full, nch, planar, nch, ns) < 0) {
+		/* a width the braid has no region for (odd, > 40) is refused, not encoded */
+		free(planes); free(planar); free(again);
+		if (reac_box_width_ok(nch))
+			abort();   /* a legal width must never be refused */
+		return;
+	}
 	/* The braid is a bijection over the n_ch x ns x 3 region and the 24-bit codec
 	 * is exact, so decode followed by encode is the identity.
 	 * mutant: src/reac_decode.c:79 `audio[pos[0]]` -> `audio[pos[1]]`

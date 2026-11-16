@@ -27,13 +27,10 @@ static int fails;
 	if (!(cond)) { fails++; fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } \
 } while (0)
 
-/* the encoder call; the base signature has no length parameter */
-#define REAC_BRAID_ENCODE_CALL(buf, len, n_ch, pl, n_src) \
-	((void)(len), reac_braid_encode((buf), (n_ch), (pl), (n_src), REAC_SAMPLES_PER_PKT))
-
 #define REGION(n) ((size_t)(n) * REAC_SAMPLES_PER_PKT * 3)
 
-/* One encode into an exact-size heap buffer holding `len` bytes. */
+/* One encode into an exact-size heap buffer holding `len` bytes. The encoder
+ * must refuse (-1) and leave every byte as it found it. */
 static void encode_into(size_t len, int n_ch)
 {
 	uint8_t *buf = malloc(len ? len : 1);
@@ -45,7 +42,9 @@ static void encode_into(size_t len, int n_ch)
 	memset(buf, 0x5A, len);
 	for (int i = 0; i < REAC_MAX_CHANNELS; i++)
 		pl[i] = plane;
-	REAC_BRAID_ENCODE_CALL(buf, len, n_ch, pl, REAC_MAX_CHANNELS);
+	CHK(reac_braid_encode(buf, len, n_ch, pl, REAC_MAX_CHANNELS, REAC_SAMPLES_PER_PKT) == -1);
+	for (size_t i = 0; i < len; i++)
+		CHK(buf[i] == 0x5A);
 	free(buf);
 }
 
@@ -72,6 +71,25 @@ int main(int argc, char **argv)
 			continue;
 		fprintf(stderr, "case %d: %s\n", i, cases[i].what);
 		encode_into(cases[i].len, cases[i].n_ch);
+	}
+
+	/* and the legal edges still encode: width 2 and 40, into exactly their region */
+	if (only < 0) {
+		for (int n = 2; n <= REAC_MAX_CHANNELS; n += 38) {
+			uint8_t *buf = malloc(REGION(n));
+			float plane[REAC_SAMPLES_PER_PKT] = { 0 };
+			float *pl[REAC_MAX_CHANNELS];
+
+			if (!buf)
+				abort();
+			for (int i = 0; i < REAC_MAX_CHANNELS; i++)
+				pl[i] = plane;
+			CHK(reac_braid_encode(buf, REGION(n), n, pl, REAC_MAX_CHANNELS,
+			                      REAC_SAMPLES_PER_PKT) == 0);
+			free(buf);
+		}
+		/* a NULL region is refused, not written */
+		CHK(reac_braid_encode(NULL, REGION(8), 8, NULL, 0, REAC_SAMPLES_PER_PKT) == -1);
 	}
 
 	if (fails)

@@ -371,7 +371,9 @@ static void gen_decode(void)
 		}
 		memset(g_frame, 0, sizeof UP8);
 		memcpy(g_frame, UP8, REAC_L2_HEADER_LEN);
-		reac_braid_encode(g_frame + REAC_L2_HEADER_LEN, 8, planar, 8, REAC_SAMPLES_PER_PKT);
+		if (reac_braid_encode(g_frame + REAC_L2_HEADER_LEN, sizeof g_frame - REAC_L2_HEADER_LEN, 8,
+		                      planar, 8, REAC_SAMPLES_PER_PKT) < 0)
+			abort();
 		g_frame[sizeof UP8 - 2] = REAC_END_MARKER_0;
 		g_frame[sizeof UP8 - 1] = REAC_END_MARKER_1;
 		put8(&s, 1); put8(&s, 0); put8(&s, 0);
