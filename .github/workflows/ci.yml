@@ -110,8 +110,8 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     # A backstop: fuzz-run spends FUZZ_TIME on each harness and fuzz-sabotage at most
-    # 30 s on each mutant, so the job ends on its own well inside this.
-    timeout-minutes: 40
+    # 30 s on each mutant, and fuzz-records builds each recorded mutant once, so the job ends on its own well inside this.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Build the fuzz harnesses (clang, libFuzzer, ASan, UBSan)
@@ -132,6 +132,14 @@ jobs:
           cov=$(command -v llvm-cov-$v || command -v llvm-cov)
           prof=$(command -v llvm-profdata-$v || command -v llvm-profdata)
           make fuzz-cov LLVM_COV="$cov" LLVM_PROFDATA="$prof"
+      # Every check's recorded breakage (the `mutant:` / `input:` lines in fuzz/*.c) must still apply
+      # and be stopped by the seed it names: the records name source lines that move with every edit,
+      # and a stale one proves nothing.
+      - name: Hold every mutant record
+        run: make fuzz-records
+      # The committed seeds must be what fuzz/gen-corpus.c writes.
+      - name: Hold the seed corpus to its generator
+        run: make fuzz-corpus-check
       - name: Upload the crashing inputs
         if: failure()
         uses: actions/upload-artifact@v4

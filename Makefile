@@ -747,6 +747,13 @@ $(FUZZ_GEN): fuzz/gen-corpus.c libreac.a
 fuzz-corpus: $(FUZZ_GEN)
 	$(FUZZ_GEN) fuzz/corpus
 
+# The committed corpus must be what the generator writes: a seed edited by hand, or a generator
+# changed without regenerating, is refused instead of drifting. Needs no clang.
+fuzz-corpus-check: $(FUZZ_GEN)
+	@mkdir -p $(BUILD_DIR) && tmp=$$(mktemp -d -p $(BUILD_DIR)) && $(FUZZ_GEN) $$tmp/corpus >/dev/null && \
+	  diff -r $$tmp/corpus fuzz/corpus && echo "fuzz-corpus-check: the seed corpus is current" || \
+	  { echo "fuzz-corpus-check: fuzz/corpus is not what fuzz/gen-corpus.c writes; run make fuzz-corpus"; exit 1; }
+
 # THE PEER-BINDING PROOF AGAINST THE RECORDED SESSIONS. Dev-only, like `corpus`: the
 # captures are not in this repo (REAC_CAPTURES, FreeREAC/reac-captures, git lfs pull).
 #   peer-replay          every capture, frame by frame, through the base (BASE, default
@@ -782,4 +789,4 @@ clean:
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \
         peer-replay peer-attack peer-sabotage peer-replay-selftest \
-        fuzz fuzz-run fuzz-sabotage fuzz-records fuzz-cov fuzz-checks-selftest fuzz-corpus
+        fuzz fuzz-run fuzz-sabotage fuzz-records fuzz-cov fuzz-checks-selftest fuzz-corpus fuzz-corpus-check
