@@ -85,3 +85,5 @@ test_box_facts
 # fuzzing: crashing inputs and logs from make fuzz-run
 /fuzz/findings/
 /test_reac_*
+/courtship_probe
+/tap_probe

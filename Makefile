@@ -191,6 +191,9 @@ $(MOVED_UNIT_BINS): test_reac_%: tests/test_reac_%.c $(MOVED_TEST_DEPS) libreac.
 $(MOVED_TRANSPORT_BINS): test_reac_%: tests/test_reac_%.c $(MOVED_TEST_DEPS) libreac-transport.a libreac.a
 	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests -Itests/facts $(INC) $< libreac-transport.a libreac.a -lm -lpthread -o $@
 
+courtship_probe tap_probe: %: tests/%.c $(MOVED_TEST_DEPS) libreac-transport.a libreac.a
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -Itests -Itests/facts $(INC) $< libreac-transport.a libreac.a -lm -lpthread -o $@
+
 # The one moved test that needs the capture corpus (not in this repo): dev-only like `make corpus`;
 # it exits 77 (SKIP) without the corpus, so it is not an arm of the CI suites.
 .PHONY: hunt-captures
@@ -497,7 +500,7 @@ transport: libreac-transport.a
 # 802.1Q tag). Absent, the test prints CORPUS ARM NOT RUN rather than passing quietly.
 REAC_TAP_CAPTURE ?=
 
-test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c tests/test_peer_binding.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c tests/test_etf_qdisc_offload.c tests/test_ifscan_physical.c tests/netns_veth.h libreac-transport.a libreac.a $(addprefix test_reac_,$(MOVED_TRANSPORT))
+test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c tests/test_peer_binding.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c tests/test_etf_qdisc_offload.c tests/test_ifscan_physical.c tests/netns_veth.h libreac-transport.a libreac.a $(addprefix test_reac_,$(MOVED_TRANSPORT)) courtship_probe tap_probe tests/facts.sh tools/facts-env.py
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
 	$(RUN_TEST) ./test_tap $(REAC_TAP_CAPTURE)
 	$(RUN_TEST) tools/conformance-tap-silent.sh
@@ -556,6 +559,14 @@ test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c test
 	$(RUN_TEST) ./test_ifscan_physical
 	# THE MOVED TRANSPORT TESTS (see MOVED_TRANSPORT above).
 	@for t in $(addprefix test_reac_,$(MOVED_TRANSPORT)); do $(RUN_TEST) ./$$t || exit 1; done
+	# THREE NAMESPACE SCRIPTS MOVED HERE FROM reac-pw, each driving only libreac's own engines on
+	# real sockets (no daemon): the link watch seeing a real carrier change (three edges, in order);
+	# the REAL slave engine backing off a master that never grants, read off the wire at the far end
+	# of a veth; and a tap-role segment transmitting nothing, with that engine as its control. Each
+	# exits 77 (SKIP) where the user+net namespace, iproute2 or the dummy/veth drivers are missing.
+	$(RUN_TEST) tests/link-edge-observed.sh ./test_reac_linkmon
+	$(RUN_TEST) tests/courtship-backs-off.sh ./courtship_probe
+	$(RUN_TEST) tests/tap-sends-nothing.sh ./courtship_probe ./tap_probe
 
 # --- fuzzing: libFuzzer harnesses for every parser of wire bytes ---
 # One harness per parser in fuzz/, each a plain C LLVMFuzzerTestOneInput, linked
@@ -764,7 +775,7 @@ peer-replay-selftest:
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) libreac.a test_reac test_capture test_braid test_upstream test_encode test_decode test_ports test_grant_width test_headamp_replay test_box_0832 test_ctrl test_link test_facts test_identity test_box_facts test_master_carriers test_master_capture test_wire_invariants test_abi_layout test_reac_knock test_reac_tapwait test_reac_etf test_reac_etf_qdisc test_reac_etf_hwstamp test_sniffer_binds_first test_cfg test_boxreg test_box_width test_desk_or_box test_hold test_hunt_one_frame test_rate_detect test_clock test_identity_cksum test_decode_plain_le test_code etf_probe topo_bind_probe corpus_check $(WIRE_TOOLS)
 	rm -f $(TRANSPORT_OBJS) $(TRANSPORT_OBJS:.o=.d) libreac-transport.a test_tap test_rx_twin test_rx_spoof test_peer_binding test_topo_hears_vlans test_etf_qdisc_stats test_etf_qdisc_offload test_ifscan_physical
-	rm -f $(MOVED_UNIT_BINS) $(MOVED_TRANSPORT_BINS)
+	rm -f $(MOVED_UNIT_BINS) $(MOVED_TRANSPORT_BINS) courtship_probe tap_probe
 	rm -rf $(BUILD_DIR) transport/*.o transport/*.d
 
 .PHONY: all test test-transport conformance corpus wire-tools clean transport \
