@@ -76,6 +76,59 @@ static const uint8_t GOLD_DEL[36] = {
 	0x00, 0x00, 0x00, 0x00,
 };
 
+/* THE HARDWARE-LAUNCH FORM, captured the same way inside a namespace whose veth0 has
+ * four TX queues (ifindex 4, seq 0x6afa361d):
+ *
+ *   tc qdisc add dev veth0 root handle 100: mqprio num_tc 2 \
+ *       map 1 1 1 0 1 1 1 1 1 1 1 1 1 1 1 1 queues 1@0 3@1 hw 0
+ *   tc qdisc add dev veth0 parent 100:1 etf clockid CLOCK_TAI delta 300000 offload skip_sock_check
+ *
+ * with `strace -e trace=sendmsg -e write=3`. The second one the veth REFUSED ("Specified
+ * device does not support ETF offload"), which is the namespace's fallback: the bytes are
+ * still what tc asks, and that is the specification. */
+#define GOLD_HW_IFINDEX 4
+#define GOLD_HW_SEQ     0x6afa361du
+
+static const uint8_t GOLD_MQPRIO[136] = {
+	/* nlmsghdr: len 136, RTM_NEWQDISC, REQUEST|ACK|EXCL|CREATE */
+	0x88, 0x00, 0x00, 0x00,  0x24, 0x00, 0x05, 0x06,  0x1d, 0x36, 0xfa, 0x6a,  0x00, 0x00, 0x00, 0x00,
+	/* tcmsg: AF_UNSPEC, ifindex 4, handle 100: (0x01000000), parent TC_H_ROOT, info 0 */
+	0x00, 0x00, 0x00, 0x00,  0x04, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x01,  0xff, 0xff, 0xff, 0xff,
+	0x00, 0x00, 0x00, 0x00,
+	/* TCA_KIND, len 11, "mqprio\0", padded to 12 */
+	0x0b, 0x00, 0x01, 0x00,  0x6d, 0x71, 0x70, 0x72,  0x69, 0x6f, 0x00, 0x00,
+	/* TCA_OPTIONS, len 88: struct tc_mqprio_qopt itself, not nested */
+	0x58, 0x00, 0x02, 0x00,
+	/* num_tc 2, then prio_tc_map[16] (priority 3 -> class 0, every other -> class 1), then hw 0 */
+	0x02, 0x01, 0x01, 0x01,  0x00, 0x01, 0x01, 0x01,  0x01, 0x01, 0x01, 0x01,  0x01, 0x01, 0x01, 0x01,
+	0x01, 0x00,
+	/* count[16] (u16): class 0 one queue, class 1 three */
+	0x01, 0x00, 0x03, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,
+	/* offset[16] (u16): class 0 at queue 0, class 1 at queue 1 */
+	0x00, 0x00, 0x01, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,
+	/* the qopt padded to 84 */
+	0x00, 0x00,
+};
+
+static const uint8_t GOLD_OFFLOAD[64] = {
+	/* nlmsghdr: len 64, RTM_NEWQDISC, REQUEST|ACK|EXCL|CREATE */
+	0x40, 0x00, 0x00, 0x00,  0x24, 0x00, 0x05, 0x06,
+	0x1d, 0x36, 0xfa, 0x6a,  0x00, 0x00, 0x00, 0x00,
+	/* tcmsg: ifindex 4, handle 0, parent 100:1 (0x01000001) */
+	0x00, 0x00, 0x00, 0x00,  0x04, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00,  0x01, 0x00, 0x00, 0x01,
+	0x00, 0x00, 0x00, 0x00,
+	/* TCA_KIND "etf\0" */
+	0x08, 0x00, 0x01, 0x00,  0x65, 0x74, 0x66, 0x00,
+	/* TCA_OPTIONS nesting TCA_ETF_PARMS */
+	0x14, 0x00, 0x02, 0x00,  0x10, 0x00, 0x01, 0x00,
+	/* delta 300000, clockid 11, flags 6 (offload | skip_sock_check) */
+	0xe0, 0x93, 0x04, 0x00,  0x0b, 0x00, 0x00, 0x00,
+	0x06, 0x00, 0x00, 0x00,
+};
+
 static void diff(const uint8_t *got, const uint8_t *want, size_t n, const char *what)
 {
 	for (size_t i = 0; i < n; i++)
@@ -156,6 +209,42 @@ static void test_short_buffer_refuses(void)
 	printf("  refusals: a short buffer and a bad ifindex build nothing\n");
 }
 
+/* ---- 4b. the hardware-launch form is what tc sends, both halves ----------- */
+static void test_hardware_form_is_byte_exact(void)
+{
+	uint8_t buf[256];
+	memset(buf, 0xa5, sizeof buf);
+	size_t n = reac_etf_qdisc_mqprio_msg(buf, sizeof buf, GOLD_HW_IFINDEX, GOLD_HW_SEQ);
+	CHECK(n == sizeof GOLD_MQPRIO, "the mqprio message is %zu bytes, tc sends %zu",
+	      n, sizeof GOLD_MQPRIO);
+	if (n == sizeof GOLD_MQPRIO) {
+		diff(buf, GOLD_MQPRIO, sizeof GOLD_MQPRIO, "RTM_NEWQDISC mqprio");
+		CHECK(buf[n] == 0xa5, "the mqprio builder wrote past its own length");
+	}
+	CHECK(GOLD_MQPRIO[0x34 + 1 + REAC_ETF_QDISC_PRIO] == 0,
+	      "the golden's map does not send REAC_ETF_QDISC_PRIO to class 0");
+
+	memset(buf, 0xa5, sizeof buf);
+	n = reac_etf_qdisc_offload_msg(buf, sizeof buf, GOLD_HW_IFINDEX,
+	                               REAC_ETF_QDISC_DELTA_NS, GOLD_HW_SEQ);
+	CHECK(n == sizeof GOLD_OFFLOAD, "the offload message is %zu bytes, tc sends %zu",
+	      n, sizeof GOLD_OFFLOAD);
+	if (n == sizeof GOLD_OFFLOAD) {
+		diff(buf, GOLD_OFFLOAD, sizeof GOLD_OFFLOAD, "RTM_NEWQDISC etf offload");
+		CHECK(buf[n] == 0xa5, "the offload builder wrote past its own length");
+	}
+
+	/* the refusals the software builders make, made here too */
+	CHECK(reac_etf_qdisc_mqprio_msg(buf, sizeof GOLD_MQPRIO - 1, GOLD_HW_IFINDEX, 1) == 0,
+	      "a short buffer took the mqprio message");
+	CHECK(reac_etf_qdisc_offload_msg(buf, sizeof GOLD_OFFLOAD - 1, GOLD_HW_IFINDEX, 0, 1) == 0,
+	      "a short buffer took the offload message");
+	CHECK(reac_etf_qdisc_mqprio_msg(buf, sizeof buf, 0, 1) == 0 &&
+	      reac_etf_qdisc_offload_msg(buf, sizeof buf, 0, 0, 1) == 0,
+	      "ifindex 0 built a hardware-form message");
+	CHECK(reac_etf_qdisc_offloaded(0) < 0, "ifindex 0 read as a device without offload, not unreadable");
+}
+
 /* ---- 5. the errno classification ------------------------------------------ *
  *
  * FOUR DIFFERENT PROBLEMS WITH FOUR DIFFERENT FIXES. EPERM is a capability, ENOENT
@@ -213,6 +302,7 @@ int main(void)
 	test_del_is_byte_exact();
 	test_delta_reaches_the_message();
 	test_short_buffer_refuses();
+	test_hardware_form_is_byte_exact();
 	test_errno_classification();
 	test_state_of_no_device();
 

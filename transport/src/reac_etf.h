@@ -247,6 +247,13 @@ size_t reac_etf_stamp(struct msghdr *msg, void *cmsgbuf, uint64_t launch_ns);
  * the journal can say WHICH refusal rather than only how many. May be NULL. */
 unsigned reac_etf_drain_errors(int fd, unsigned budget, uint8_t *first_code);
 
+/* The same drain, also handing EVERY message it reads to `on_msg` (when not NULL):
+ * the error queue is one queue, and the hardware launch's TX stamps
+ * (reac_etf_hwstamp.h) arrive on it beside the refusals, so one reader must see both
+ * or one of them is eaten by the other. */
+unsigned reac_etf_drain(int fd, unsigned budget, uint8_t *first_code,
+                        void (*on_msg)(struct msghdr *m, void *ctx), void *ctx);
+
 /* CLOCK_TAI now, in nanoseconds. 0 when the clock is unreadable — the caller checks,
  * because a launch time computed from a zero base would be 1970. */
 uint64_t reac_etf_tai_ns(void);

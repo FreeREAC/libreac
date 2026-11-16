@@ -7,6 +7,8 @@
 #include <reac/transport/reac_pacer.h>
 #include "reac_handle_priv.h"
 #include "reac_etf.h"          /* the launch-time pacing backend */
+#include "reac_etf_hwstamp.h"  /* the hardware launch's instrument of record */
+static void pacer_hw_take(struct msghdr *m, void *ctx);   /* the drain hands it each message */
 #include <reac/transport/reac_rt.h>
 #include <reac/transport/reac_carrier.h>   /* the wire before the protocol */
 #include <reac/reac_ctrl.h>     /* reac_ctrl_classify_box_frame */
@@ -1617,6 +1619,7 @@ static void *pacer_loop(void *arg)
 		deadline = mono_ns() + (uint64_t)p->period_ns;
 	}
 	uint64_t etf_drain_countdown = 0;
+	unsigned etf_hw_countdown = 0;
 	atomic_store_explicit(&p->started, 1, memory_order_release);
 
 	struct sockaddr_ll sll;
@@ -1762,14 +1765,28 @@ static void *pacer_loop(void *arg)
 			 * is to leave; the kernel holds it until then. MSG_DONTWAIT still
 			 * applies — a full qdisc must not stall a SCHED_FIFO thread. */
 			struct iovec iov = { .iov_base = frame, .iov_len = REAC_FRAME_BYTES };
-			uint8_t cbuf[REAC_ETF_CMSG_SPACE];
+			union {
+				uint8_t b[REAC_ETF_CMSG_SPACE + REAC_ETF_HW_CMSG_SPACE];
+				struct cmsghdr align;
+			} cbuf;
 			struct msghdr msg;
 			memset(&msg, 0, sizeof msg);
 			msg.msg_name    = &sll;
 			msg.msg_namelen = sizeof sll;
 			msg.msg_iov     = &iov;
 			msg.msg_iovlen  = 1;
-			reac_etf_stamp(&msg, cbuf, h->etf_grid.launch_ns);
+			reac_etf_stamp(&msg, cbuf.b, h->etf_grid.launch_ns);
+			/* THE INSTRUMENT OF RECORD, sampled: every Nth frame also asks the
+			 * NIC for its TX stamp, and its launch time is remembered for the
+			 * drain to pair it with. Off (NULL) unless armed. */
+			if (h->etf_hw && !etf_hw_countdown--) {
+				etf_hw_countdown = h->etf_hw_every - 1;
+				struct cmsghdr *c = (struct cmsghdr *)(cbuf.b + msg.msg_controllen);
+				memset(c, 0, REAC_ETF_HW_CMSG_SPACE);
+				reac_etf_hw_request(c);
+				msg.msg_controllen += REAC_ETF_HW_CMSG_SPACE;
+				reac_etf_hw_expect(h->etf_hw, h->etf_grid.launch_ns);
+			}
 			r = sendmsg(reac_handle_fd(p->handle), &msg, MSG_DONTWAIT);
 		} else {
 			r = sendto(reac_handle_fd(p->handle), frame, REAC_FRAME_BYTES, MSG_DONTWAIT,
@@ -1789,7 +1806,13 @@ static void *pacer_loop(void *arg)
 		if (etf && !etf_drain_countdown--) {
 			etf_drain_countdown = (uint64_t)p->fps / 8;
 			uint8_t code = 0;
-			unsigned bad = reac_etf_drain_errors(reac_handle_fd(p->handle), 8, &code);
+			/* Armed, the queue also carries the sampled TX stamps (up to
+			 * fps/every a second, 125 at 4000 fps every 32nd), so the budget
+			 * grows to drain them all; unarmed it is the 8 it always was. */
+			unsigned bad = h->etf_hw
+				? reac_etf_drain(reac_handle_fd(p->handle), 64, &code,
+				                 pacer_hw_take, h->etf_hw)
+				: reac_etf_drain_errors(reac_handle_fd(p->handle), 8, &code);
 			if (bad) {
 				h->etf_refused += bad;
 				if (!h->etf_first_code)
@@ -1885,6 +1908,69 @@ static void *pacer_loop(void *arg)
 }
 
 /* ---- lifecycle ---------------------------------------------------------- */
+
+
+/* ---- the hardware launch's instrument of record (reac_etf_hwstamp.h) -------- */
+
+static void pacer_hw_take(struct msghdr *m, void *ctx)
+{
+	uint64_t hw;
+	if (reac_etf_hw_stamp_of(m, &hw))
+		reac_etf_hw_take(ctx, hw);
+}
+
+int reac_pacer_launch_stamps_arm(struct reac_pacer *p, unsigned every)
+{
+	if (!p || !p->handle || every == 0)
+		return -EINVAL;
+	if (atomic_load_explicit(&p->running, memory_order_acquire))
+		return -EBUSY;   /* the slot loop reads the instrument without a lock */
+	struct reac_handle *h = p->handle;
+	if (!h->etf_on)
+		return -ENOTSUP; /* no launch time on the frame: nothing to judge against */
+	if (h->etf_hw)
+		return -EALREADY;
+	int r = reac_etf_hw_arm(reac_handle_fd(h), p->ifname);
+	if (r < 0) {
+		fprintf(stderr, "reac-pacer: launch stamps NOT armed on %s: %s (TX hardware "
+		        "timestamping needs CAP_NET_ADMIN and a NIC that stamps on transmit)\n",
+		        p->ifname, strerror(-r));
+		return r;
+	}
+	struct reac_etf_hw *hw = calloc(1, sizeof *hw);
+	if (!hw)
+		return -ENOMEM;
+	reac_etf_hw_init(hw, (uint64_t)p->period_ns);
+	h->etf_hw_every = every;
+	h->etf_hw = hw;
+	fprintf(stderr, "reac-pacer: launch stamps armed on %s: every %u%s frame asks the "
+	        "NIC for its TX hardware stamp; launch error = stamp - SCM_TXTIME\n",
+	        p->ifname, every, every == 1 ? "st" : "th");
+	return 0;
+}
+
+int reac_pacer_launch_stamps(const struct reac_pacer *p, struct reac_pacer_launch_stamps *out)
+{
+	if (!p || !out)
+		return -EINVAL;
+	memset(out, 0, sizeof *out);
+	if (!p->handle || !p->handle->etf_hw)
+		return -ENODATA;
+	struct reac_etf_hw_summary s;
+	reac_etf_hw_read(p->handle->etf_hw, &s);
+	out->every    = p->handle->etf_hw_every;
+	out->paired   = s.paired;
+	out->unpaired = s.unpaired;
+	out->outside  = s.outside;
+	out->mean_ns  = s.mean_ns;
+	out->sd_ns    = s.sd_ns;
+	out->min_ns   = s.min_ns;
+	out->max_ns   = s.max_ns;
+	out->p50_ns   = s.p50_ns;
+	out->p99_ns   = s.p99_ns;
+	out->p999_ns  = s.p999_ns;
+	return 0;
+}
 
 /* Arm the ETF backend on an already-open handle, or say exactly why not.
  *

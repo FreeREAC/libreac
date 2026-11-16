@@ -891,6 +891,40 @@ enum reac_pacer_backend reac_pacer_backend(const struct reac_pacer *p);
  * it and never frees it. */
 const char *reac_pacer_backend_refusal(const struct reac_pacer *p);
 
+/* ---- THE HARDWARE LAUNCH'S INSTRUMENT OF RECORD (docs/ETF-PACING.md) ---------
+ *
+ * Under the hardware launch (mqprio + etf offload) the NIC holds each frame until its
+ * SCM_TXTIME, so a capture on the transmitting host stamps a frame before that hold
+ * and cannot judge it. The NIC's own TX hardware stamp can: launch error = stamp -
+ * SCM_TXTIME, in the PHC's timescale (which is why the PHC must be aligned to
+ * CLOCK_TAI, by phc2sys, for a stamp to pair at all).
+ *
+ * SAMPLED, and every figure says over how many stamps: the NIC stamps a few
+ * outstanding frames at a time, so every `every`th frame asks. A stamp that pairs with
+ * no sampled launch within half a slot period is counted UNPAIRED, never dropped:
+ * many unpaired and few paired is a PHC not aligned to TAI.
+ *
+ * Opt-in, ETF backend only, armed after reac_pacer_open and before reac_pacer_start.
+ * Returns 0, or -EINVAL (every 0), -EBUSY (already started), -ENOTSUP (not on the ETF
+ * backend), -EALREADY, -ENOMEM, or what SIOCSHWTSTAMP / SO_TIMESTAMPING said (-EPERM
+ * without CAP_NET_ADMIN; -EOPNOTSUPP or -ERANGE from a NIC with no TX stamping). */
+struct reac_pacer_launch_stamps {
+	unsigned every;        /* one frame in `every` asked for a stamp */
+	uint64_t paired;       /* stamps paired with their launch time: the sample count */
+	uint64_t unpaired;     /* stamps with no launch time within half a slot period */
+	uint64_t outside;      /* paired, beyond +-10 us: in min/max, not the percentiles */
+	double   mean_ns;      /* over all paired */
+	double   sd_ns;        /* over the paired inside +-10 us, at 10 ns resolution */
+	int64_t  min_ns, max_ns;
+	int64_t  p50_ns, p99_ns, p999_ns;   /* lower edges of 10 ns bins */
+};
+
+int reac_pacer_launch_stamps_arm(struct reac_pacer *p, unsigned every);
+
+/* The figures so far, cumulative since the arm. Safe from any thread while the pacer
+ * runs. 0, or -ENODATA when the instrument was never armed. */
+int reac_pacer_launch_stamps(const struct reac_pacer *p, struct reac_pacer_launch_stamps *out);
+
 /* ---- HEALTH, published where an operator can see it (workstream CLK) --------
  *
  * THE FAULT THIS EXISTS FOR IS INVISIBLE BY CONSTRUCTION. The depth guard drops

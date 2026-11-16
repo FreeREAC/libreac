@@ -162,10 +162,25 @@ enum reac_etf_refusal reac_etf_socket_arm(int fd, int tai_offset_s,
 		return errno == EPERM ? REAC_ETF_REFUSE_TXTIME_EPERM
 		                      : REAC_ETF_REFUSE_NO_TXTIME;
 	}
+	/* THE QUEUE THE HARDWARE FORM LAUNCHES FROM. Under mqprio (reac_etf_qdisc.h) the
+	 * socket's priority picks the traffic class, and only REAC_ETF_QDISC_PRIO's class
+	 * has the offloaded etf; at priority 0 every frame would ride a queue that ignores
+	 * its launch time. Harmless under the software form (one root qdisc, no classes),
+	 * and a priority 0-6 needs no capability, so a refusal here is not expected; if
+	 * one comes it is not fatal to the software form and is left to the health line,
+	 * which reads where the frames actually went. */
+	int prio = (int)REAC_ETF_QDISC_PRIO;
+	(void)setopt(fd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof prio);
 	return REAC_ETF_OK;
 }
 
 unsigned reac_etf_drain_errors(int fd, unsigned budget, uint8_t *first_code)
+{
+	return reac_etf_drain(fd, budget, first_code, NULL, NULL);
+}
+
+unsigned reac_etf_drain(int fd, unsigned budget, uint8_t *first_code,
+                        void (*on_msg)(struct msghdr *m, void *ctx), void *ctx)
 {
 	unsigned n = 0;
 	uint8_t seen = 0;
@@ -181,6 +196,8 @@ unsigned reac_etf_drain_errors(int fd, unsigned budget, uint8_t *first_code)
 		m.msg_controllen = sizeof ctl;
 		if (recvmsg(fd, &m, MSG_ERRQUEUE | MSG_DONTWAIT) < 0)
 			break;                       /* EAGAIN: the queue is empty */
+		if (on_msg)
+			on_msg(&m, ctx);
 		for (struct cmsghdr *c = CMSG_FIRSTHDR(&m); c; c = CMSG_NXTHDR(&m, c)) {
 			/* The pacer's socket is AF_PACKET, so packet_recvmsg puts the
 			 * error at SOL_PACKET/PACKET_TX_TIMESTAMP. Anything else on this

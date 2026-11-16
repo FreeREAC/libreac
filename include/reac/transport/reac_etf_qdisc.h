@@ -53,6 +53,28 @@
  * already expired. That is the hazard the two rules above exist for. */
 #define REAC_ETF_QDISC_FLAG_SKIP_SOCK_CHECK  0x4u
 
+/* ---- the hardware-launch form (docs/ETF-PACING.md, "Hardware launch") ------ *
+ *
+ * On a NIC that can launch by itself (an i225/i226), the etf qdisc does not sit at the
+ * root: an mqprio root splits the device into two traffic classes, and etf with OFFLOAD
+ * sits on class 0's one hardware queue. The pacer's socket carries REAC_ETF_QDISC_PRIO,
+ * which the map sends to class 0, and every other priority goes to class 1 on the
+ * remaining queues. So the launch-time queue carries only stamped frames.
+ *
+ * Every number here is a PROTOCOL field, read off what iproute2 6.17.0 sends for
+ *
+ *   tc qdisc add dev X root handle 100: mqprio num_tc 2 \
+ *       map 1 1 1 0 1 1 1 1 1 1 1 1 1 1 1 1 queues 1@0 3@1 hw 0
+ *   tc qdisc add dev X parent 100:1 etf clockid CLOCK_TAI delta 300000 offload skip_sock_check
+ *
+ * (tests/test_reac_etf_qdisc.c holds both captures byte for byte). */
+#define REAC_ETF_QDISC_PRIO            3u           /* the pacer socket's SO_PRIORITY */
+#define REAC_ETF_QDISC_MQPRIO_HANDLE   0x01000000u  /* 100: */
+#define REAC_ETF_QDISC_OFFLOAD_PARENT  0x01000001u  /* 100:1, class 0's queue */
+#define REAC_ETF_QDISC_FLAG_OFFLOAD    0x2u         /* TC_ETF_OFFLOAD_ON */
+#define REAC_ETF_QDISC_MQPRIO_LEN      136u
+#define REAC_ETF_QDISC_OFFLOAD_LEN     64u
+
 /* ---- what is on the device ------------------------------------------------ *
  *
  * UNREADABLE IS NOT ABSENT. A dump that could not be made says so with its own value:
@@ -117,6 +139,22 @@ int reac_etf_qdisc_stats_read(int ifindex, struct reac_etf_qdisc_stats *out);
  * which is the ordinary case, and the add is what decides the return. */
 int reac_etf_qdisc_install(int ifindex, uint32_t delta_ns);
 
+/* The hardware-launch form on `ifindex`: whatever root is there removed, the mqprio
+ * root added, then `etf clockid CLOCK_TAI delta <delta_ns> offload skip_sock_check` on
+ * REAC_ETF_QDISC_OFFLOAD_PARENT. `delta_ns` of 0 means REAC_ETF_QDISC_DELTA_NS.
+ *
+ * All or nothing: when the etf half is refused (-EOPNOTSUPP from a device with no
+ * launch-time engine, a veth among them), the mqprio root it added is removed again,
+ * so a refused offload leaves the device at its default for the caller's software
+ * install, never half-built. Returns 0, or the -errno of the half that was refused. */
+int reac_etf_qdisc_install_offload(int ifindex, uint32_t delta_ns);
+
+/* Whether an etf qdisc on `ifindex` has OFFLOAD on, as the kernel reports its own
+ * TCA_ETF_PARMS flags: 1 one does, 0 the device was read and none does (no etf, or a
+ * software etf), -errno when the dump could not be read. UNREADABLE IS NOT 0. This is
+ * what a health line says, never what the daemon remembers having asked for. */
+int reac_etf_qdisc_offloaded(int ifindex);
+
 /* Delete `ifindex`'s ROOT qdisc, putting the device back to its default.
  *
  * NEVER CALL THIS BLIND. A delete is verified before it is issued, not after: the
@@ -144,5 +182,11 @@ const char *reac_etf_qdisc_fix(int err);
 size_t reac_etf_qdisc_add_msg(void *buf, size_t cap, int ifindex,
                               uint32_t delta_ns, uint32_t seq);
 size_t reac_etf_qdisc_del_msg(void *buf, size_t cap, int ifindex, uint32_t seq);
+
+/* The hardware-launch form's two messages: the mqprio root (REAC_ETF_QDISC_MQPRIO_LEN
+ * bytes) and the offloaded etf on its class-0 queue (REAC_ETF_QDISC_OFFLOAD_LEN). */
+size_t reac_etf_qdisc_mqprio_msg(void *buf, size_t cap, int ifindex, uint32_t seq);
+size_t reac_etf_qdisc_offload_msg(void *buf, size_t cap, int ifindex,
+                                  uint32_t delta_ns, uint32_t seq);
 
 #endif /* REAC_ETF_QDISC_H */
