@@ -68,9 +68,12 @@ static int parse_mac(const char *s, uint8_t out[6])
 	return 0;
 }
 
+/* The protocol goes to bind() (tools/conformance-packet-socket.sh): a packet socket created with
+ * one hears every interface on the host until the bind. This socket only SENDS, so it is never
+ * bound to one; the ear below binds with the protocol in its sockaddr_ll. */
 static int open_packet(const char *iface, int *ifindex)
 {
-	int fd = socket(AF_PACKET, SOCK_RAW, htons(REAC_ETHERTYPE));
+	int fd = socket(AF_PACKET, SOCK_RAW, 0);
 	if (fd < 0) {
 		fprintf(stderr, "courtship-probe: AF_PACKET: %s (need CAP_NET_RAW)\n",
 		        strerror(errno));
@@ -130,7 +133,7 @@ static int run_master(const char *iface, const uint8_t slave_mac[6], int fps, do
 
 	/* A SECOND SOCKET FOR THE EAR. Bound to 0x8819 it is handed RECEIVED frames only,
 	 * so what it counts is unambiguously the OTHER end's. */
-	int rx = socket(AF_PACKET, SOCK_RAW, htons(REAC_ETHERTYPE));
+	int rx = socket(AF_PACKET, SOCK_RAW, 0);
 	if (rx < 0) {
 		close(tx);
 		return 77;
