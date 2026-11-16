@@ -439,7 +439,7 @@ REAC_TAP_CAPTURE ?=
 
 test-transport: tests/test_frame_ring_init.c tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c tests/test_peer_binding.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c tests/test_etf_qdisc_offload.c tests/test_ifscan_physical.c tests/netns_veth.h libreac-transport.a libreac.a
 	# THE FRAME RING REFUSES A REQUEST IT CANNOT HOLD (a rounding overflow was a 0-slot ring).
-	$(CC) $(CFLAGS) $(INC) tests/test_frame_ring_init.c libreac-transport.a libreac.a -lm -lpthread -o test_frame_ring_init
+	$(CC) $(CFLAGS) -D_GNU_SOURCE $(INC) tests/test_frame_ring_init.c libreac-transport.a libreac.a -lm -lpthread -o test_frame_ring_init
 	$(RUN_TEST) ./test_frame_ring_init
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
 	$(RUN_TEST) ./test_tap $(REAC_TAP_CAPTURE)
