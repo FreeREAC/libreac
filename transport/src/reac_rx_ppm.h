@@ -8,9 +8,22 @@
 #ifndef REAC_RX_PPM_H
 #define REAC_RX_PPM_H
 
+#include <limits.h>
+#include <math.h>
+
+/* A non-finite estimate (a zero sample rate divides to NaN/inf) is "no information":
+ * 0. A finite one saturates at the int range, so a master running faster than about
+ * 3.1x cannot make the cast undefined behaviour. */
 static inline int reac_rx_ppm_to_milli(double ppm)
 {
-	return (int)(ppm * 1000.0);
+	if (!isfinite(ppm))
+		return 0;
+	double milli = ppm * 1000.0;
+	if (milli >= (double)INT_MAX)
+		return INT_MAX;
+	if (milli <= (double)INT_MIN)
+		return INT_MIN;
+	return (int)milli;
 }
 
 #endif /* REAC_RX_PPM_H */
