@@ -69,6 +69,8 @@ jobs:
             echo "fedora $(rpm -E %fedora), gcc $(gcc -dumpfullversion)"
             make test REAC_REQUIRE_FACTS_GATE=1 REAC_PROTOCOL=/reac-protocol
             make test-transport
+            # This job exists to run the namespace tests: a test that exited 77 here did not run.
+            tools/skip-gate.sh
           '
 
   # The package that carries fake_box for the programs that test against it (reac-pw): built the way the release

@@ -370,6 +370,8 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) tests/conformance-packaging.sh
 	# THE FACTS DRIFT GATE CAN FAIL WHERE IT IS REQUIRED (CI sets REAC_REQUIRE_FACTS_GATE=1).
 	$(RUN_TEST) tests/conformance-facts-gate-required.sh
+	# THE PRIVILEGED CI JOB FAILS ON A SKIP (tools/skip-gate.sh); this is the gate's own test.
+	$(RUN_TEST) tests/conformance-skip-gate.sh
 	$(RUN_TEST) tests/conformance-public-docs.sh
 	# THE PYTHON BINDING LOADS THE CURRENT ABI SONAME. This runs with only the
 	# versioned shared object and the libreac.so.<ABI> link present, so an old
