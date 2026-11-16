@@ -59,9 +59,11 @@ struct reac_frame reac_frame_inspect(const uint8_t *raw, size_t len,
  * -1 on a malformed frame, or on a mode descriptor whose channel width is odd
  * (the braid packs channel PAIRS) or whose geometry does not fit the 1440-byte
  * audio region. The shipped REAC_MODE_* descriptors are all 40 x 12.
+ * `out_cap` is how many bytes the caller owns at `out`; a NULL out, or an out_cap
+ * below n_channels * samples_per_pkt * 3, is refused with -1 as well.
  * On -1, out is untouched: every refusal comes before the first byte is written. */
 int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
-                uint8_t *out);
+                uint8_t *out, size_t out_cap);
 
 /* DIAGNOSTIC ONLY — the pre-0.5.0 reac_decode(), unchanged.
  *

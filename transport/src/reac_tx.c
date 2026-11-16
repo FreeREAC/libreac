@@ -89,7 +89,8 @@ void reac_tx_close(struct reac_tx *tx)
 int reac_tx_emit(struct reac_tx *tx, float *const *planar, int nch, int ns)
 {
 	uint8_t frame[REAC_FRAME_BYTES];
-	reac_downstream_build(frame, planar, nch, ns, tx->counter, tx->src);
+	if (reac_downstream_build(frame, sizeof frame, planar, nch, ns, tx->counter, tx->src) < 0)
+		return -1;   /* unreachable: the frame is REAC_FRAME_BYTES long; no half-built frame goes out */
 
 	struct sockaddr_ll sll;
 	memset(&sll, 0, sizeof sll);

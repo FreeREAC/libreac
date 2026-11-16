@@ -66,7 +66,7 @@ static const struct reac_disco_entry *entry(const struct reac_disco_table *t,
 static size_t desk_downstream(uint8_t *f)
 {
 	float *none[1] = { NULL };
-	return (size_t)reac_downstream_build(f, none, 0, 12, 7, DESK);
+	return (size_t)reac_downstream_build(f, 2048, none, 0, 12, 7, DESK);
 }
 
 /* The same frame with the desk's cfea master announce over its control block. */

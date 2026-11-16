@@ -143,7 +143,7 @@ facts-drift-check:
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
 endif
 
-test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
+test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_capacity.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
 	@mkdir -p $(BUILD_DIR); rm -f $(SKIP_LOG)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	$(RUN_TEST) ./test_reac
@@ -164,6 +164,9 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) ./test_upstream
 	$(CC) $(CFLAGS) $(INC) tests/test_encode.c libreac.a -lm -o test_encode
 	$(RUN_TEST) ./test_encode
+	# THE CALLER'S BUFFER CAPACITY IS CHECKED: a short out is refused, nothing written.
+	$(CC) $(CFLAGS) $(INC) tests/test_capacity.c libreac.a -lm -o test_capacity
+	$(RUN_TEST) ./test_capacity
 	$(CC) $(CFLAGS) $(INC) tests/test_decode.c libreac.a -lm -o test_decode
 	$(RUN_TEST) ./test_decode
 	$(CC) $(CFLAGS) $(INC) tests/test_ports.c libreac.a -lm -o test_ports

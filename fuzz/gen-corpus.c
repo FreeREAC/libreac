@@ -188,7 +188,7 @@ static size_t frag_frame(uint8_t *out, uint8_t seg, const uint8_t *body, unsigne
 }
 
 /* A downstream frame whose 480 samples are all distinct. */
-static size_t program_frame(uint8_t *out, uint16_t counter)
+static size_t program_frame(uint8_t *out, size_t out_cap, uint16_t counter)
 {
 	static float planes[REAC_MAX_CHANNELS][REAC_SAMPLES_PER_PKT];
 	float *planar[REAC_MAX_CHANNELS];
@@ -198,7 +198,7 @@ static size_t program_frame(uint8_t *out, uint16_t counter)
 			planes[ch][s] = (float)((ch * REAC_SAMPLES_PER_PKT + s + 1) * 1024 *
 			                        ((ch & 1) ? -1 : 1)) / 8388608.0f;
 	}
-	return (size_t)reac_downstream_build(out, planar, REAC_MAX_CHANNELS,
+	return (size_t)reac_downstream_build(out, out_cap, planar, REAC_MAX_CHANNELS,
 	                                     REAC_SAMPLES_PER_PKT, counter, DESK);
 }
 
@@ -300,7 +300,7 @@ static void gen_decode(void)
 	char name[96];
 	for (size_t m = 0; m < sizeof MODES / sizeof MODES[0]; m++) {
 		put8(&s, MODES[m].sel); put8(&s, MODES[m].nch); put8(&s, MODES[m].ns);
-		put(&s, g_frame, program_frame(g_frame, (uint16_t)(0x1000 + m)));
+		put(&s, g_frame, program_frame(g_frame, sizeof g_frame, (uint16_t)(0x1000 + m)));
 		snprintf(name, sizeof name, "downstream-program-%s", MODES[m].name);
 		emit("decode", name, &s);
 	}
@@ -309,16 +309,16 @@ static void gen_decode(void)
 	static const unsigned WIDE[] = { 39, 42 };
 	for (size_t i = 0; i < sizeof WIDE / sizeof WIDE[0]; i++) {
 		put8(&s, 3); put8(&s, WIDE[i]); put8(&s, 12);
-		put(&s, g_frame, program_frame(g_frame, 0x1006));
+		put(&s, g_frame, program_frame(g_frame, sizeof g_frame, 0x1006));
 		snprintf(name, sizeof name, "downstream-program-custom-%ux12", WIDE[i]);
 		emit("decode", name, &s);
 	}
 	/* the plain silent downstream and its FCS-residue twin */
 	put8(&s, 1); put8(&s, 0); put8(&s, 0);
-	put(&s, g_frame, (size_t)reac_downstream_build(g_frame, NULL, 0, 0, 7, DESK));
+	put(&s, g_frame, (size_t)reac_downstream_build(g_frame, sizeof g_frame, NULL, 0, 0, 7, DESK));
 	emit("decode", "downstream-silent", &s);
 	put8(&s, 1); put8(&s, 0); put8(&s, 0);
-	put(&s, g_frame, (size_t)reac_downstream_build(g_frame, NULL, 0, 0, 7, DESK));
+	put(&s, g_frame, (size_t)reac_downstream_build(g_frame, sizeof g_frame, NULL, 0, 0, 7, DESK));
 	put8(&s, 0x12); put8(&s, 0x34);
 	emit("decode", "downstream-fcs-residue", &s);
 
@@ -344,7 +344,7 @@ static void gen_decode(void)
 		{ "ethertype", 13, 0x18 }, { "end-marker", (size_t)-1, 0xeb },
 	};
 	for (size_t i = 0; i < 2; i++) {
-		size_t n = program_frame(g_frame, 3);
+		size_t n = program_frame(g_frame, sizeof g_frame, 3);
 		g_frame[BREAK[i].at == (size_t)-1 ? n - 1 : BREAK[i].at] = BREAK[i].v;
 		put8(&s, 1); put8(&s, 0); put8(&s, 0);
 		put(&s, g_frame, n);
@@ -1176,7 +1176,7 @@ static void gen_pcap(void)
 	/* a snaplen capture, a record bigger than the buffer, then a cut record */
 	put8(&s, 44);   /* cap 352: room for an 8-wide return, not for a downstream */
 	pcap_header(&s, 0);
-	size_t n = program_frame(g_frame, 1);
+	size_t n = program_frame(g_frame, sizeof g_frame, 1);
 	pcap_record(&s, 0, 1, 2, g_frame, 64, n);
 	pcap_record(&s, 0, 1, 3, g_frame, n, n);
 	n = fixture_frame(g_frame, &FIXTURES[8], 9);

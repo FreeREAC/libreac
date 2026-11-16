@@ -88,7 +88,7 @@ static void feed_frame(struct reac_rx *rx, const struct reac_mode *mode,
 		 * gate has already required it to BE 1492, so this is that frame; a
 		 * capture path's +2 was stripped at the door and never reaches a parser
 		 * (#82, and libreac's <reac/reac.h> since 0.5.0). Never emit them. */
-		ns = reac_decode(frame, len, mode, s24); /* out[(ch*ns+s)*3] */
+		ns = reac_decode(frame, len, mode, s24, sizeof s24); /* out[(ch*ns+s)*3] */
 	}
 	if (ns < 0) {
 		atomic_fetch_add_explicit(&rx->frames_bad, 1, memory_order_relaxed);

@@ -49,7 +49,7 @@ static uint8_t frame[2048];
 static size_t desk_audio(const uint8_t mac[6], uint16_t ctr)
 {
 	float *none[1] = { NULL };
-	return (size_t)reac_downstream_build(frame, none, 0, 12, ctr, mac);
+	return (size_t)reac_downstream_build(frame, sizeof frame, none, 0, 12, ctr, mac);
 }
 
 static size_t desk_announce(const uint8_t mac[6], uint16_t ctr)

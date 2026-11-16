@@ -53,7 +53,7 @@ struct reac_frame reac_frame_inspect(const uint8_t *raw, size_t len,
  * <reac/reac_braid.h>, which is the one place the byte map lives.
  */
 int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
-                uint8_t *out)
+                uint8_t *out, size_t out_cap)
 {
 	struct reac_frame f = reac_frame_inspect(raw, len, mode);
 	if (!f.valid)
@@ -70,7 +70,7 @@ int reac_decode(const uint8_t *raw, size_t len, const struct reac_mode *mode,
 	if (nch <= 0 || (nch & 1) || ns <= 0 ||
 	    (size_t)nch * (size_t)ns * REAC_RESOLUTION > (size_t)REAC_AUDIO_BYTES)
 		return -1;
-
+	if (!out || out_cap < (size_t)nch * (size_t)ns * REAC_RESOLUTION) return -1; /* capacity: checked, not trusted */
 	uint8_t *dptr = out;
 	for (int ch = 0; ch < nch; ch++) {
 		for (int s = 0; s < ns; s++) {

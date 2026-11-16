@@ -111,7 +111,7 @@ static uint64_t plain_le_corpus(void)
 						chbuf[ch][s] = rng_f(SCALES[si]);
 					planar[ch] = (ch % 5 == 4) ? NULL : chbuf[ch];
 				}
-				reac_downstream_build(frame, (float *const *)planar, nsrc, NS,
+				reac_downstream_build(frame, sizeof frame, (float *const *)planar, nsrc, NS,
 				                      CNT[ti], SRC);
 				if (reac_decode_plain_le(frame, REAC_FRAME_BYTES,
 				                         &REAC_MODE_48K, pcm) != NS) {
@@ -137,12 +137,12 @@ int main(void)
 				chbuf[ch][s] = (float)target_code(ch, s) / S24_SCALE;
 			planar[ch] = chbuf[ch];
 		}
-		CHK(reac_downstream_build(frame, (float *const *)planar, NCH, NS,
+		CHK(reac_downstream_build(frame, sizeof frame, (float *const *)planar, NCH, NS,
 		                          0x1234, SRC) == REAC_FRAME_BYTES);
 
 		for (int m = 0; m < 3; m++) {
 			memset(pcm, 0xA5, sizeof pcm);
-			CHK(reac_decode(frame, REAC_FRAME_BYTES, MODES[m], pcm) == NS);
+			CHK(reac_decode(frame, REAC_FRAME_BYTES, MODES[m], pcm, sizeof pcm) == NS);
 			int exact = 0;
 			for (int ch = 0; ch < NCH; ch++)
 				for (int s = 0; s < NS; s++)
@@ -166,8 +166,8 @@ int main(void)
 		for (int ch = 0; ch < NCH; ch++)
 			planar[ch] = (ch == hot) ? sig : NULL;
 
-		reac_downstream_build(frame, (float *const *)planar, NCH, NS, 0, SRC);
-		CHK(reac_decode(frame, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == NS);
+		reac_downstream_build(frame, sizeof frame, (float *const *)planar, NCH, NS, 0, SRC);
+		CHK(reac_decode(frame, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm, sizeof pcm) == NS);
 		for (int ch = 0; ch < NCH; ch++)
 			for (int s = 0; s < NS; s++)
 				CHK(s24_at(pcm, ch, s) == (ch == hot ? code : 0));
@@ -183,8 +183,8 @@ int main(void)
 				chbuf[ch][s] = (float)target_code(ch, s) / S24_SCALE;
 			planar[ch] = chbuf[ch];
 		}
-		reac_downstream_build(frame, (float *const *)planar, NCH, NS, 7, SRC);
-		CHK(reac_decode(frame, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == NS);
+		reac_downstream_build(frame, sizeof frame, (float *const *)planar, NCH, NS, 7, SRC);
+		CHK(reac_decode(frame, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm, sizeof pcm) == NS);
 		CHK(reac_decode_plain_le(frame, REAC_FRAME_BYTES, &REAC_MODE_48K, plain) == NS);
 		for (int ch = 0; ch < NCH; ch++)
 			for (int s = 0; s < NS; s++)
@@ -229,26 +229,26 @@ int main(void)
 		struct reac_mode deep = { 48000, NCH, 13 };   /* 40*13*3 > 1440 B */
 		struct reac_mode empty = { 48000, 0, NS };
 
-		reac_downstream_build(bad, NULL, 0, NS, 0, SRC);
-		CHK(reac_decode(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == NS);
+		reac_downstream_build(bad, sizeof bad, NULL, 0, NS, 0, SRC);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm, sizeof pcm) == NS);
 
-		CHK(reac_decode(bad, REAC_FRAME_BYTES - 1, &REAC_MODE_48K, pcm) == -1);
-		CHK(reac_decode(bad, REAC_FRAME_BYTES_OHRCA, &REAC_MODE_48K, pcm) == -1);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES - 1, &REAC_MODE_48K, pcm, sizeof pcm) == -1);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES_OHRCA, &REAC_MODE_48K, pcm, sizeof pcm) == -1);
 		bad[12] = 0x08;                               /* wrong ethertype */
-		CHK(reac_decode(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == -1);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm, sizeof pcm) == -1);
 		CHK(reac_decode_plain_le(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == -1);
 		bad[12] = 0x88;
 		bad[REAC_FRAME_BYTES - 1] = 0x00;             /* broken end marker */
-		CHK(reac_decode(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == -1);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm, sizeof pcm) == -1);
 		bad[REAC_FRAME_BYTES - 1] = REAC_END_MARKER_1;
 
-		CHK(reac_decode(bad, REAC_FRAME_BYTES, &odd, pcm) == -1);
-		CHK(reac_decode(bad, REAC_FRAME_BYTES, &wide, pcm) == -1);
-		CHK(reac_decode(bad, REAC_FRAME_BYTES, &deep, pcm) == -1);
-		CHK(reac_decode(bad, REAC_FRAME_BYTES, &empty, pcm) == -1);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES, &odd, pcm, sizeof pcm) == -1);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES, &wide, pcm, sizeof pcm) == -1);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES, &deep, pcm, sizeof pcm) == -1);
+		CHK(reac_decode(bad, REAC_FRAME_BYTES, &empty, pcm, sizeof pcm) == -1);
 
 		/* reac_frame_inspect is unchanged: it reads the counter of a good frame */
-		reac_downstream_build(bad, NULL, 0, NS, 0xBEEF, SRC);
+		reac_downstream_build(bad, sizeof bad, NULL, 0, NS, 0xBEEF, SRC);
 		struct reac_frame f = reac_frame_inspect(bad, REAC_FRAME_BYTES, &REAC_MODE_48K);
 		CHK(f.valid == 1 && f.counter == 0xBEEF);
 	}
