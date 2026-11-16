@@ -437,7 +437,11 @@ transport: libreac-transport.a
 # 802.1Q tag). Absent, the test prints CORPUS ARM NOT RUN rather than passing quietly.
 REAC_TAP_CAPTURE ?=
 
-test-transport: tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c tests/test_peer_binding.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c tests/test_etf_qdisc_offload.c tests/test_ifscan_physical.c tests/netns_veth.h libreac-transport.a libreac.a
+test-transport: tests/test_ring_door.c tests/test_tap.c tests/test_rx_twin.c tests/test_rx_spoof.c tests/test_peer_binding.c tests/test_topo_hears_vlans.c tests/test_etf_qdisc_stats.c tests/test_etf_qdisc_offload.c tests/test_ifscan_physical.c tests/netns_veth.h libreac-transport.a libreac.a
+	# THE RING'S DOOR: a NULL planar / dst / plane is refused and counted, never dereferenced
+	# on the RT thread; the SPSC discipline is checked (see tests/test_ring_door.c).
+	$(CC) $(CFLAGS) -D_GNU_SOURCE -DREAC_RING_CHECK_SPSC $(INC) tests/test_ring_door.c transport/src/reac_ring.c -lpthread -o test_ring_door
+	$(RUN_TEST) ./test_ring_door
 	$(CC) $(CFLAGS) -Itests $(INC) tests/test_tap.c libreac-transport.a libreac.a -lm -lpthread -o test_tap
 	$(RUN_TEST) ./test_tap $(REAC_TAP_CAPTURE)
 	$(RUN_TEST) tools/conformance-tap-silent.sh
