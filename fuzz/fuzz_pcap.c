@@ -72,11 +72,10 @@ FILE *__wrap_fopen(const char *path, const char *mode)
 	return __real_fopen(path, mode);
 }
 
-static uint32_t rd32(const uint8_t *p, int swap)
+static uint32_t rd32(const uint8_t *p)
 {
-	uint32_t v = (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 |
-	             (uint32_t)p[3] << 24;
-	return swap ? __builtin_bswap32(v) : v;
+	return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 |
+	       (uint32_t)p[3] << 24;
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
@@ -94,11 +93,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	memset(&ps, 0xa5, sizeof ps);
 	int r = pcap_source_open(&ps, FUZZ_PCAP_PATH);
 	uint32_t magic = g_file_len >= 4 ? rd32(file, 0) : 0;
-	int good = g_file_len >= 24 && (magic == 0xA1B2C3D4u || magic == 0xD4C3B2A1u);
-	/* Open accepts a file of at least 24 bytes with one of the two classic magics,
-	 * and refuses all other files.
-	 * mutant: src/pcap_source.c:39 `magic == PCAP_MAGIC_SWAP` -> `magic == PCAP_MAGIC_SWAP + 1`
-	 * input: fixtures-swapped
+	int good = g_file_len >= 24 && magic == 0xA1B2C3D4u;
+	/* Open accepts a file of at least 24 bytes with the little-endian classic magic,
+	 * and refuses all other files, a byte-swapped pcap among them.
 	 * mutant: src/pcap_source.c:37 `magic == PCAP_MAGIC` -> `magic == PCAP_MAGIC || magic == 0x0A0D0D0Au`
 	 * input: pcapng-refused */
 	if (r != (good ? 0 : -1))
@@ -114,12 +111,6 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		free(file);
 		return 0;
 	}
-	/* The reader swaps the record headers exactly when the magic is the swapped one.
-	 * mutant: src/pcap_source.c:40 `ps->swapped = 1;` -> `ps->swapped = 0;`
-	 * input: fixtures-swapped */
-	if (ps.swapped != (magic == 0xD4C3B2A1u))
-		abort();
-
 	uint8_t *buf = malloc(cap ? cap : 1);
 	/* not a property: malloc failed, so there is no record buffer to test. */
 	if (!buf)
@@ -158,7 +149,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			 * input: skipped-then-small */
 			if (at + 16 > g_file_len)
 				abort();
-			incl = rd32(file + at + 8, ps.swapped);
+			incl = rd32(file + at + 8);
 			if (incl != 0 && incl <= cap)
 				break;
 			if (incl > cap)
@@ -174,7 +165,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		/* The source keeps the record header's original length.
 		 * mutant: src/pcap_source.c:68 `ph + 12` -> `ph + 8`
 		 * input: snaplen-oversized-truncated */
-		if (ps.last_orig_len != rd32(file + at + 12, ps.swapped))
+		if (ps.last_orig_len != rd32(file + at + 12))
 			abort();
 		int tagged = incl >= 18 && rec[12] == 0x81 && rec[13] == 0x00;
 		/* The source says tagged exactly when the record carried an 802.1Q tag.
@@ -211,11 +202,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		/* The timestamp of each record handed back is the record header's seconds
 		 * times 10^6 plus its microseconds.
 		 * mutant: src/pcap_source.c:105 `+ usec;` -> `+ usec + (ftell(ps->f) > 4096);`
-		 * input: fixtures
-		 * mutant: src/pcap_source.c:61 `rd_u32(ph + 4, ps->swapped)` -> `rd_u32(ph + 4, 0)`
-		 * input: fixtures-swapped */
-		if (ts != (uint64_t)rd32(file + at, ps.swapped) * 1000000ull +
-		              rd32(file + at + 4, ps.swapped))
+		 * input: fixtures */
+		if (ts != (uint64_t)rd32(file + at) * 1000000ull +
+		              rd32(file + at + 4))
 			abort();
 		ts = ~(uint64_t)0;
 		at += 16 + incl;
@@ -239,7 +228,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				want = -1;
 				break;
 			}
-			uint32_t len = rd32(file + e + 8, ps.swapped);
+			uint32_t len = rd32(file + e + 8);
 			if (len == 0) {
 				e += 16;
 				continue;
@@ -306,9 +295,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 	 * input: fixtures */
 	if (ps.f != NULL)
 		abort();
-	/* A closed reader opens again.
-	 * mutant: src/pcap_source.c:27 `!ps->f` -> `!ps->f || ps->swapped == 1`
-	 * input: fixtures-swapped */
+	/* A closed reader opens again. */
 	if (pcap_source_open(&ps, FUZZ_PCAP_PATH) != 0)
 		abort();
 	/* The reopened reader, asked for no timestamp, gives the same first answer as

@@ -29,8 +29,6 @@
  *     works);
  *   - every decoded sample, downstream and upstream, is the three bytes the braid
  *     map of reac_braid.h puts it in, the map written out in the harness;
- *   - reac_decode_plain_le() is a straight copy: each sample (ch, s) is the 3
- *     bytes at (s * n_channels + ch) * 3;
  *   - reac_upstream_channels() is the frame's geometry (52 + 36 per channel,
  *     worked out in the harness) restricted to box widths, the even widths
  *     REAC_BOX_MIN_CHANNELS..REAC_BOX_MAX_CHANNELS;
@@ -200,38 +198,6 @@ static void fuzz_downstream(const uint8_t *frame, size_t len, const struct reac_
 	if (r > 0)
 		check_braid(frame + REAC_L2_HEADER_LEN, out, nch, ns);
 
-	memset(out, 0xa5, olen);
-	r = reac_decode_plain_le(frame, len, mode, out);
-	/* The plain-LE diagnostic pairs nothing, so only the size bound applies.
-	 * mutant: src/reac_decode.c:123 `return ns;` -> `return ns - 1;`
-	 * input: downstream-program-48k
-	 * mutant: src/reac_decode.c:111 `(size_t)nch * (size_t)ns * REAC_RESOLUTION > (size_t)REAC_AUDIO_BYTES` -> `0`
-	 * input: downstream-program-custom-41x12 */
-	if (r != ((wellformed && fits) ? ns : -1))
-		abort();
-	/* A refused reac_decode_plain_le() writes nothing into the output.
-	 * mutant: src/reac_decode.c:112 `return -1;` -> `return (out[0] = 1, out[1] = 1, out[2] = 1), -1;`
-	 * input: downstream-program-custom-41x12
-	 * mutant: src/reac_decode.c:101 `return -1;` -> `return (out[0] = 1, out[1] = 1, out[2] = 1), -1;`
-	 * input: downstream-bad-ethertype */
-	if (r < 0 && changed(out, olen))
-		abort();
-	if (r > 0) {
-		const uint8_t *audio = frame + REAC_L2_HEADER_LEN;
-		int bad = 0;
-		for (int ch = 0; ch < nch; ch++)
-			for (int s = 0; s < ns; s++)
-				bad |= memcmp(out + ((size_t)ch * (size_t)ns + (size_t)s) * REAC_RESOLUTION,
-				              audio + ((size_t)s * (size_t)nch + (size_t)ch) * REAC_RESOLUTION,
-				              REAC_RESOLUTION) != 0;
-		/* Its meaning, as the header defines it: (ch, s) is the straight copy at
-		 * (s * n_channels + ch) * 3. Check each sample. r > 0 gives
-		 * nch * ns <= 480.
-		 * mutant: src/reac_decode.c:117 `(size_t)(s * nch + ch)` -> `(size_t)(ch * ns + s)`
-		 * input: downstream-program-48k */
-		if (bad)
-			abort();
-	}
 	free(out);
 }
 

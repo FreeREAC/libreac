@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 
 /* Unit test: the DOWNSTREAM decode — reac_decode (braid, the default since
- * 0.5.0) and reac_decode_plain_le (the pre-0.5.0 body, diagnostic).
+ * 0.5.0).
  *
  * The defect this pins (libreac#13): reac_downstream_build() wrote the braid,
  * reac_decode() read plain LE, and on a 1492 B frame the library had just built
@@ -20,14 +20,7 @@
  *    every other channel must decode to exact digital silence. A stride or
  *    pair-parity error delivers the value to a neighbour and this catches it
  *    even when the values are not all distinct.
- * 3. THE TWO PATHS ARE NOT THE SAME FUNCTION. On a braided frame the plain-LE
- *    read must DIFFER from the braid read on most samples — otherwise someone
- *    has quietly "fixed" the diagnostic into a second copy of the braid.
- * 4. PLAIN-LE, UNCHANGED MEANING. Checked twice over: definitionally (sample
- *    (ch,s) is the straight copy at (s*nch+ch)*3, which is exactly what the
- *    0.4.0 body did) and as a digest over a deterministic corpus, so a future
- *    edit that changes what it means is a number that moves.
- * 5. VALIDATION. Malformed frames reject, and the braid geometry guard rejects
+ * 3. VALIDATION. Malformed frames reject, and the braid geometry guard rejects
  *    a descriptor the braid has no byte map for (odd width) or that does not
  *    fit the 1440 B audio region.
  */
@@ -75,55 +68,6 @@ static int32_t s24_at(const uint8_t *p, int ch, int s)
 /* target code for (ch,s): distinct across all 480 positions, exactly on a
  * 24-bit code, and far enough from zero that silence can never look like it */
 static int32_t target_code(int ch, int s) { return (int32_t)((ch * NS + s + 1) * 1024); }
-
-/* ---- 4. the plain-LE corpus digest ---- */
-
-/* Digest of the corpus below decoded by the 0.4.0 reac_decode() — computed by
- * BUILDING THE PRE-CHANGE CODE and running it, so it is a record of what the
- * plain-LE path used to return, not a restatement of what it returns now.
- * A mismatch means the diagnostic changed meaning; never "update the
- * constant". */
-#define PLAIN_LE_GOLDEN 0x66ab6e370c76e5bdULL
-
-#define FNV_INIT  0xcbf29ce484222325ULL
-#define FNV_PRIME 0x100000001b3ULL
-
-static uint32_t rng_state;
-static void rng_seed(uint32_t s) { rng_state = s ? s : 0x2b3c4d5eu; }
-static uint32_t rng_u32(void) { rng_state = rng_state * 1664525u + 1013904223u; return rng_state; }
-static float rng_f(float scale) { return scale * ((float)(int32_t)rng_u32() / 2147483648.0f); }
-
-static uint64_t plain_le_corpus(void)
-{
-	static const float SCALES[4] = { 0.25f, 1.0f, 4.0f, 0.0000001f };
-	static const uint16_t CNT[4] = { 0x0000, 0x1234, 0xfffe, 0xffff };
-	static const int NSRC[4] = { 1, 8, 32, NCH };
-	uint64_t fnv = FNV_INIT;
-	uint32_t seed = 1;
-
-	for (int si = 0; si < 4; si++)
-		for (int ci = 0; ci < 4; ci++) {
-			int nsrc = NSRC[ci];
-			for (int ti = 0; ti < 4; ti++) {
-				rng_seed(seed++);
-				for (int ch = 0; ch < NCH; ch++) {
-					for (int s = 0; s < NS; s++)
-						chbuf[ch][s] = rng_f(SCALES[si]);
-					planar[ch] = (ch % 5 == 4) ? NULL : chbuf[ch];
-				}
-				reac_downstream_build(frame, (float *const *)planar, nsrc, NS,
-				                      CNT[ti], SRC);
-				if (reac_decode_plain_le(frame, REAC_FRAME_BYTES,
-				                         &REAC_MODE_48K, pcm) != NS) {
-					fails++;
-					return 0;
-				}
-				for (size_t i = 0; i < sizeof pcm; i++)
-					fnv = (fnv ^ pcm[i]) * FNV_PRIME;
-			}
-		}
-	return fnv;
-}
 
 int main(void)
 {
@@ -173,55 +117,7 @@ int main(void)
 				CHK(s24_at(pcm, ch, s) == (ch == hot ? code : 0));
 	}
 
-	/* ---- 3. the diagnostic is still a different function ---- */
-	{
-		static uint8_t plain[sizeof pcm];
-		int differ = 0;
-
-		for (int ch = 0; ch < NCH; ch++) {
-			for (int s = 0; s < NS; s++)
-				chbuf[ch][s] = (float)target_code(ch, s) / S24_SCALE;
-			planar[ch] = chbuf[ch];
-		}
-		reac_downstream_build(frame, (float *const *)planar, NCH, NS, 7, SRC);
-		CHK(reac_decode(frame, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == NS);
-		CHK(reac_decode_plain_le(frame, REAC_FRAME_BYTES, &REAC_MODE_48K, plain) == NS);
-		for (int ch = 0; ch < NCH; ch++)
-			for (int s = 0; s < NS; s++)
-				if (s24_at(pcm, ch, s) != s24_at(plain, ch, s))
-					differ++;
-		/* the braid is a real permutation-with-lane-shift, so the overwhelming
-		 * majority of positions must disagree; equality everywhere would mean
-		 * the diagnostic had been turned into a second copy of the braid */
-		CHK(differ > NCH * NS * 3 / 4);
-	}
-
-	/* ---- 4. plain-LE still means what it meant: definition, then digest ---- */
-	{
-		static uint8_t plain[sizeof pcm];
-		const uint8_t *audio = frame + REAC_L2_HEADER_LEN;
-
-		/* frame here is the braided one built just above — the definition holds
-		 * whatever the region contains, which is the point */
-		CHK(reac_decode_plain_le(frame, REAC_FRAME_BYTES, &REAC_MODE_48K, plain) == NS);
-		for (int ch = 0; ch < NCH; ch++)
-			for (int s = 0; s < NS; s++) {
-				const uint8_t *want = audio + (size_t)(s * NCH + ch) * REAC_RESOLUTION;
-				const uint8_t *got = plain + ((size_t)ch * NS + s) * 3;
-				CHK(memcmp(want, got, 3) == 0);
-			}
-
-		uint64_t got = plain_le_corpus();
-		if (got != PLAIN_LE_GOLDEN) {
-			fails++;
-			fprintf(stderr, "FAIL plain-LE corpus digest: got 0x%016llx want 0x%016llx\n"
-			                "  the diagnostic path changed meaning — it must stay the\n"
-			                "  pre-0.5.0 reac_decode() body, byte for byte\n",
-			        (unsigned long long)got, (unsigned long long)PLAIN_LE_GOLDEN);
-		}
-	}
-
-	/* ---- 5. validation + the braid geometry guard ---- */
+	/* ---- 3. validation + the braid geometry guard ---- */
 	{
 		static uint8_t bad[REAC_FRAME_BYTES];
 		struct reac_mode odd = { 48000, 39, NS };     /* the braid packs PAIRS */
@@ -236,7 +132,6 @@ int main(void)
 		CHK(reac_decode(bad, REAC_FRAME_BYTES_OHRCA, &REAC_MODE_48K, pcm) == -1);
 		bad[12] = 0x08;                               /* wrong ethertype */
 		CHK(reac_decode(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == -1);
-		CHK(reac_decode_plain_le(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == -1);
 		bad[12] = 0x88;
 		bad[REAC_FRAME_BYTES - 1] = 0x00;             /* broken end marker */
 		CHK(reac_decode(bad, REAC_FRAME_BYTES, &REAC_MODE_48K, pcm) == -1);
@@ -258,6 +153,6 @@ int main(void)
 		return 1;
 	}
 	printf("test_decode: OK — downstream round trip exact at 44k1/48k/96k, "
-	       "no cross-wire over 40 hot-channel cases, plain-LE diagnostic pinned\n");
+	       "no cross-wire over 40 hot-channel cases\n");
 	return 0;
 }

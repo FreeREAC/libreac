@@ -32,8 +32,7 @@
  * vs M-200/M-300 braid" split that went with it, are refuted — its "coherence
  * 0.999" was a mid-byte lane shift amplifying quiet braided audio 256x into a
  * coherent-looking image. Since 0.5.0 both directions decode this braid by
- * default (reac_decode / reac_upstream_decode) and plain LE survives only as
- * the explicitly named diagnostic reac_decode_plain_le() (see reac_decode.h).
+ * default (reac_decode / reac_upstream_decode); the plain-LE decoder is gone.
  * Do not add a second copy of this byte map to a consumer; reac-pw and reac-aes67
  * call this oracle (fuzz_decode states it again, as the check it is held to).
  */

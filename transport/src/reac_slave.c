@@ -92,11 +92,14 @@ void reac_slave_fsm_init(struct reac_slave *s, const struct reac_slave_cfg *cfg)
 	 * slot offset the console addresses head-amp by: a 16-input S-1608 sits at 0x20,
 	 * every other width (S-0808/S-4000S) at 0x00 (m200-headamp-re/DECODE.md). */
 	/* THE HEAD-AMP BASE IS THE BOX'S OWN CHASSIS STRAP, and a declared row states it
-	 * (reac_ports.h: the per-width table it replaced agreed with the wire only because
-	 * width and strap are collinear across the three chassis we own). With no row the
-	 * legacy width rule stands, unchanged, for the callers that have no row. */
-	s->ch_base = s->model ? (int)s->model->headamp_strap * 0x10
-	                      : ((s->box_channels == 16) ? 0x20 : 0x00);
+	 * (reac_ports.h). A slave with no row of its own takes the strap of the captured row
+	 * whose width it has, and 0 when no captured row has it. */
+	if (s->model) {
+		s->ch_base = (int)s->model->headamp_strap * 0x10;
+	} else {
+		const struct reac_box_model *r = reac_box_catalogue_by_width(s->box_channels);
+		s->ch_base = r->in_ch == s->box_channels ? (int)r->headamp_strap * 0x10 : 0;
+	}
 	s->box_master = cfg && cfg->box_master;
 	s->bm_frame_box = cfg && cfg->box_master_frame_box;
 	s->bm_burst_chanmap = cfg && cfg->box_master_burst_chanmap;
@@ -259,8 +262,8 @@ static size_t slave_build_block(struct reac_slave *s, uint8_t *frame,
 		                          counter, planar, ns);
 	switch (b) {
 	case REAC_BOX_BLOCK_CONFIG:
-		return reac_ctrl_build_config_announce(frame, s->fsm.master_mac, s->src,
-		                                       counter, s->box_channels);
+		return reac_ctrl_build_as(frame, reac_box_catalogue_by_width(s->box_channels),
+		                          b, s->fsm.master_mac, s->src, counter, NULL, 0);
 	case REAC_BOX_BLOCK_CC0014:
 		return reac_ctrl_build_coldconnect(frame, s->fsm.master_mac, s->src,
 		                                   counter, s->box_channels, planar, ns);
@@ -750,9 +753,10 @@ static void emit_decision(struct reac_slave *s, const struct reac_slave_decision
 				s->bm_burst--;
 			} else if (d->with_join) {
 				if (s->bm_seq == 0)
-					len = reac_ctrl_build_config_announce(frame,
-					          s->fsm.master_mac, s->src, counter,
-					          s->box_channels);
+					len = reac_ctrl_build_as(frame,
+					          reac_box_catalogue_by_width(s->box_channels),
+					          REAC_BOX_BLOCK_CONFIG, s->fsm.master_mac,
+					          s->src, counter, NULL, 0);
 				else if (s->bm_seq == 2)
 					s->bm_burst = 3;   /* fires on this frame and the next two */
 				if (s->bm_burst == 3) {

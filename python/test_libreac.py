@@ -148,7 +148,6 @@ def test_a_non_reac_buffer_is_rejected():
 
 CTRL_BUILDERS = [
     ("box_hb", lambda c, n: libreac.build_box_hb(MASTER, BOX, c, n)),
-    ("config_announce", lambda c, n: libreac.build_config_announce(MASTER, BOX, c, n)),
 ]
 
 WIDTHS = [8, 16, 32]

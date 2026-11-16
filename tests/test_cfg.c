@@ -48,8 +48,8 @@ int main(void)
 	CHK(strcmp(REAC_CFG_RATE_REFUSED_PROP, "reac.cfg.rate.refused") == 0);
 	CHK(strcmp(REAC_CFG_ROLE_PROP, "reac.cfg.role") == 0);
 	CHK(strcmp(REAC_ROLE_PROP, "reac.role") == 0);
-	CHK(strcmp(REAC_ROLE_STATE_APPLIED, "applied") == 0);
-	CHK(strcmp(REAC_ROLE_STATE_REESTABLISH_PENDING, "role_reestablish_pending") == 0);
+	CHK(strcmp(REAC_CFG_ROLE_STATE_APPLIED, "applied") == 0);
+	CHK(strcmp(REAC_CFG_ROLE_STATE_PENDING, "role_reestablish_pending") == 0);
 	/* the tap's own role answer: reac-pw publishes it, so the one declaration names it */
 	CHK(strcmp(REAC_CFG_ROLE_STATE_TAP, "role_tap") == 0);
 

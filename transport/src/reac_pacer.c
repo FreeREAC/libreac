@@ -1300,7 +1300,7 @@ int reac_pacer_apply_rate(struct reac_pacer *p, int hz)
 	/* cfea[19] = the PACE CODE (reac_pace_code above): derived from the pace so a rate
 	 * change re-stamps it and the box re-paces. Tool+rig verified at 48/96 k; 44.1 k
 	 * measured 2026-09-11. */
-	saved_cfg.console_field = reac_pace_code(fps);
+	saved_cfg.pace_code = reac_pace_code(fps);
 	const struct reac_console_cfg *ccfg = saved_cfg.out_channels ? &saved_cfg : NULL;
 	/* Captured BEFORE reac_master_init overwrites p->master: note_transition and
 	 * sync_published_box normally read the OLD state straight off p->master, but
@@ -2123,7 +2123,7 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 	 * 44.1 kHz measured 2026-09-11. */
 	struct reac_console_cfg ccfg_buf =
 		cfg->console.out_channels ? cfg->console : REAC_CONSOLE_CFG_IDLE;
-	ccfg_buf.console_field = reac_pace_code(cfg->fps);
+	ccfg_buf.pace_code = reac_pace_code(cfg->fps);
 	reac_master_init(&p->master, p->src, &ccfg_buf, cfg->fps);
 
 	/* MASTER head-amp DMX send table. Off unless the caller passes at
@@ -2199,15 +2199,13 @@ int reac_pacer_open(struct reac_pacer *p, const struct reac_pacer_cfg *cfg)
 			                "box's unicast to our spoofed MAC\n");
 	}
 
-	/* Best-effort (Linux >=4.20): don't echo our own 8000 fps broadcast into
-	 * our RX queue. The classifier's src==ours software filter stays mandatory
-	 * either way (hub/loopback echoes, older kernels). */
-#ifdef PACKET_IGNORE_OUTGOING
+	/* Best-effort: don't echo our own 8000 fps broadcast into our RX queue. The
+	 * classifier's src==ours software filter stays mandatory either way (hub and
+	 * loopback echoes). */
 	{
 		int one = 1;
 		setsockopt(fd, SOL_PACKET, PACKET_IGNORE_OUTGOING, &one, sizeof one);
 	}
-#endif
 
 	p->handle = reac_handle_adopt(fd);
 	if (!p->handle) {
