@@ -37,6 +37,15 @@ struct reac_ring {
 	_Atomic uint32_t tail;   /* consumer reads here (next valid slot)  */
 	_Atomic uint64_t underruns; /* RT-side: quanta that had to be silenced */
 	_Atomic uint64_t overruns;  /* feeder-side: frames dropped (ring full)  */
+	_Atomic uint64_t refused;   /* either side: calls refused at the door
+	                             * (NULL planar / dst / plane); readable off the RT thread */
+	_Atomic uint64_t spsc_violations; /* two writers or two readers caught inside the
+	                             * ring at once, or (REAC_RING_CHECK_SPSC builds) a
+	                             * second thread on a side; 0 in a correct program */
+	_Atomic uint32_t writer_busy;     /* 1 while a write is inside the ring */
+	_Atomic uint32_t reader_busy;     /* 1 while a read/trim is inside the ring */
+	_Atomic uint64_t writer_tid;      /* REAC_RING_CHECK_SPSC builds only: first writer */
+	_Atomic uint64_t reader_tid;      /* REAC_RING_CHECK_SPSC builds only: first reader */
 };
 
 /* Allocate a ring holding `capacity_frames` per channel (rounded up to a power
