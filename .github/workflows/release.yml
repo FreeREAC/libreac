@@ -20,6 +20,19 @@ permissions:
   actions: read
 
 jobs:
+  # The Debian library packages are named after the soname, which is the release version, so the
+  # names the deb job publishes are read from the header and cannot lag a release.
+  names:
+    runs-on: ubuntu-latest
+    outputs:
+      deb: ${{ steps.n.outputs.deb }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: n
+        run: |
+          v=$(awk '/^#define LIBREAC_VERSION_(MAJOR|MINOR|PATCH)/ { v = v (v == "" ? "" : ".") $3 } END { print v }' include/reac/reac.h)
+          echo "deb=libreac$v libreac-dev libreac-transport$v libreac-transport-dev" >> "$GITHUB_OUTPUT"
+
   rpm:
     uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@openmixer-v1
     with:
@@ -39,11 +52,11 @@ jobs:
   # after the RPMs: a release is one wave. A red or skipped RPM job skips this one, so no DEB is published after a
   # failed RPM.
   deb:
-    needs: rpm
+    needs: [rpm, names]
     uses: Open-Mixer/.github/.github/workflows/build-deb.yml@openmixer-v1
     with:
       package-name: libreac
-      binary-names: libreac7 libreac-dev libreac-transport7 libreac-transport-dev
+      binary-names: ${{ needs.names.outputs.deb }}
       publish: ${{ github.ref_type == 'tag' }}
       dependencies: ''
       requires: ''

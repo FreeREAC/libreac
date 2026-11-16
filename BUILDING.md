@@ -54,17 +54,18 @@ One source builds two libraries, `libreac` and `libreac-transport`, as four bina
 
 | | Fedora | Debian |
 | --- | --- | --- |
-| libreac | `libreac`, `libreac-devel` | `libreac7`, `libreac-dev` |
-| libreac-transport | `libreac-transport`, `libreac-transport-devel` | `libreac-transport7`, `libreac-transport-dev` |
+| libreac | `libreac`, `libreac-devel` | `libreac1.12.0`, `libreac-dev` |
+| libreac-transport | `libreac-transport`, `libreac-transport-devel` | `libreac-transport1.12.0`, `libreac-transport-dev` |
 
 `packaging/libreac.spec` and `debian/` describe them; both build the shared objects from every
 `src/*.c` and `transport/src/*.c` and run `make test`. The pkg-config files are the templates
 `packaging/*.pc.in`. `openwrt/libreac/Makefile` is the OpenWrt package.
 
-The version and libreac's soname are defined once, in `include/reac/reac.h`;
-`tests/conformance-packaging.sh` (part of `make test`) refuses a spec or `debian/`
-that disagrees. libreac-transport's soname is its own, in `%global tabi` of the spec and `TABI` of
-`debian/rules`, and names the `libreac-transport7` package.
+The version is defined once, in `include/reac/reac.h`, and it is the soname of both libraries
+(`libreac.so.<version>`, `libreac-transport.so.<version>`): every release has its own, and the
+packages named after it (`libreac<version>`, `libreac-transport<version>`, with their `.install`
+files under `debian/`) tie a program to the libreac it was built against.
+`tests/conformance-packaging.sh` (part of `make test`) refuses a spec or `debian/` that disagrees.
 
 ### Releasing
 

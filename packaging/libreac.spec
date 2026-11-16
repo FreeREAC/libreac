@@ -2,17 +2,12 @@
 # libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.11.0
-# THE SONAME'S MAJOR, and it is not decoration. rpm generates this package's
-# `provides` (libreac.so.N()(64bit)) and every consumer's runtime `requires`
-# from it, so bumping it is what makes a mismatched pair refuse to install
-# instead of failing at exec time with `undefined symbol`. It tracks
-# LIBREAC_ABI in include/reac/reac.h -- tests/conformance-packaging.sh refuses a copy
-# that disagrees with the header, in `make test`, before a package is built.
-%global abi 7
-# libreac-transport's own soname major. It moves independently of libreac's: the two libraries
-# are built from this one source and share a version, not an ABI.
-%global tabi 7
+Version:        1.12.0
+# THE SONAME IS THE VERSION (libreac.so.%{version}, libreac-transport.so.%{version}). rpm
+# generates this package's `provides` and every consumer's runtime `requires` from it, so each
+# release has its own and a program built against one libreac cannot be installed beside
+# another. No number to bump by hand: tests/conformance-packaging.sh refuses a copy of the
+# soname that is not the version, in `make test`, before a package is built.
 Release:        1%{?dist}
 Summary:        Roland REAC wire-format core (validate, counter, 24-bit decode/encode, capture)
 
@@ -34,7 +29,7 @@ and outputs, its model, its firmware.
 libreac is the REAC protocol library: it recognises a REAC frame (EtherType 0x8819),
 reads its sequence counter, detects the sample rate, and decodes and encodes the
 24-bit braided audio region in both directions (the 40-channel master broadcast
-and the box's upstream return), plus a legacy plain-LE diagnostic path. It also
+and the box's upstream return). It also
 implements the REAC control plane: control-block layout and checksums, head-amp
 records, box identity, and the master/slave establishment state machines, and it
 reads frames from a live AF_PACKET capture or an offline pcap.
@@ -48,7 +43,6 @@ Headers and pkg-config for building against libreac.
 
 %package -n libreac-transport
 Summary:        The REAC transport layer: sockets, pacer, RT threads, VLAN scan (userspace backend)
-Requires:       (libreac%{?_isa} >= 1.1.0 with libreac%{?_isa} < 2)
 
 %description -n libreac-transport
 libreac-transport is the REAC transport layer: AF_PACKET frame RX/TX over a lock-free
@@ -61,7 +55,7 @@ itself, that belongs to the process that links it.
 %package -n libreac-transport-devel
 Summary:        Development files for libreac-transport
 Requires:       libreac-transport%{?_isa} = %{version}-%{release}
-Requires:       (pkgconfig(libreac) >= 1.1.0 with pkgconfig(libreac) < 2)
+Requires:       pkgconfig(libreac)
 
 %description -n libreac-transport-devel
 Headers and pkg-config for building against libreac-transport.
@@ -99,7 +93,7 @@ done
 # (`/usr/lib64/libreac.so: undefined reference`, nine reac-pw targets, in its %%build).
 # A shared object is allowed unresolved symbols by default; this refuses them, here,
 # where the missing file is.
-cc %{build_ldflags} -shared -Wl,-soname,libreac.so.%{abi} -Wl,--no-undefined \
+cc %{build_ldflags} -shared -Wl,-soname,libreac.so.%{version} -Wl,--no-undefined \
   -o libreac.so.%{version} *.o -lm
 
 # libreac-transport: a second, parallel object family in its own directory, never folded into the
@@ -113,7 +107,7 @@ for f in transport/src/*.c; do
 done
 # --no-undefined is the same gate as above: a symbol the transport calls into libreac that libreac
 # lacks fails here, at package build, not at a consumer's exec.
-cc %{build_ldflags} -shared -Wl,-soname,libreac-transport.so.%{tabi} -Wl,--no-undefined \
+cc %{build_ldflags} -shared -Wl,-soname,libreac-transport.so.%{version} -Wl,--no-undefined \
   -o libreac-transport.so.%{version} transport-obj/*.o -L. -lreac -lm -lpthread
 
 # fake_box links the objects of libreac itself, not the shared library, so the package that carries it needs nothing
@@ -121,8 +115,7 @@ cc %{optflags} -D_GNU_SOURCE -Iinclude tools/fake_box.c $(ls *.o) %{build_ldflag
 
 %install
 install -Dm0755 libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{version}
-ln -s libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so.%{abi}
-ln -s libreac.so.%{abi}     %{buildroot}%{_libdir}/libreac.so
+ln -s libreac.so.%{version} %{buildroot}%{_libdir}/libreac.so
 # Same rule as %%build: every public header, derived. reac_ctrlblk.h and
 # reac_ports.h were missing from the old hand-kept list.
 for h in include/reac/*.h; do
@@ -135,8 +128,7 @@ sed -e 's|@LIB@|%{_lib}|' -e 's|@VERSION@|%{version}|' packaging/libreac.pc.in \
 
 # libreac-transport
 install -Dm0755 libreac-transport.so.%{version} %{buildroot}%{_libdir}/libreac-transport.so.%{version}
-ln -s libreac-transport.so.%{version} %{buildroot}%{_libdir}/libreac-transport.so.%{tabi}
-ln -s libreac-transport.so.%{tabi}    %{buildroot}%{_libdir}/libreac-transport.so
+ln -s libreac-transport.so.%{version} %{buildroot}%{_libdir}/libreac-transport.so
 for h in include/reac/transport/*.h; do
   install -Dm0644 "$h" %{buildroot}%{_includedir}/reac/transport/"$(basename "$h")"
 done
@@ -155,7 +147,6 @@ make test
 %files
 %license LICENSE
 %{_libdir}/libreac.so.%{version}
-%{_libdir}/libreac.so.%{abi}
 
 %files devel
 # The whole directory, so a new public header ships the day it lands instead of
@@ -168,7 +159,6 @@ make test
 %files -n libreac-transport
 %license LICENSE
 %{_libdir}/libreac-transport.so.%{version}
-%{_libdir}/libreac-transport.so.%{tabi}
 
 %files -n libreac-transport-devel
 %dir %{_includedir}/reac/transport
@@ -181,6 +171,18 @@ make test
 %{_libexecdir}/libreac/tests/fake_box
 
 %changelog
+* Mon Nov 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.12.0-1
+- The soname of both libraries is the release version (libreac.so.1.12.0,
+  libreac-transport.so.1.12.0), so rpm ties each program to the libreac it was
+  built against. The ABI promise is gone: LIBREAC_ABI, the layout table with its
+  test and generator, and the version ranges that served it.
+- Removed: the append-only enum rule, reac_decode_plain_le, the width-keyed
+  reac_ctrl_build_config_announce (use reac_ctrl_build_as with a catalogue row),
+  the REAC_ROLE_STATE_APPLIED / _REESTABLISH_PENDING aliases, the console_field
+  member name (pace_code), the byte-swapped pcap reader and the fallback for
+  kernels older than 4.20. The Python binding loads the soname of its own
+  release.
+
 * Thu Nov 05 2026 Pau Aliagas <linuxnow@gmail.com> - 1.11.0-1
 - ABI break: struct pcap_source gains skipped_oversized, so libreac.so.6 becomes
   libreac.so.7 (libreac7). pcap_source_next counts the records larger than the

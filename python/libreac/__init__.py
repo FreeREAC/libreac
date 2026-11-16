@@ -8,33 +8,31 @@ layout oracle, and this project already deleted a per-width head-amp table for
 exactly that reason. Every function below is a thin call into the .so — no byte
 layout, no arithmetic on wire fields, no constants copied from a header.
 
-Why ctypes and not an extension module: libreac is a stable-soname C library of
+Why ctypes and not an extension module: libreac is a C library of
 pure functions over buffers, with a pkg-config file and an RPM. ctypes needs no
 build step and cannot drift out of step with the installed library, because it IS
 the installed library. An extension module would need rebuilding on every bump.
 
-Load by ABI SONAME (`libreac.so.7`), never by the versioned filename: the
-soname is the compatibility promise, the filename is an implementation detail
-that moves on every release.
+Load by the soname of THIS release (`libreac.so.<version>`, the soname is the version),
+never by the versioned filename of another one and never by whatever libreac the dynamic
+linker finds first: this binding is the same release as the library it loads.
 """
 
 import ctypes
-import ctypes.util
 
-_SONAME = "libreac.so.7"
+# The release this binding belongs to, and so the soname it loads.
+# tests/conformance-python-soname.sh refuses a value that is not LIBREAC_VERSION.
+_SONAME = "libreac.so.1.12.0"
 
 
 def _load():
     try:
         return ctypes.CDLL(_SONAME)
-    except OSError:
-        found = ctypes.util.find_library("reac")
-        if not found:
-            raise OSError(
-                f"{_SONAME} not found. Install the libreac package "
-                "(libreac + libreac-devel), or set LD_LIBRARY_PATH to a build tree."
-            )
-        return ctypes.CDLL(found)
+    except OSError as exc:
+        raise OSError(
+            f"{_SONAME} not found. Install the libreac package of this release "
+            "(libreac + libreac-devel), or set LD_LIBRARY_PATH to a build tree."
+        ) from exc
 
 
 _lib = _load()
@@ -95,7 +93,7 @@ _c.reac_ctrl_build_headamp.argtypes = [
 # (upstream_filler, flood_filler, coldconnect*) are deliberately NOT bound yet:
 # they need a float *const * of live samples, and a binding that fakes one would
 # be testing the fake.
-for _name in ("reac_ctrl_build_box_hb", "reac_ctrl_build_config_announce",
+for _name in ("reac_ctrl_build_box_hb",
               "reac_ctrl_build_identity_first", "reac_ctrl_build_identity_last"):
     _f = getattr(_c, _name)
     _f.restype = ctypes.c_size_t
@@ -237,11 +235,6 @@ def _build_simple(fn_name: str, master: bytes, src: bytes,
 def build_box_hb(master: bytes, src: bytes, counter: int, n_ch: int) -> bytes:
     """The box heartbeat."""
     return _build_simple("reac_ctrl_build_box_hb", master, src, counter, n_ch)
-
-
-def build_config_announce(master: bytes, src: bytes, counter: int, in_ch: int) -> bytes:
-    """The box's config announce — the frame carrying the head-amp base strap."""
-    return _build_simple("reac_ctrl_build_config_announce", master, src, counter, in_ch)
 
 
 def build_identity_first(master: bytes, src: bytes, counter: int, in_ch: int) -> bytes:

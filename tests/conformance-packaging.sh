@@ -10,7 +10,8 @@
 # packaging/libreac.spec and debian/ carry copies, which must say so:
 #   ARM 1  the spec's Version and the top of debian/changelog equal the header's version;
 #   ARM 2  the spec links libreac.so with the soname libreac.so.%{version} and keeps no hand-kept
-#          soname number, and debian/control's library package is named libreac<version>;
+#          soname number, and debian/control's library package is named libreac<version>, with
+#          its debian/libreac<version>.install;
 #   ARM 3  the same for libreac-transport: the spec's soname, debian/rules (no TABI, the version),
 #          and the libreac-transport<version> package of debian/control;
 #   ARM 4  debian/control builds the Python binding's conformance gate with python3.
@@ -42,10 +43,12 @@ check() {
 	grep -q -- '-soname,libreac\.so\.%{version}' "$spec" || { echo "  ARM 2: the spec's libreac soname is not libreac.so.%{version}"; bad=1; }
 	grep -qE '^%global (abi|tabi)' "$spec" && { echo "  ARM 2: the spec keeps a hand-kept soname number"; bad=1; }
 	[ "$deb_lib" = "$ver" ] || { echo "  ARM 2: debian/control names libreac$deb_lib, reac.h says $ver"; bad=1; }
+	[ -f "$t/debian/libreac$ver.install" ] || { echo "  ARM 2: debian/libreac$ver.install is missing (the install file is named after the package)"; bad=1; }
 	grep -q -- '-soname,libreac-transport\.so\.%{version}' "$spec" || { echo "  ARM 3: the spec's libreac-transport soname is not libreac-transport.so.%{version}"; bad=1; }
 	grep -q '^TABI' "$t/debian/rules" && { echo "  ARM 3: debian/rules keeps a hand-kept soname number"; bad=1; }
 	grep -q -- '-soname,libreac-transport\.so\.$(VERSION)' "$t/debian/rules" || { echo "  ARM 3: debian/rules' libreac-transport soname is not the version"; bad=1; }
 	[ "$deb_tlib" = "$ver" ] || { echo "  ARM 3: debian/control names libreac-transport$deb_tlib, reac.h says $ver"; bad=1; }
+	[ -f "$t/debian/libreac-transport$ver.install" ] || { echo "  ARM 3: debian/libreac-transport$ver.install is missing"; bad=1; }
 	printf '%s\n' "$deb_python" | grep -Eq '^Build-Depends:.*(^|,)[[:space:]]*python3([[:space:]]*,|[[:space:]]*$)' ||
 		{ echo "  ARM 4: debian/control must Build-Depend on python3 for tests/conformance-python-soname.sh"; bad=1; }
 	return $bad
@@ -66,6 +69,7 @@ plant() { # <name>: a copy of the files the arms read
 	cp "$ROOT/include/reac/reac.h" "$P/$1/include/reac/"
 	cp "$ROOT/packaging/libreac.spec" "$P/$1/packaging/"
 	cp "$ROOT/debian/changelog" "$ROOT/debian/control" "$ROOT/debian/rules" "$P/$1/debian/"
+	cp "$ROOT"/debian/*.install "$P/$1/debian/"
 }
 plant good
 plant bad

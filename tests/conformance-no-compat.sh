@@ -31,7 +31,12 @@ printf 'x REAC_ROLE_STATE_APPLIED y\n' | grep -q 'REAC_ROLE_STATE_APPLIED' \
 	|| { echo "NOT A RESULT: the search cannot see a planted match"; exit 2; }
 SRCS="include src transport python tools fuzz tests packaging openwrt debian Makefile"
 # in <what> <pattern>: files outside this script that match
-hits() { grep -rnE --exclude=conformance-no-compat.sh -- "$1" $SRCS 2>/dev/null; }
+# The history of a release (debian/changelog, the spec's %changelog, the version history comment in
+# reac.h) names what it removed; that is not the thing coming back.
+hits() {
+	grep -rnE --exclude=conformance-no-compat.sh --exclude=changelog -- "$1" $SRCS 2>/dev/null |
+		grep -vE '^include/reac/reac\.h:[0-9]+: \*|^packaging/libreac\.spec:[0-9]+:(- |  )'
+}
 
 # 1
 for f in tests/test_abi_layout.c tests/abi-layout.inc tools/gen-abi-layout.py; do
