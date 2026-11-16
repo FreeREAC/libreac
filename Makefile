@@ -139,8 +139,14 @@ facts-drift-check: $(BUILD_DIR)/reac_facts_assert.h $(BUILD_DIR)/reac_facts_box_
 	    echo "Refresh it: cp $(BUILD_DIR)/reac_facts_master_cadence.h include/reac/reac_facts_master_cadence.h"; \
 	    exit 1; }
 else
+# CI sets REAC_REQUIRE_FACTS_GATE=1 (and fetches reac-protocol): there a skipped gate compared
+# nothing, so it is a failure, not a message.
 facts-drift-check:
+ifeq ($(REAC_REQUIRE_FACTS_GATE),1)
+	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL) (or python3 yaml missing): the facts drift gate is REQUIRED here and would compare nothing." >&2; exit 1
+else
 	@echo "REAC_PROTOCOL not reachable at $(REAC_PROTOCOL); skipping the facts drift gate (standalone build, using the shipped tests/reac_facts_assert.h)"
+endif
 endif
 
 test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H)
@@ -311,6 +317,8 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# THE VERSION AND THE SONAMES HAVE ONE DEFINITION (reac.h); the spec and debian/ copy
 	# them, and a copy that lags is refused here instead of shipping a package that loads a stale ABI.
 	$(RUN_TEST) tests/conformance-packaging.sh
+	# THE FACTS DRIFT GATE CAN FAIL WHERE IT IS REQUIRED (CI sets REAC_REQUIRE_FACTS_GATE=1).
+	$(RUN_TEST) tests/conformance-facts-gate-required.sh
 	$(RUN_TEST) tests/conformance-public-docs.sh
 	# THE PYTHON BINDING LOADS THE CURRENT ABI SONAME. This runs with only the
 	# versioned shared object and the libreac.so.<ABI> link present, so an old

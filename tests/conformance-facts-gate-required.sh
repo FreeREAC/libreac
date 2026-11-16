@@ -10,11 +10,13 @@
 #   - REAC_REQUIRE_FACTS_GATE=1  -> the gate must FAIL, naming the missing schema;
 #   - not set                    -> the gate must still skip (standalone builds).
 set -u
+# Run from `make test`, whose command-line variables ride in MAKEFLAGS: the arms below set their own.
+unset MAKEFLAGS MFLAGS
 cd "$(dirname "$0")/.." || exit 2
 none=$(mktemp -d) || exit 2
 trap 'rm -rf "$none"' EXIT
 
-out=$(REAC_PROTOCOL="$none" REAC_REQUIRE_FACTS_GATE=1 make --no-print-directory facts-drift-check 2>&1)
+out=$(make REAC_PROTOCOL="$none" REAC_REQUIRE_FACTS_GATE=1 --no-print-directory facts-drift-check 2>&1)
 rc=$?
 if [ "$rc" -eq 0 ]; then
 	echo "FAIL: facts-drift-check passed with REAC_REQUIRE_FACTS_GATE=1 and no schema; CI would be green on a skipped gate" >&2
@@ -27,7 +29,7 @@ echo "$out" | grep -q 'not reachable' || {
 	exit 1
 }
 
-out=$(REAC_PROTOCOL="$none" make --no-print-directory facts-drift-check 2>&1) || {
+out=$(make REAC_PROTOCOL="$none" REAC_REQUIRE_FACTS_GATE=0 --no-print-directory facts-drift-check 2>&1) || {
 	echo "FAIL: a standalone build (gate not required) must skip, not fail:" >&2
 	echo "$out" >&2
 	exit 1
