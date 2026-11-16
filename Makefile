@@ -377,6 +377,9 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	# versioned shared object and the libreac.so.<ABI> link present, so an old
 	# literal soname cannot pass through a system development link.
 	$(RUN_TEST) tests/conformance-python-soname.sh
+	# THE PYTHON BINDING'S OWN TESTS, against a shared object built from this tree (they were
+	# written and wired into nothing). REAC_PROTOCOL lets its grammar arm find reac.ksy's parser.
+	REAC_PROTOCOL=$(REAC_PROTOCOL) $(RUN_TEST) tests/python-binding.sh
 	$(RUN_TEST) tools/ops-slugs.sh --self-test
 	# THE PEER-BINDING COMPARISON REFUSES WHAT NOTHING EXPLAINS (no captures needed; the
 	# whole-corpus run is `make peer-replay`).
