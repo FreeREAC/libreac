@@ -939,9 +939,8 @@ static size_t ctrl_emit_as(uint8_t *out, const struct ctrl_frame *f,
 	memset(out, 0, len);
 	put_hdr(out, dst, src, counter, f->type0, f->type1);
 	ctrl_lay_block(out, f, m, args);
-	if (f->audio && reac_braid_encode(out + AUDIO_OFF, len - AUDIO_OFF - 2,
-	                                  n_ch, planar, n_ch, ns) < 0)
-		return 0;   /* the encoder refused the width: no frame, like every other refusal here */
+	if (f->audio && reac_braid_encode(out + AUDIO_OFF, len - AUDIO_OFF - 2, n_ch, planar, n_ch, ns) < 0)
+		return 0;   /* the encoder refused: no frame, like every other refusal here */
 	ctrl_finish(out, f);
 	out[len - 2] = REAC_END_MARKER_0;
 	out[len - 1] = REAC_END_MARKER_1;

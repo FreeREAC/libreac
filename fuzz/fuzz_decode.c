@@ -120,8 +120,11 @@ static void check_round_trip(const uint8_t *audio, const uint8_t *pcm, int nch, 
 	if (reac_braid_encode(again, full, nch, planar, nch, ns) < 0) {
 		/* a width the braid has no region for (odd, > 40) is refused, not encoded */
 		free(planes); free(planar); free(again);
+		/* a legal width must never be refused
+		 * mutant: src/reac_encode.c:31 `!reac_box_width_ok(n_ch)` -> `reac_box_width_ok(n_ch)`
+		 * input: downstream-program-48k */
 		if (reac_box_width_ok(nch))
-			abort();   /* a legal width must never be refused */
+			abort();
 		return;
 	}
 	/* The braid is a bijection over the n_ch x ns x 3 region and the 24-bit codec

@@ -8,7 +8,7 @@
  * refuse such a width (and a buffer too small for the width) and touch nothing,
  * not write past the end of the caller's buffer.
  *
- * This file is built WITH -fsanitize=address,undefined and compiles
+ * `make test SANITIZE=1` builds this file WITH -fsanitize=address,undefined and compiles
  * src/reac_encode.c itself with the same flags (Makefile), so a write past the
  * end of a heap buffer sized exactly for the region is an ASan report, not a
  * silent pass. Every buffer here is malloc'd to the exact size the case claims.

@@ -65,6 +65,8 @@ all: libreac.a
 # Every test runs through tests/run-test.sh: a timeout on each (a hang is red, never a
 # stall), and exit 77 reported as an explicit SKIP (a capability the environment lacks).
 RUN_TEST := tests/run-test.sh
+, := ,
+SANITIZE ?=
 SKIP_LOG := $(BUILD_DIR)/skipped.txt
 export REAC_SKIP_LOG := $(abspath $(SKIP_LOG))
 
@@ -164,9 +166,11 @@ test: tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c te
 	$(RUN_TEST) ./test_upstream
 	$(CC) $(CFLAGS) $(INC) tests/test_encode.c libreac.a -lm -o test_encode
 	$(RUN_TEST) ./test_encode
-	# test_braid_width: an exact-size heap buffer written past its end is an ASan report, so the
-	# encoder is compiled into the test with the sanitizers (libreac.a is not).
-	$(CC) $(CFLAGS) -g -fsanitize=address,undefined -fno-sanitize-recover=undefined $(INC) tests/test_braid_width.c src/reac_encode.c -lm -o test_braid_width
+	# test_braid_width: the encoder is compiled into the test, and `make test SANITIZE=1` adds ASan and
+	# UBSan so a write past an exact-size heap buffer is a report, not a silent pass. The default build
+	# (and the rpm/deb %check, which has no libasan) runs it unsanitized: it still asserts the refusal
+	# and that every byte is untouched. CI's Ubuntu job sets SANITIZE=1.
+	$(CC) $(CFLAGS) -g $(if $(SANITIZE),-fsanitize=address$(,)undefined -fno-sanitize-recover=undefined) $(INC) tests/test_braid_width.c src/reac_encode.c -lm -o test_braid_width
 	$(RUN_TEST) ./test_braid_width
 	$(CC) $(CFLAGS) $(INC) tests/test_decode.c libreac.a -lm -o test_decode
 	$(RUN_TEST) ./test_decode
