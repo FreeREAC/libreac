@@ -43,6 +43,8 @@
 #include <reac/reac_sample.h>
 #include <reac/reac_encode.h>
 #include <reac/reac_upstream.h>
+#include <reac/reac_ctrl.h>
+#include <reac/reac_ctrlblk.h>
 
 static int fails;
 #define CHK(cond) do { \
@@ -55,6 +57,10 @@ static int fails;
  * it needs the old code, so treat a mismatch as "the wire format changed",
  * never as "update the constant". */
 #define DOWNSTREAM_GOLDEN 0xe86e36e1d979f244ULL
+/* The same for the box->master builders (the braid loop plus the audio-free handshake
+ * frames), computed by the pre-move encoder. Taken in from reac-pw's byte-identity test,
+ * whose downstream arm duplicated the one above. */
+#define UPSTREAM_GOLDEN   0xd55c2aca88584655ULL
 
 #define FNV_INIT  0xcbf29ce484222325ULL
 #define FNV_PRIME 0x100000001b3ULL
@@ -123,6 +129,62 @@ static uint64_t downstream_corpus(void)
 	return fnv;
 }
 
+static uint64_t upstream_corpus(void)
+{
+	static uint8_t frame[REAC_FRAME_BYTES];
+	static const int NCH[6] = { 2, 8, 16, 32, 38, 40 };
+	static const uint8_t master[6] = { 0x00, 0x1a, 0x2b, 0x3c, 0x4d, 0x5e };
+	static const uint8_t bcast[6]  = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+	uint32_t seed = 0x50000;
+
+	fnv = FNV_INIT;
+	for (int si = 0; si < 4; si++)
+		for (int ci = 0; ci < 6; ci++)
+			for (int ni = 0; ni < 5; ni++)
+				for (int ti = 0; ti < 7; ti++) {
+					int nch = NCH[ci];
+					int ns = NS[ni];
+					uint16_t cnt = CNT[ti];
+					/* the builders guard the planar pointer, so the NULL path is
+					 * exercised here at every width */
+					int null_all = ((si + ci + ni + ti) % 7) == 0;
+					float *const *pl = fill(seed++, SCALES[si], null_all);
+					uint8_t src[6] = { 0x00, 0x40, 0xab,
+					                   (uint8_t)si, (uint8_t)ci, (uint8_t)(ni * 8 + ti) };
+					size_t len;
+
+					/* the six audio-carrying box->master builders: the moved braid loop */
+					len = reac_ctrl_build_upstream_filler(frame, master, src, cnt, nch, pl, ns);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_flood_filler(frame, bcast, src, cnt, nch, pl, ns);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_coldconnect(frame, master, src, cnt, nch, pl, ns);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_coldconnect_0013(frame, master, src, cnt, nch, pl, ns);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_coldconnect_0016(frame, master, src, cnt, nch, pl, ns);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_coldconnect_001a(frame, master, src, cnt, nch, pl, ns);
+					absorb_len(len); absorb(frame, len);
+
+					/* the audio-free handshake frames: pinned so the refactor is
+					 * shown to have left the control plane alone */
+					len = reac_ctrl_build_box_hb(frame, master, src, cnt, nch);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_config_announce(frame, master, src, cnt, nch);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_identity_first(frame, master, src, cnt, nch);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_identity_last(frame, master, src, cnt, nch);
+					absorb_len(len); absorb(frame, len);
+					len = reac_ctrl_build_headamp(frame, bcast, src, cnt,
+					                              (uint8_t)(nch & 0x3f),
+					                              (uint8_t)(ti % 3), (uint8_t)(si));
+					absorb_len(len); absorb(frame, len);
+				}
+	return fnv;
+}
+
 /* ---- helpers ---- */
 
 static int32_t s24_at(const uint8_t *planar_pcm, int ch, int s)
@@ -144,6 +206,16 @@ int main(void)
 			fprintf(stderr, "FAIL downstream corpus digest: got 0x%016llx want 0x%016llx\n"
 			                "  the emitted BYTES changed — this is a wire-format regression\n",
 			        (unsigned long long)got, (unsigned long long)DOWNSTREAM_GOLDEN);
+		}
+	}
+
+	{
+		uint64_t got = upstream_corpus();
+		if (got != UPSTREAM_GOLDEN) {
+			fails++;
+			fprintf(stderr, "FAIL upstream corpus digest: got 0x%016llx want 0x%016llx\n"
+			                "  the BYTES of a box->master frame changed — wire-format regression\n",
+			        (unsigned long long)got, (unsigned long long)UPSTREAM_GOLDEN);
 		}
 	}
 
