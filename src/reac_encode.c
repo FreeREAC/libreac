@@ -20,9 +20,18 @@
 
 #include <string.h>
 
-void reac_braid_encode(uint8_t *audio, int n_ch,
-                       float *const *planar, int n_src, int ns)
+int reac_braid_encode(uint8_t *audio, size_t audio_len, int n_ch,
+                      float *const *planar, int n_src, int ns)
 {
+	/* THE PRECONDITION IS CHECKED, NOT TRUSTED. The braid packs channel pairs
+	 * inside an n_ch * 36-byte region; an odd width writes one byte past it, a
+	 * width above 40 runs off the end of a full frame, and a buffer shorter than
+	 * the region is the same overflow with a legal width. Refuse before the
+	 * first write. */
+	if (!audio || !reac_box_width_ok(n_ch) ||
+	    audio_len < (size_t)n_ch * REAC_SAMPLES_PER_PKT * REAC_RESOLUTION)
+		return -1;
+
 	/* A REAC frame carries exactly 12 samples per channel at every sample rate
 	 * — the rate rides on the PACKET rate, not on the frame size. Clamp rather
 	 * than trust the caller's ns so a graph quantum longer than a frame cannot
@@ -45,6 +54,7 @@ void reac_braid_encode(uint8_t *audio, int n_ch,
 			audio[pos[2]] = b[2];
 		}
 	}
+	return 0;
 }
 
 int reac_downstream_build(uint8_t *out, float *const *planar, int nch, int ns,
@@ -68,8 +78,9 @@ int reac_downstream_build(uint8_t *out, float *const *planar, int nch, int ns,
 	/* Audio at offset exactly 50: the full 40-channel downstream width, in the
 	 * braid. Channels beyond nch (and NULL planes) are silent; the memset above
 	 * means a short ns leaves silence rather than stale audio. */
-	reac_braid_encode(out + REAC_AUDIO_OFFSET, REAC_MAX_CHANNELS,
-	                  planar, nch, ns);
+	(void)reac_braid_encode(out + REAC_AUDIO_OFFSET,
+	                        REAC_FRAME_BYTES - REAC_AUDIO_OFFSET - 2,
+	                        REAC_MAX_CHANNELS, planar, nch, ns);   /* 40 wide, 1440 B: never refused */
 
 	out[REAC_FRAME_BYTES - 2] = REAC_END_MARKER_0;  /* 0xC2 */
 	out[REAC_FRAME_BYTES - 1] = REAC_END_MARKER_1;  /* 0xEA */

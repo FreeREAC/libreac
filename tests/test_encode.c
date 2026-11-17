@@ -239,7 +239,8 @@ int main(void)
 		frame[12] = 0x88; frame[13] = 0x19;
 		frame[len - 2] = REAC_END_MARKER_0;
 		frame[len - 1] = REAC_END_MARKER_1;
-		reac_braid_encode(frame + REAC_AUDIO_OFFSET, nch, pl, nch, REAC_SAMPLES_PER_PKT);
+		CHK(reac_braid_encode(frame + REAC_AUDIO_OFFSET, len - REAC_AUDIO_OFFSET - 2, nch, pl, nch,
+		                      REAC_SAMPLES_PER_PKT) == 0);
 
 		CHK(reac_upstream_channels(len) == nch);
 		CHK(reac_upstream_decode(frame, len, out) == REAC_SAMPLES_PER_PKT);
@@ -268,8 +269,8 @@ int main(void)
 		 * region is written, so nothing of the old content survives. */
 		memset(a, 0x00, region);
 		memset(b, 0xA5, region);
-		reac_braid_encode(a, nch, pl, nch, REAC_SAMPLES_PER_PKT);
-		reac_braid_encode(b, nch, pl, nch, REAC_SAMPLES_PER_PKT);
+		CHK(reac_braid_encode(a, region, nch, pl, nch, REAC_SAMPLES_PER_PKT) == 0);
+		CHK(reac_braid_encode(b, region, nch, pl, nch, REAC_SAMPLES_PER_PKT) == 0);
 		CHK(memcmp(a, b, region) == 0);
 	}
 
@@ -283,17 +284,17 @@ int main(void)
 
 		/* NULL planar -> silence for the whole region */
 		memset(a, 0x5A, sizeof a);
-		reac_braid_encode(a, REAC_MAX_CHANNELS, NULL, 0, REAC_SAMPLES_PER_PKT);
+		CHK(reac_braid_encode(a, sizeof a, REAC_MAX_CHANNELS, NULL, 0, REAC_SAMPLES_PER_PKT) == 0);
 		CHK(memcmp(a, z, REAC_AUDIO_BYTES) == 0);
 
 		/* n_src smaller than n_ch -> the surplus channels are silent */
 		memset(a, 0x5A, sizeof a);
-		reac_braid_encode(a, REAC_MAX_CHANNELS, pl, 0, REAC_SAMPLES_PER_PKT);
+		CHK(reac_braid_encode(a, sizeof a, REAC_MAX_CHANNELS, pl, 0, REAC_SAMPLES_PER_PKT) == 0);
 		CHK(memcmp(a, z, REAC_AUDIO_BYTES) == 0);
 
 		/* ns <= 0 writes nothing at all (the caller owns the buffer state) */
 		memset(a, 0x5A, sizeof a);
-		reac_braid_encode(a, REAC_MAX_CHANNELS, NULL, 0, 0);
+		CHK(reac_braid_encode(a, sizeof a, REAC_MAX_CHANNELS, NULL, 0, 0) == 0);
 		for (size_t i = 0; i < REAC_AUDIO_BYTES; i++)
 			CHK(a[i] == 0x5A);
 
@@ -301,7 +302,7 @@ int main(void)
 		for (int s = 0; s < REAC_SAMPLES_PER_PKT; s++) { hot[s] = 4.0f; cold[s] = -4.0f; }
 		pl[0] = hot; pl[1] = cold; pl[2] = hot; pl[3] = cold;
 		memset(a, 0, sizeof a);
-		reac_braid_encode(a, 4, pl, 4, REAC_SAMPLES_PER_PKT);
+		CHK(reac_braid_encode(a, sizeof a, 4, pl, 4, REAC_SAMPLES_PER_PKT) == 0);
 		for (int s = 0; s < REAC_SAMPLES_PER_PKT; s++) {
 			size_t pos[3];
 			uint8_t t[3];

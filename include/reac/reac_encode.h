@@ -56,10 +56,13 @@ extern "C" {
  *
  *   audio   points at the frame's audio region — frame + REAC_AUDIO_OFFSET
  *           (50). Must hold n_ch * 12 * 3 bytes.
+ *   audio_len  how many bytes the caller owns at `audio`. Less than
+ *           n_ch * 12 * 3 is refused.
  *   n_ch    the FRAME's channel width: 40 for the downstream broadcast, the
  *           box's even input count (2..40) for an upstream return. Every one
  *           of these n_ch channels is written, so the region is fully defined
- *           on return — the braid is a bijection over it.
+ *           on return — the braid is a bijection over it. Any other width
+ *           (odd, below 2, above 40) has no legal region and is refused.
  *   planar  planar[ch][s], ch < n_src. A NULL planar, a NULL plane, or a
  *           channel index >= n_src encodes DIGITAL SILENCE for that channel
  *           (the frame width is a wire fact; the caller need not supply 40
@@ -71,10 +74,17 @@ extern "C" {
  *           are left as the caller found them — callers that need silence
  *           there zero the buffer first, as both reac-pw builders do.
  *
+ * Returns 0 when the region was written (ns <= 0 writes nothing and is still
+ * 0), or -1 when it REFUSED: a NULL `audio`, a width reac_box_width_ok()
+ * rejects, or an `audio_len` below n_ch * 12 * 3. A refusal writes nothing,
+ * allocates nothing, takes no lock and never aborts, so it is safe on an RT
+ * thread; the caller decides what a refused frame costs (the in-tree builders
+ * return their ordinary "no frame" answer).
+ *
  * Out-of-range floats clamp to the 24-bit signed range (reac_sample.h), so a
  * hot mix cannot wrap round to the opposite polarity on the wire. */
-void reac_braid_encode(uint8_t *audio, int n_ch,
-                       float *const *planar, int n_src, int ns);
+int reac_braid_encode(uint8_t *audio, size_t audio_len, int n_ch,
+                      float *const *planar, int n_src, int ns);
 
 /* Build one complete DOWNSTREAM (master -> fabric) broadcast frame into
  * out[REAC_FRAME_BYTES]. Returns REAC_FRAME_BYTES (1492).

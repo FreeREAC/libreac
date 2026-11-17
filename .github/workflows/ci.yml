@@ -18,7 +18,7 @@ jobs:
           git -C ../reac-protocol checkout -q FETCH_HEAD
           python3 -c 'import yaml' || sudo apt-get install -y -q python3-yaml
       - name: Build + unit tests
-        run: make test REAC_REQUIRE_FACTS_GATE=1
+        run: make test SANITIZE=1 REAC_REQUIRE_FACTS_GATE=1
       # The transport suite. Its namespace/veth test
       # either measures on this runner or exits 77 and is reported as SKIP: it ends with a
       # verdict either way, and every test in it carries tests/run-test.sh's timeout.
