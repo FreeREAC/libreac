@@ -17,8 +17,26 @@ jobs:
           git -C ../reac-protocol fetch -q --depth 1 https://github.com/FreeREAC/reac-protocol.git 3713dca9969733abbd8032329a7d0eb979a67250
           git -C ../reac-protocol checkout -q FETCH_HEAD
           python3 -c 'import yaml' || { sudo apt-get update -q && sudo apt-get install -y -q python3-yaml; }
+      # The python binding's grammar arm (python/libreac/ksy.py) needs reac-protocol's generated parser and the
+      # Kaitai runtime; without them it skips. kaitai-struct-compiler is in no distro repository: the 0.11 release
+      # zip, checksum-pinned, needs a JRE at build time only.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate the grammar's Python parser and install the Kaitai runtime
+        run: |
+          set -eux
+          pip install kaitaistruct==0.11
+          tools/ci-grammar-parser.sh ../reac-protocol
       - name: Build + unit tests
         run: make test SANITIZE=1 REAC_REQUIRE_FACTS_GATE=1
+      - name: The python binding's grammar arm ran (a skip here is a failure)
+        run: |
+          ! grep -x 'tests/python-binding.sh' build/skipped.txt
       # The transport suite. Its namespace/veth test
       # either measures on this runner or exits 77 and is reported as SKIP: it ends with a
       # verdict either way, and every test in it carries tests/run-test.sh's timeout.
@@ -48,6 +66,14 @@ jobs:
           git init -q $RUNNER_TEMP/reac-protocol
           git -C $RUNNER_TEMP/reac-protocol fetch -q --depth 1 https://github.com/FreeREAC/reac-protocol.git 3713dca9969733abbd8032329a7d0eb979a67250
           git -C $RUNNER_TEMP/reac-protocol checkout -q FETCH_HEAD
+      # The python binding's grammar arm needs reac-protocol's generated parser (no distro packages the compiler):
+      # generated here, on the host, into the checkout the container mounts; the runtime is pip'd in the container.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Generate the grammar's Python parser
+        run: tools/ci-grammar-parser.sh $RUNNER_TEMP/reac-protocol
       - name: Prepare the host for namespace tests
         run: |
           set -eux
@@ -64,8 +90,9 @@ jobs:
         run: |
           docker run --rm --privileged -v "$GITHUB_WORKSPACE:/w" -v "$RUNNER_TEMP/reac-protocol:/reac-protocol:ro" -w /w fedora:${{ matrix.fedora }} bash -euxo pipefail -c '
             dnf install -y -q --setopt=install_weak_deps=False --setopt=retries=10 \
-              gcc make python3 python3-pyyaml git iproute iproute-tc util-linux procps-ng libcap findutils diffutils gawk sed grep coreutils
+              gcc make python3 python3-pip python3-pyyaml git iproute iproute-tc util-linux procps-ng libcap findutils diffutils gawk sed grep coreutils
             git config --global --add safe.directory "*"
+            pip install -q kaitaistruct==0.11
             echo "fedora $(rpm -E %fedora), gcc $(gcc -dumpfullversion)"
             make test REAC_REQUIRE_FACTS_GATE=1 REAC_PROTOCOL=/reac-protocol
             make test-transport
