@@ -36,6 +36,7 @@ static void pacer_hw_take(struct msghdr *m, void *ctx);   /* the drain hands it 
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>     /* htons */
+#include "reac_rx_ppm.h"   /* the one ppm -> int-milli saturation (also update_ppm's) */
 
 /* ---- lock-free SPSC frame ring (whole encoded frames) -------------------- */
 
@@ -1433,7 +1434,7 @@ void reac_pacer_clock_publish_graph(struct reac_pacer *p, const char *name, int 
 		return;
 	enum reac_clock_quality q = reac_clock_grade_name(name, clock_ref);
 	reac_pacer_clock_publish(p, REAC_CLOCK_SRC_GRAPH, 1,
-	                         (int)(reac_clock_ppm_from_rate_diff(rate_diff) * 1000.0),
+	                         reac_rx_ppm_to_milli(reac_clock_ppm_from_rate_diff(rate_diff)),
 	                         name, q, nsec);
 }
 
