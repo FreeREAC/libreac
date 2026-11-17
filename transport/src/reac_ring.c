@@ -219,11 +219,26 @@ uint32_t reac_ring_write(struct reac_ring *r, const float *planar, uint32_t n,
 	return w;
 }
 
+/* A refused read still owes the caller silence: the caller publishes its planes
+ * whatever the return, so leaving them as found would play stale memory. Zero the
+ * planes that exist (n floats each, the caller's own n); a NULL plane or a NULL
+ * dst has nothing to fill. */
+static void refused_read_silence(float *const *dst, uint32_t nch, uint32_t n)
+{
+	if (!dst)
+		return;
+	for (uint32_t c = 0; c < nch; c++)
+		if (dst[c])
+			memset(dst[c], 0, (size_t)n * sizeof(float));
+}
+
 uint32_t reac_ring_read_planar(struct reac_ring *r, float *const *dst,
                                uint32_t channels, uint32_t n)
 {
-	if (!r || !r->buf)
+	if (!r || !r->buf) {
+		refused_read_silence(dst, channels, n);
 		return 0;
+	}
 	uint32_t nch = channels < r->channels ? channels : r->channels;
 	if (n > 0 && nch > 0) {
 		int bad = dst == NULL;
@@ -231,11 +246,14 @@ uint32_t reac_ring_read_planar(struct reac_ring *r, float *const *dst,
 			bad = dst[c] == NULL;
 		if (bad) {
 			atomic_fetch_add_explicit(&r->refused, 1, memory_order_relaxed);
+			refused_read_silence(dst, nch, n);
 			return 0;
 		}
 	}
-	if (!side_enter(&r->reader_busy, &r->reader_tid, &r->spsc_violations))
+	if (!side_enter(&r->reader_busy, &r->reader_tid, &r->spsc_violations)) {
+		refused_read_silence(dst, nch, n);
 		return 0;
+	}
 	uint32_t got = ring_read_planar(r, dst, channels, n);
 	side_leave(&r->reader_busy);
 	return got;

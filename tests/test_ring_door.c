@@ -77,6 +77,10 @@ static void p_read_good(void)
 	fresh();
 	CHK(reac_ring_write(&ring, a, 16, 4) == 16);
 	float *dst[4] = { pl0, pl1, pl2, pl3 };
+	/* no ring at all is refused too, and the planes are left silent */
+	memset(pl0, 0x7f, sizeof pl0);
+	CHK(reac_ring_read_planar(NULL, dst, 4, 16) == 0);
+	CHK(pl0[0] == 0.0f && pl0[15] == 0.0f);
 	CHK(reac_ring_read_planar(&ring, dst, 4, 16) == 16);
 	CHK(pl0[0] == 1.0f && pl1[0] == 17.0f && pl3[15] == 64.0f);
 	CHK(atomic_load(&ring.refused) == 0);
