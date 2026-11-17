@@ -10,7 +10,9 @@
  *
  * update_ppm is static, so this test compiles reac_rx.c into itself. A finite
  * estimate is the CONTROL: it must bump, or the harness proves nothing. */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include "../transport/src/reac_rx.c"
 
 #include <stdio.h>

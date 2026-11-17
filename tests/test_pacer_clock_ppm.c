@@ -8,7 +8,9 @@
  * saturation update_ppm applies: INT_MAX/INT_MIN at the range, 0 for non-finite
  * ("no information"). Build with -fsanitize=undefined,float-cast-overflow to see
  * the cast itself; without it the wrong value (INT_MIN) is the evidence. */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include <reac/reac.h>
 #include <reac/transport/reac_pacer.h>
 
@@ -27,6 +29,9 @@ static int published(struct reac_pacer *p, double rate_diff)
 	return atomic_load(&p->clock_ppm_milli[REAC_CLOCK_SRC_GRAPH]);
 }
 
+/* (rate - 1) * 1e6 * 1000 is a double product: allow the last milli of rounding. */
+static int near(int got, int want) { return got >= want - 1 && got <= want + 1; }
+
 int main(void)
 {
 	struct reac_pacer *p = calloc(1, sizeof *p);
@@ -34,8 +39,8 @@ int main(void)
 	p->clock_follow = 1;
 
 	CHK(published(p, 1.0) == 0);                     /* CONTROL: on-rate */
-	CHK(published(p, 1.000018) == 18000);            /* +18 ppm */
-	CHK(published(p, 0.9999) == -100000);
+	CHK(near(published(p, 1.000018), 18000));        /* +18 ppm */
+	CHK(near(published(p, 0.9999), -100000));        /* -100 ppm */
 	CHK(published(p, NAN) == 0);
 	CHK(published(p, INFINITY) == 0);              /* non-finite: no information */
 	CHK(published(p, 4.0) == INT_MAX);               /* +3e6 ppm -> 3e9 milli */
