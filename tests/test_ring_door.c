@@ -63,11 +63,14 @@ static int p_read_null_plane(void)
 	fresh();
 	reac_ring_write(&ring, a, 16, 4);
 	float *dst[4] = { pl0, pl1, NULL, pl3 };
-	memset(pl0, 0x7f, sizeof pl0);
+	memset(pl0, 0x7f, sizeof pl0); memset(pl1, 0x7f, sizeof pl1); memset(pl3, 0x7f, sizeof pl3);
 	uint32_t got = reac_ring_read_planar(&ring, dst, 4, 16);
-	/* refused whole: not even plane 0 was written, tail did not move */
+	/* refused whole: tail did not move, and the planes that exist are SILENCE, not
+	 * what the caller's buffer held (the header promises a read never hands back
+	 * stale memory; reac-pw publishes the planes without looking at the return) */
 	return !(got == 0 && atomic_load(&ring.tail) == 0 &&
-	         atomic_load(&ring.refused) == 1 && ((uint8_t *)pl0)[0] == 0x7f);
+	         atomic_load(&ring.refused) == 1 &&
+	         pl0[0] == 0.0f && pl0[15] == 0.0f && pl1[0] == 0.0f && pl3[15] == 0.0f);
 }
 static void p_read_good(void)
 {
@@ -112,6 +115,8 @@ static void spsc(void)
 	uint32_t head = atomic_load(&sr.head), tail = atomic_load(&sr.tail);
 
 	/* a second thread as writer AND as reader: both refused, nothing moves */
+	memset(pl0, 0x7f, sizeof pl0); memset(pl1, 0x7f, sizeof pl1);
+	memset(pl2, 0x7f, sizeof pl2); memset(pl3, 0x7f, sizeof pl3);
 	pthread_t t;
 	pthread_create(&t, NULL, second_thread, NULL);
 	pthread_join(t, NULL);
@@ -121,6 +126,8 @@ static void spsc(void)
 	CHK(other_w == 0 && other_r == 0);
 	CHK(atomic_load(&sr.spsc_violations) == 2);
 	CHK(atomic_load(&sr.head) == head && atomic_load(&sr.tail) == tail);
+	/* the refused read left silence in the first n floats of every plane, not the 0x7f it found */
+	CHK(pl0[0] == 0.0f && pl0[3] == 0.0f && pl3[3] == 0.0f);
 
 	/* the original threads still work */
 	CHK(reac_ring_write(&sr, a, 4, 4) == 4);
