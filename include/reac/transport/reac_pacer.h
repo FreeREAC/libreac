@@ -63,6 +63,9 @@ struct reac_frame_ring {
 	_Atomic uint64_t underruns; /* consumer: slots with no frame ready */
 };
 
+/* Returns 0, or -1 when the request is refused: zero slots, a slot count whose
+ * power-of-two ceiling overflows 32 bits, slot_sz outside REAC_FRAME_BYTES..UINT16_MAX,
+ * or an allocation failure. On -1 nothing is allocated (buf and len are NULL). */
 int  reac_frame_ring_init(struct reac_frame_ring *r, uint32_t slots, uint32_t slot_sz);
 void reac_frame_ring_free(struct reac_frame_ring *r);
 /* PRODUCER: copy one frame in. Drops (overrun) the NEWEST if full — SPSC forbids
