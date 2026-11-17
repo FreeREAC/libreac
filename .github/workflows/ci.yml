@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build + unit tests
-        run: make test
+        run: make test SANITIZE=1
       # The transport suite. Its namespace/veth test
       # either measures on this runner or exits 77 and is reported as SKIP: it ends with a
       # verdict either way, and every test in it carries tests/run-test.sh's timeout.
