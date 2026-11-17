@@ -8,8 +8,35 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # reac-protocol, pinned, beside the tree where the Makefile looks for it (REAC_PROTOCOL ?= ../reac-protocol):
+      # without it `make facts-drift-check` compares nothing. REAC_REQUIRE_FACTS_GATE=1 makes a skip a failure.
+      - name: Fetch reac-protocol (the facts the drift gate compares against)
+        run: |
+          set -eux
+          git init -q ../reac-protocol
+          git -C ../reac-protocol fetch -q --depth 1 https://github.com/FreeREAC/reac-protocol.git 3713dca9969733abbd8032329a7d0eb979a67250
+          git -C ../reac-protocol checkout -q FETCH_HEAD
+          python3 -c 'import yaml' || { sudo apt-get update -q && sudo apt-get install -y -q python3-yaml; }
+      # The python binding's grammar arm (python/libreac/ksy.py) needs reac-protocol's generated parser and the
+      # Kaitai runtime; without them it skips. kaitai-struct-compiler is in no distro repository: the 0.11 release
+      # zip, checksum-pinned, needs a JRE at build time only.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate the grammar's Python parser and install the Kaitai runtime
+        run: |
+          set -eux
+          pip install kaitaistruct==0.11
+          tools/ci-grammar-parser.sh ../reac-protocol
       - name: Build + unit tests
-        run: make test SANITIZE=1
+        run: make test SANITIZE=1 REAC_REQUIRE_FACTS_GATE=1
+      - name: The python binding's grammar arm ran (a skip here is a failure)
+        run: |
+          ! grep -x 'tests/python-binding.sh' build/skipped.txt
       # The transport suite. Its namespace/veth test
       # either measures on this runner or exits 77 and is reported as SKIP: it ends with a
       # verdict either way, and every test in it carries tests/run-test.sh's timeout.
@@ -31,6 +58,22 @@ jobs:
         fedora: [44, 45]
     steps:
       - uses: actions/checkout@v4
+      # reac-protocol, pinned, beside the tree where the Makefile looks for it (mounted into the container below):
+      # without it `make facts-drift-check` compares nothing. REAC_REQUIRE_FACTS_GATE=1 makes a skip a failure.
+      - name: Fetch reac-protocol (the facts the drift gate compares against)
+        run: |
+          set -eux
+          git init -q $RUNNER_TEMP/reac-protocol
+          git -C $RUNNER_TEMP/reac-protocol fetch -q --depth 1 https://github.com/FreeREAC/reac-protocol.git 3713dca9969733abbd8032329a7d0eb979a67250
+          git -C $RUNNER_TEMP/reac-protocol checkout -q FETCH_HEAD
+      # The python binding's grammar arm needs reac-protocol's generated parser (no distro packages the compiler):
+      # generated here, on the host, into the checkout the container mounts; the runtime is pip'd in the container.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Generate the grammar's Python parser
+        run: tools/ci-grammar-parser.sh $RUNNER_TEMP/reac-protocol
       - name: Prepare the host for namespace tests
         run: |
           set -eux
@@ -45,13 +88,16 @@ jobs:
           lsmod | grep -E '^(veth|dummy|8021q|sch_etf) '
       - name: Build + unit tests, then the transport tests, in fedora:${{ matrix.fedora }}
         run: |
-          docker run --rm --privileged -v "$GITHUB_WORKSPACE:/w" -w /w fedora:${{ matrix.fedora }} bash -euxo pipefail -c '
+          docker run --rm --privileged -v "$GITHUB_WORKSPACE:/w" -v "$RUNNER_TEMP/reac-protocol:/reac-protocol:ro" -w /w fedora:${{ matrix.fedora }} bash -euxo pipefail -c '
             dnf install -y -q --setopt=install_weak_deps=False --setopt=retries=10 \
-              gcc make python3 git iproute iproute-tc util-linux procps-ng libcap findutils diffutils gawk sed grep coreutils
+              gcc make python3 python3-pip python3-pyyaml git iproute iproute-tc util-linux procps-ng libcap findutils diffutils gawk sed grep coreutils
             git config --global --add safe.directory "*"
+            pip install -q kaitaistruct==0.11
             echo "fedora $(rpm -E %fedora), gcc $(gcc -dumpfullversion)"
-            make test
+            make test REAC_REQUIRE_FACTS_GATE=1 REAC_PROTOCOL=/reac-protocol
             make test-transport
+            # This job exists to run the namespace tests: a test that exited 77 here did not run.
+            tools/skip-gate.sh
           '
 
   # The package that carries fake_box for the programs that test against it (reac-pw): built the way the release
@@ -91,8 +137,8 @@ jobs:
   fuzz:
     runs-on: ubuntu-latest
     # A backstop: fuzz-run spends FUZZ_TIME on each harness and fuzz-sabotage at most
-    # 30 s on each mutant, so the job ends on its own well inside this.
-    timeout-minutes: 40
+    # 30 s on each mutant, and fuzz-records builds each recorded mutant once, so the job ends on its own well inside this.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Build the fuzz harnesses (clang, libFuzzer, ASan, UBSan)
@@ -113,6 +159,14 @@ jobs:
           cov=$(command -v llvm-cov-$v || command -v llvm-cov)
           prof=$(command -v llvm-profdata-$v || command -v llvm-profdata)
           make fuzz-cov LLVM_COV="$cov" LLVM_PROFDATA="$prof"
+      # Every check's recorded breakage (the `mutant:` / `input:` lines in fuzz/*.c) must still apply
+      # and be stopped by the seed it names: the records name source lines that move with every edit,
+      # and a stale one proves nothing.
+      - name: Hold every mutant record
+        run: make fuzz-records
+      # The committed seeds must be what fuzz/gen-corpus.c writes.
+      - name: Hold the seed corpus to its generator
+        run: make fuzz-corpus-check
       - name: Upload the crashing inputs
         if: failure()
         uses: actions/upload-artifact@v4

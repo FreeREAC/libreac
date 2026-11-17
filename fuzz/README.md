@@ -276,6 +276,7 @@ make fuzz-records            # every check's recorded breakage, proven at this c
 REC_VERBOSE=1 make fuzz-records   # the same, and the line each met record fires at
 make fuzz-cov                # the coverage witness and the record ratchet
 make fuzz-corpus             # regenerate fuzz/corpus/ from the fixtures
+make fuzz-corpus-check       # fail when fuzz/corpus is not what gen-corpus.c writes (CI runs it)
 ```
 
 They need clang with libFuzzer and, for `fuzz-cov`, `llvm-profdata` and `llvm-cov`. The harnesses

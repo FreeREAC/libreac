@@ -109,18 +109,18 @@ static void check_table(const struct reac_disco_table *t)
 	 * (fuzz/sabotage/disco.patch) writes a ninth entry past the table: ASan stops it
 	 * in the library, and in the plain build the write puts the ninth MAC over `n`,
 	 * which this check then sees.
-	 * mutant: src/reac_disco.c:366 `t->n--;` -> `t->n -= 9;`
+	 * mutant: src/reac_disco.c:370 `t->n--;` -> `t->n -= 9;`
 	 * input: desk-and-box
-	 * mutant: src/reac_disco.c:329 `>=` -> `>`
+	 * mutant: src/reac_disco.c:332 `>=` -> `>`
 	 * input: nine-peers
 	 */
 	if (t->n < 0 || t->n > REAC_DISCO_MAX)
 		abort();
 	for (int i = 0; i < t->n; i++) {
 		/* Each role is one of the three roles.
-		 * mutant: src/reac_disco.c:343 `s->role` -> `7`
+		 * mutant: src/reac_disco.c:346 `s->role` -> `7`
 		 * input: fixture-l1-box-hb
-		 * mutant: src/reac_disco.c:343 `s->role` -> `-1`
+		 * mutant: src/reac_disco.c:346 `s->role` -> `-1`
 		 * input: fixture-l1-box-hb
 		 */
 		if ((int)t->e[i].role < REAC_DISCO_ROLE_UNKNOWN ||
@@ -128,7 +128,7 @@ static void check_table(const struct reac_disco_table *t)
 			abort();
 		for (int j = i + 1; j < t->n; j++)
 			/* No MAC twice.
-			 * mutant: src/reac_disco.c:255 `memcmp(t->e[i].mac, mac, 6) == 0` -> `0`
+			 * mutant: src/reac_disco.c:256 `memcmp(t->e[i].mac, mac, 6) == 0` -> `0`
 			 * input: desk-and-box
 			 */
 			if (memcmp(t->e[i].mac, t->e[j].mac, 6) == 0)
@@ -141,9 +141,9 @@ static void check_gate(const struct reac_disco_gate *g)
 	/* At most REAC_DISCO_MAX entries. The `g->n > REAC_DISCO_MAX` part: as for the
 	 * table, only a write past the gate's array can make it true; the second mutant
 	 * does that, and in the plain build the ninth MAC lands on `n`.
-	 * mutant: src/reac_disco.c:238 `g->n++` -> `g->n--`
+	 * mutant: src/reac_disco.c:239 `g->n++` -> `g->n--`
 	 * input: fixture-l1-box-hb
-	 * mutant: src/reac_disco.c:235 `>=` -> `>`
+	 * mutant: src/reac_disco.c:236 `>=` -> `>`
 	 * input: nine-peers
 	 */
 	if (g->n < 0 || g->n > REAC_DISCO_MAX)
@@ -151,7 +151,7 @@ static void check_gate(const struct reac_disco_gate *g)
 	for (int i = 0; i < g->n; i++)
 		for (int j = i + 1; j < g->n; j++)
 			/* No MAC twice.
-			 * mutant: src/reac_disco.c:206 `memcmp(e->mac, s->mac, 6) != 0` -> `1`
+			 * mutant: src/reac_disco.c:207 `memcmp(e->mac, s->mac, 6) != 0` -> `1`
 			 * input: desk-and-box
 			 */
 			if (memcmp(g->e[i].mac, g->e[j].mac, 6) == 0)
@@ -184,9 +184,9 @@ static void check_sighting(const struct reac_disco_sighting *s, const uint8_t *f
 	 * (never our own echo); include/reac/reac_ctrlblk.h:38 (the block at [18:50])
 	 * mutant: src/reac_ctrlblk.c:262 `len < AUDIO_OFF` -> `len < 14`
 	 * input: short-filler-49
-	 * mutant: src/reac_disco.c:142 `p.src, 6` -> `p.src, 5`
+	 * mutant: src/reac_disco.c:143 `p.src, 6` -> `p.src, 5`
 	 * input: fixture-l1-box-hb
-	 * mutant: src/reac_disco.c:109 `memcmp(p.src, our_mac, 6) == 0` -> `0`
+	 * mutant: src/reac_disco.c:110 `memcmp(p.src, our_mac, 6) == 0` -> `0`
 	 * input: lock-and-gate
 	 */
 	if (len < 50 || memcmp(s->mac, frame + 6, 6) != 0 || memcmp(s->mac, our, 6) == 0)
@@ -204,9 +204,9 @@ static void check_sighting(const struct reac_disco_sighting *s, const uint8_t *f
 	            : s->channels != frame_channels(len))
 		abort();
 	/* The role is one of the three roles.
-	 * mutant: src/reac_disco.c:66 `REAC_DISCO_ROLE_BOX` -> `7`
+	 * mutant: src/reac_disco.c:67 `REAC_DISCO_ROLE_BOX` -> `7`
 	 * input: fixture-l1-box-hb
-	 * mutant: src/reac_disco.c:66 `REAC_DISCO_ROLE_BOX` -> `-1`
+	 * mutant: src/reac_disco.c:67 `REAC_DISCO_ROLE_BOX` -> `-1`
 	 * input: fixture-l1-box-hb
 	 */
 	if ((int)s->role < REAC_DISCO_ROLE_UNKNOWN || s->role > REAC_DISCO_ROLE_MASTER)
@@ -228,9 +228,9 @@ static void check_sighting(const struct reac_disco_sighting *s, const uint8_t *f
 		abort();
 	/* A declared width is at most REAC_MAX_CHANNELS.
 	 * contract: include/reac/reac_disco.h:89-91
-	 * mutant: src/reac_disco.c:161 `(uint8_t)ports.in_ch` -> `41`
+	 * mutant: src/reac_disco.c:162 `(uint8_t)ports.in_ch` -> `41`
 	 * input: fixture-l1-decl-82
-	 * mutant: src/reac_disco.c:162 `(uint8_t)ports.out_ch` -> `41`
+	 * mutant: src/reac_disco.c:163 `(uint8_t)ports.out_ch` -> `41`
 	 * input: fixture-l1-decl-82
 	 */
 	if (s->has_decl && (s->decl_in > REAC_MAX_CHANNELS || s->decl_out > REAC_MAX_CHANNELS))
@@ -249,7 +249,7 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 	uint32_t seq = t->seq;
 	int changed = reac_disco_table_observe(t, s, owned, now);
 	/* The return is 0 or 1.
-	 * mutant: src/reac_disco.c:354 `return 1;` -> `return 2;`
+	 * mutant: src/reac_disco.c:358 `return 1;` -> `return 2;`
 	 * input: fixture-l1-box-hb
 	 */
 	if (changed != 0 && changed != 1)
@@ -259,16 +259,16 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 	/* seq moves by the return; a refusal for room moves it once more, the first
 	 * time only (the table then says it is partial).
 	 * contract: include/reac/reac_disco.h:207, :210-212
-	 * mutant: src/reac_disco.c:325 `t->seq++;` -> `;`
+	 * mutant: src/reac_disco.c:328 `t->seq++;` -> `;`
 	 * input: desk-and-box
-	 * mutant: src/reac_disco.c:324 `if (changed)` -> `if (1)`
+	 * mutant: src/reac_disco.c:327 `if (changed)` -> `if (1)`
 	 * input: desk-and-box
 	 */
 	if (t->seq != seq + (uint32_t)changed + refused)
 		abort();
 	/* A BOX DOES NOT UN-PROVE ITSELF.
 	 * contract: include/reac/reac_disco.h:202-204
-	 * mutant: src/reac_disco.c:291 `e->role == REAC_DISCO_ROLE_BOX` -> `0`
+	 * mutant: src/reac_disco.c:294 `e->role == REAC_DISCO_ROLE_BOX` -> `0`
 	 * input: box-then-bye-table
 	 */
 	if (at >= 0 && old.role == REAC_DISCO_ROLE_BOX &&
@@ -299,13 +299,13 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 			want.owned = 1;
 		const struct reac_disco_entry *e = &t->e[at];
 		/* The known entry holds what the harness calculates, at the same place.
-		 * mutant: src/reac_disco.c:292 `e->role = s->role;` -> ``
+		 * mutant: src/reac_disco.c:295 `e->role = s->role;` -> ``
 		 * input: desk-and-box
-		 * mutant: src/reac_disco.c:298 `e->decl_in = s->decl_in;` -> ``
+		 * mutant: src/reac_disco.c:301 `e->decl_in = s->decl_in;` -> ``
 		 * input: desk-and-box
-		 * mutant: src/reac_disco.c:321 `e->owned = 1;` -> ``
+		 * mutant: src/reac_disco.c:324 `e->owned = 1;` -> ``
 		 * input: lock-and-gate
-		 * mutant: src/reac_disco.c:266 `e->last_seen_ns = now_ns;` -> ``
+		 * mutant: src/reac_disco.c:267 `e->last_seen_ns = now_ns;` -> ``
 		 * input: desk-and-box
 		 */
 		if (t->n != n || memcmp(e->mac, s->mac, 6) != 0 || e->role != want.role ||
@@ -322,7 +322,7 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 		              e->owned != old.owned;
 		/* The return is 1 exactly when a fact of the entry changed (a new time
 		 * alone is no change).
-		 * mutant: src/reac_disco.c:293 `changed = 1;` -> ``
+		 * mutant: src/reac_disco.c:296 `changed = 1;` -> ``
 		 * input: desk-and-box
 		 */
 		if (changed != differs)
@@ -332,9 +332,9 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 		/* A new MAC with room gets a new entry at the end, with the sighting's
 		 * facts and now as both times, and the return is 1.
 		 * contract: include/reac/reac_disco.h:209-210
-		 * mutant: src/reac_disco.c:349 `e->channels = s->channels;` -> `;`
+		 * mutant: src/reac_disco.c:352 `e->channels = s->channels;` -> `;`
 		 * input: fixture-l1-box-hb
-		 * mutant: src/reac_disco.c:350 `owned ? 1 : 0` -> `0`
+		 * mutant: src/reac_disco.c:353 `owned ? 1 : 0` -> `0`
 		 * input: nine-peers
 		 */
 		if (changed != 1 || t->n != n + 1 || memcmp(e->mac, s->mac, 6) != 0 ||
@@ -348,7 +348,7 @@ static void observe(struct reac_disco_table *t, const struct reac_disco_sighting
 		/* A new MAC on a full table is refused: no entry is added, the return is
 		 * 0, and the table says it overflowed.
 		 * contract: include/reac/reac_disco.h:210-212, :65 (REAC_DISCO_MAX)
-		 * mutant: src/reac_disco.c:334 `t->overflowed = 1;` -> `;`
+		 * mutant: src/reac_disco.c:337 `t->overflowed = 1;` -> `;`
 		 * input: nine-peers
 		 */
 		if (changed != 0 || t->n != n || !t->overflowed)
@@ -555,7 +555,7 @@ static void serialise(const struct reac_disco_table *t, uint64_t now, size_t cap
 	int r = reac_disco_table_json(t, now, buf, cap);
 	/* "sized so a full table always serializes rather than being suppressed":
 	 * with REAC_DISCO_JSON_MAX bytes, the serialisation is never refused.
-	 * mutant: src/reac_disco.c:391 `cap < 3` -> `cap < 2000`
+	 * mutant: src/reac_disco.c:395 `cap < 3` -> `cap < 2000`
 	 * input: fixture-l1-box-hb
 	 */
 	if (r == -1 && cap >= REAC_DISCO_JSON_MAX)
@@ -563,7 +563,7 @@ static void serialise(const struct reac_disco_table *t, uint64_t now, size_t cap
 	if (r != -1) {
 		/* A successful serialisation: its length fits the buffer, a NUL ends it,
 		 * it starts with '[' and ends with ']'.
-		 * mutant: src/reac_disco.c:417 `"]"` -> `""`
+		 * mutant: src/reac_disco.c:421 `"]"` -> `""`
 		 * input: fixture-l1-box-hb
 		 */
 		if (r < 2 || (size_t)r >= cap || buf[r] != '\0' || strlen(buf) != (size_t)r ||
@@ -572,13 +572,13 @@ static void serialise(const struct reac_disco_table *t, uint64_t now, size_t cap
 		struct jobj o[REAC_DISCO_MAX + 1];
 		int count = json_read(buf, (size_t)r, o, REAC_DISCO_MAX + 1);
 		/* It is one JSON array of objects.
-		 * mutant: src/reac_disco.c:397 `i ? "," : ""` -> `""`
+		 * mutant: src/reac_disco.c:401 `i ? "," : ""` -> `""`
 		 * input: desk-and-box
 		 */
 		if (count < 0)
 			abort();
 		/* One object for each table entry: never a truncated list.
-		 * mutant: src/reac_disco.c:394 `i < t->n` -> `i < t->n && i < 1`
+		 * mutant: src/reac_disco.c:398 `i < t->n` -> `i < t->n && i < 1`
 		 * input: desk-and-box
 		 */
 		if (count != t->n)
@@ -596,7 +596,7 @@ static void serialise(const struct reac_disco_table *t, uint64_t now, size_t cap
 			}
 			/* Each object's "mac" names a table entry (as aa:bb:cc:dd:ee:ff), and
 			 * no two objects name the same entry.
-			 * mutant: src/reac_disco.c:398 `e->mac[5]` -> `e->mac[4]`
+			 * mutant: src/reac_disco.c:402 `e->mac[5]` -> `e->mac[4]`
 			 * input: fixture-l1-box-hb
 			 */
 			if (at < 0 || used[at])
@@ -604,7 +604,7 @@ static void serialise(const struct reac_disco_table *t, uint64_t now, size_t cap
 			used[at] = 1;
 			const struct reac_disco_entry *e = &t->e[at];
 			/* Its "role" is the entry's role.
-			 * mutant: src/reac_disco.c:17 `"box"` -> `"master"`
+			 * mutant: src/reac_disco.c:18 `"box"` -> `"master"`
 			 * input: fixture-l1-box-hb
 			 */
 			if (!jtok_is(&o[i].role, 1, role_text(e->role)))
@@ -623,15 +623,15 @@ static void serialise(const struct reac_disco_table *t, uint64_t now, size_t cap
 			/* Its "model" is the token reac_box_name gives for the declaration, and
 			 * its "width" is the declared in x out; with no usable declaration they
 			 * are "unknown" and "0x0".
-			 * mutant: src/reac_disco.c:408 `tok` -> `nm`
+			 * mutant: src/reac_disco.c:412 `tok` -> `nm`
 			 * input: desk-and-box
-			 * mutant: src/reac_disco.c:409 `e->decl_in, e->decl_out` -> `e->decl_out, e->decl_in`
+			 * mutant: src/reac_disco.c:413 `e->decl_in, e->decl_out` -> `e->decl_out, e->decl_in`
 			 * input: fixture-l1-decl-82
 			 */
 			if (!jtok_is(&o[i].model, 1, model) || !jtok_is(&o[i].width, 1, width))
 				abort();
 			/* Its "owned" is the entry's owned flag, as true or false.
-			 * mutant: src/reac_disco.c:414 `e->owned ? "true" : "false"` -> `"false"`
+			 * mutant: src/reac_disco.c:418 `e->owned ? "true" : "false"` -> `"false"`
 			 * input: nine-peers-full-json
 			 */
 			if (!jtok_is(&o[i].owned, 3, e->owned ? "true" : "false"))
@@ -641,7 +641,7 @@ static void serialise(const struct reac_disco_table *t, uint64_t now, size_t cap
 			snprintf(age, sizeof age, "%llu", (unsigned long long)(age_ns / 1000000ULL));
 			/* Its "age_ms" is the time since the last sighting in whole ms, 0 when
 			 * the clock is before that sighting.
-			 * mutant: src/reac_disco.c:415 `1000000ULL` -> `1000ULL`
+			 * mutant: src/reac_disco.c:419 `1000000ULL` -> `1000ULL`
 			 * input: desk-and-box
 			 */
 			if (!jtok_is(&o[i].age_ms, 2, age))
@@ -704,16 +704,16 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			 * clock shows unheard for more than REAC_DISCO_STALE_NS. A clock that
 			 * stepped back makes no entry stale.
 			 * contract: include/reac/reac_disco.h:217-219, :70
-			 * mutant: src/reac_disco.c:363 `now_ns > t->e[i].last_seen_ns &&` -> ``
+			 * mutant: src/reac_disco.c:367 `now_ns > t->e[i].last_seen_ns &&` -> ``
 			 * input: box-then-clock-back
-			 * mutant: src/reac_disco.c:364 `REAC_DISCO_STALE_NS` -> `0`
+			 * mutant: src/reac_disco.c:368 `REAC_DISCO_STALE_NS` -> `0`
 			 * input: desk-and-box
 			 */
 			if (removed != stale || t.n != n - stale || left != 0)
 				abort();
 			/* seq moves once when the age removes any entry, else it stays.
 			 * contract: include/reac/reac_disco.h:219
-			 * mutant: src/reac_disco.c:373 `t->seq++;` -> `;`
+			 * mutant: src/reac_disco.c:377 `t->seq++;` -> `;`
 			 * input: desk-and-box
 			 */
 			if (t.seq != seq + (removed ? 1u : 0u))
@@ -722,7 +722,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			serialise(&t, now, k ? (k - 1) * 41 + 2 : REAC_DISCO_JSON_MAX);
 			int ch = reac_hunt_step(h, now);
 			/* The hunt step returns 0 or 1.
-			 * mutant: src/reac_hunt.c:268 `(v != h->verdict)` -> `2`
+			 * mutant: src/reac_hunt.c:306 `(v != h->verdict)` -> `2`
 			 * input: fixture-l1-box-hb
 			 */
 			if (ch != 0 && ch != 1)
@@ -755,7 +755,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			if (r >= 0) {
 				check_sighting(&s, frame, frame_clean_len(len), our, 1);
 				/* The hunt never answers MASTER for a MAC its table held as BOX.
-				 * mutant: src/reac_disco.c:291 `e->role == REAC_DISCO_ROLE_BOX` -> `0`
+				 * mutant: src/reac_disco.c:294 `e->role == REAC_DISCO_ROLE_BOX` -> `0`
 				 * input: box-0832-hunt-setup0
 				 * mutant: src/reac_hunt.c:82 `e->role` -> `s.role`
 				 * input: box-0832-hunt-setup0
@@ -768,7 +768,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			int r = (op & 3) == 0 ? reac_disco_classify(frame, len, our, &s)
 			                      : reac_disco_classify_on_segment(&lock, frame, len, our, &s);
 			/* Classify returns 0 or -1.
-			 * mutant: src/reac_disco.c:173 `return 0;` -> `return 1;`
+			 * mutant: src/reac_disco.c:174 `return 0;` -> `return 1;`
 			 * input: fixture-l1-box-hb
 			 */
 			if (r != 0 && r != -1)
@@ -777,7 +777,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				check_sighting(&s, frame, len, our, 0);
 				int push = reac_disco_gate_should_push(&g, &s, now);
 				/* The gate returns 0 or 1.
-				 * mutant: src/reac_disco.c:244 `return 1;` -> `return 2;`
+				 * mutant: src/reac_disco.c:245 `return 1;` -> `return 2;`
 				 * input: fixture-l1-box-hb
 				 */
 				if (push != 0 && push != 1)

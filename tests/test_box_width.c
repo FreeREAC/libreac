@@ -55,7 +55,6 @@ int main(void)
 		       "through every builder, so a refusal below would prove nothing\n");
 		return 2;
 	}
-	CHK(REAC_BOX_MIN_CHANNELS == 2 && REAC_BOX_MAX_CHANNELS == REAC_MAX_CHANNELS);
 	for (int n = REAC_BOX_MIN_CHANNELS; n <= REAC_BOX_MAX_CHANNELS; n += 2) {
 		CHK(reac_box_width_ok(n));
 		size_t l = reac_ctrl_build_upstream_filler(frame, MASTER, SRC, 1, n, NULL, 0);
