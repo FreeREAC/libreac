@@ -53,6 +53,16 @@ int reac_frame_ring_init(struct reac_frame_ring *r, uint32_t slots, uint32_t slo
 {
 	memset(r, 0, sizeof *r);
 	uint32_t n = next_pow2(slots);
+	/* Refuse what the ring cannot hold, before anything is allocated. next_pow2
+	 * wraps to 0 when the power-of-two ceiling exceeds UINT32_MAX: a 0-slot
+	 * calloc (non-NULL under glibc) with mask 0xFFFFFFFF, and the first push
+	 * writes far outside it (reac_ring_init guards the same case). The slot must
+	 * hold one frame, its length rides a u16, and the byte count must fit size_t
+	 * (the SIZE_MAX test can only fire on 32-bit targets: with slot_sz <= UINT16_MAX
+	 * and n <= 2^31 the product is below 2^47). */
+	if (slots == 0 || n == 0 || slot_sz < REAC_FRAME_BYTES || slot_sz > UINT16_MAX ||
+	    (size_t)n > SIZE_MAX / slot_sz)
+		return -1;
 	r->buf = calloc((size_t)n * slot_sz, 1);
 	r->len = calloc(n, sizeof *r->len);
 	if (!r->buf || !r->len) {
