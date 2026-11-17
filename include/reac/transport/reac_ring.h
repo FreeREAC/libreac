@@ -37,6 +37,15 @@ struct reac_ring {
 	_Atomic uint32_t tail;   /* consumer reads here (next valid slot)  */
 	_Atomic uint64_t underruns; /* RT-side: quanta that had to be silenced */
 	_Atomic uint64_t overruns;  /* feeder-side: frames dropped (ring full)  */
+	_Atomic uint64_t refused;   /* either side: calls refused at the door
+	                             * (NULL planar / dst / plane); readable off the RT thread */
+	_Atomic uint64_t spsc_violations; /* two writers or two readers caught inside the
+	                             * ring at once, or (REAC_RING_CHECK_SPSC builds) a
+	                             * second thread on a side; 0 in a correct program */
+	_Atomic uint32_t writer_busy;     /* 1 while a write is inside the ring */
+	_Atomic uint32_t reader_busy;     /* 1 while a read/trim is inside the ring */
+	_Atomic uint64_t writer_tid;      /* REAC_RING_CHECK_SPSC builds only: first writer */
+	_Atomic uint64_t reader_tid;      /* REAC_RING_CHECK_SPSC builds only: first reader */
 };
 
 /* Allocate a ring holding `capacity_frames` per channel (rounded up to a power
@@ -75,10 +84,24 @@ uint32_t reac_ring_writable(const struct reac_ring *r);
 uint32_t reac_ring_write(struct reac_ring *r, const float *planar, uint32_t n,
                          uint32_t src_channels);
 
-/* CONSUMER (PipeWire process()). Pop `n` per-channel samples into PipeWire's
+/* THE DOOR. Every entry point (write, read_planar, trim) refuses, before it
+ * touches the ring, a NULL ring, a NULL buffer the call needs (planar, dst, or one
+ * of the first min(channels, ring channels) planes of dst), and a second thread on
+ * a side that already has one inside (SPSC: one writer, one reader). A refusal
+ * returns 0, moves neither head nor tail, and is counted: `refused` for a NULL,
+ * `spsc_violations` for a second thread. It never logs, allocates or aborts, so it
+ * is safe on the RT thread. A caller that does not read the return can read the
+ * two counters. The door sees pointers, not lengths: each plane must hold n floats.
+ *
+ * CONSUMER (PipeWire process()). Pop `n` per-channel samples into PipeWire's
  * planar output `dst[c]` buffers (one pointer per channel). On underrun the
  * shortfall is zero-filled and `underruns` is bumped. Returns frames that were
- * real audio (n - shortfall). REALTIME-SAFE: no locks, no syscalls. */
+ * real audio (n - shortfall). A REFUSED read (the door above) returns 0 and ALSO
+ * zero-fills every non-NULL plane among the first min(channels, ring channels) (all
+ * `channels` when there is no ring), n
+ * floats each: the caller hands the planes on whatever the return, so a refusal
+ * must not leave them as it found them. A NULL dst, or a NULL plane, has nothing
+ * to fill. REALTIME-SAFE: no locks, no syscalls. */
 uint32_t reac_ring_read_planar(struct reac_ring *r, float *const *dst, uint32_t channels, uint32_t n);
 
 /* CONSUMER-side latency trim. Drop the OLDEST samples so at most `keep`
