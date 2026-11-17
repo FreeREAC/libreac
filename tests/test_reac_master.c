@@ -438,7 +438,7 @@ int main(void)
 	CHK(m.state == REAC_M_IDLE);
 	uint16_t cnt = 0;
 	int idx;
-	long n_probe = 0, n_sub01 = 0, n_sub02 = 0, n_ann = 0, n_grant = 0, n_cm = 0, n_ident = 0;
+	long n_probe = 0, n_sub01 = 0, n_sub02 = 0, n_ann = 0, n_grant = 0, n_cm = 0;
 	int cm_seen[REAC_CHANMAP_RING_LEN] = { 0 };                    /* which sweep windows were emitted */
 	/* One chanmap window per control cycle (fps*10778/4000 slots ≈ 2.69 s), so
 	 * the 49-window sweep needs 49 cycles ≈ 132 s — soak 140 s (~52 cycles) to
@@ -465,8 +465,7 @@ int main(void)
 		case REAC_M_EMIT_ANNOUNCE: n_ann++;   break;
 		case REAC_M_EMIT_CHANMAP:  n_cm++; CHK(idx >= 0 && idx < 49); cm_seen[idx] = 1; break;
 		case REAC_M_EMIT_GRANT:    n_grant++; break;
-		case REAC_M_EMIT_IDENTITY_POLL:   /* the re-poll for a box that has not answered: a RQ1, not a grant */
-			n_ident++; CHK(idx >= 0 && idx < REAC_GRANT_GROUPB_LEN); break;
+		case REAC_M_EMIT_IDENTITY_POLL: CHK(0); break;   /* ESTABLISHED-only re-poll; never while PROBING */
 		case REAC_M_EMIT_FILLER:   break;
 		}
 	}
@@ -480,7 +479,6 @@ int main(void)
 	CHK(n_sub02 >= 50 && n_sub02 <= 53);        /* sub02: once per cycle */
 	CHK(n_cm    >= 50 && n_cm    <= 53);        /* chanmap: ONE window per cycle */
 	CHK(n_ann   >= 138 && n_ann  <= 141);       /* cfea free-runs at ~1/s */
-	CHK(n_ident > 0 && n_ident <= (long)REAC_M_IDENTITY_POLLS * REAC_GRANT_GROUPB_LEN * 141);  /* armed once a second, six RQ1s each */
 
 	/* ---- (a2) transfer choreography: the "specials" are the VALIDATED tags -----
 	 * What an earlier RE transcribed as one-off "inventory specials" at in-burst
