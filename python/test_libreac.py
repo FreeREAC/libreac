@@ -15,6 +15,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import libreac  # noqa: E402
 
+
+class Skip(Exception):
+    """This test could not run here (an arm needs something absent): not a pass, not a failure."""
+
 MASTER = bytes.fromhex("0040ab000001")
 BOX = bytes.fromhex("0040abc4803b")
 
@@ -107,13 +111,13 @@ def test_the_grammar_accepts_every_frame_libreac_builds():
 
     SKIPS when the grammar is unreachable, and says so — an absent grammar is
     not a clean grammar, and reporting it as a pass is the exact failure this
-    project keeps paying for.
+    project keeps paying for. The runner below turns a skip into exit 77, which
+    tests/run-test.sh reports as SKIP and logs for tools/skip-gate.sh.
     """
     from libreac import ksy
 
     if not ksy.available():
-        print(f"     SKIP: {ksy.reason_unavailable()}")
-        return
+        raise Skip(ksy.reason_unavailable())
 
     checked = 0
     for name, fn in CTRL_BUILDERS:
@@ -165,13 +169,17 @@ def test_every_known_box_resolves_to_a_display_name():
 
 if __name__ == "__main__":
     fns = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_")]
-    failed = 0
+    failed = skipped = 0
     for name, fn in fns:
         try:
             fn()
             print(f"ok   {name}")
+        except Skip as why:
+            skipped += 1
+            print(f"SKIP {name}: {why}")
         except Exception as exc:  # noqa: BLE001
             failed += 1
             print(f"FAIL {name}: {exc}")
-    print(f"\n{len(fns) - failed} passed, {failed} failed")
-    sys.exit(1 if failed else 0)
+    print(f"\n{len(fns) - failed - skipped} passed, {skipped} skipped, {failed} failed")
+    # A skip is not a pass: 77 is tests/run-test.sh's SKIP (nothing of that test ran).
+    sys.exit(1 if failed else 77 if skipped else 0)

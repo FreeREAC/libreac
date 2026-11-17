@@ -202,8 +202,8 @@ courtship_probe tap_probe: %: tests/%.c $(MOVED_TEST_DEPS) libreac-transport.a l
 hunt-captures: test_reac_hunt_captures
 	$(RUN_TEST) ./test_reac_hunt_captures
 
-test: tests/test_rx_ppm.c transport/src/reac_rx_ppm.h tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_braid_width.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H) $(MOVED_UNIT_BINS)
-	@mkdir -p $(BUILD_DIR); rm -f $(SKIP_LOG)
+test: tests/test_rx_ppm.c transport/src/reac_rx_ppm.h tests/test_reac_knock.c tests/test_reac_tapwait.c tests/test_reac_etf.c tests/test_reac_etf_qdisc.c tests/test_reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.c transport/src/reac_etf_hwstamp.h transport/src/reac_etf.c transport/src/reac_etf.h transport/src/reac_etf_qdisc.c include/reac/transport/reac_etf_qdisc.h tests/test_abi_layout.c tests/abi-layout.inc tests/test_master_capture.c tests/test_master_carriers.c tests/test_link.c tests/test_reac.c tests/test_capture.c tests/test_braid.c tests/test_upstream.c tests/test_encode.c tests/test_braid_width.c tests/test_decode.c tests/test_ports.c tests/test_grant_width.c tests/test_headamp_replay.c tests/test_box_table.c tests/test_box_0832.c tests/box_0832_fixtures.inc tests/test_ctrl.c tests/test_facts.c tests/test_identity.c tests/test_box_facts.c tests/test_no_getenv_conformance.c tests/test_wire_invariants.c tests/wire-invariants.inc tests/test_sniffer_binds_first.c tests/test_code.c tests/conformance-python-soname.sh tests/conformance-python-binding-env.sh tests/python-binding.sh python/libreac/__init__.py libreac.a $(FACTS_ASSERT_H) $(MOVED_UNIT_BINS)
+	@mkdir -p $(BUILD_DIR); : > $(SKIP_LOG)
 	$(CC) $(CFLAGS) $(INC) tests/test_reac.c libreac.a -lm -o test_reac
 	$(RUN_TEST) ./test_reac
 	$(CC) $(CFLAGS) $(INC) tests/test_capture.c libreac.a -lm -o test_capture
@@ -392,6 +392,8 @@ test: tests/test_rx_ppm.c transport/src/reac_rx_ppm.h tests/test_reac_knock.c te
 	# THE PYTHON BINDING'S OWN TESTS, against a shared object built from this tree (they were
 	# written and wired into nothing). REAC_PROTOCOL lets its grammar arm find reac.ksy's parser.
 	REAC_PROTOCOL=$(REAC_PROTOCOL) $(RUN_TEST) tests/python-binding.sh
+	# ...AND IT KEEPS REAC_PROTOCOL through `env -i`, and a skipped grammar arm exits 77 (it used to print SKIP and pass).
+	$(RUN_TEST) tests/conformance-python-binding-env.sh
 	$(RUN_TEST) tools/ops-slugs.sh --self-test
 	# THE PEER-BINDING COMPARISON REFUSES WHAT NOTHING EXPLAINS (no captures needed; the
 	# whole-corpus run is `make peer-replay`).

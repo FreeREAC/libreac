@@ -24,5 +24,12 @@ mkdir -p "$B"
 	-Wl,-soname,"libreac.so.$abi" "$ROOT"/src/*.c -lm -o "$B/libreac.so.$version"
 ln -sf "libreac.so.$version" "$B/libreac.so.$abi"
 
+# The Makefile hands it relative to the tree (../reac-protocol); the run below happens in $B.
+[ -z "${REAC_PROTOCOL:-}" ] || REAC_PROTOCOL=$(cd "$ROOT" && cd "$REAC_PROTOCOL" 2>/dev/null && pwd || printf '%s' "$REAC_PROTOCOL")
 cd "$B"
+# env -i keeps the run clean of the caller's environment, but the grammar arm finds reac.ksy's parser
+# through REAC_PROTOCOL: drop it and that arm looks only at ../../../reac-protocol and skips quietly.
+if [ -n "${REAC_PROTOCOL:-}" ]; then
+	exec env -i PATH="$PATH" LD_LIBRARY_PATH="$B" REAC_PROTOCOL="$REAC_PROTOCOL" "$PYTHON" "$ROOT/python/test_libreac.py"
+fi
 exec env -i PATH="$PATH" LD_LIBRARY_PATH="$B" "$PYTHON" "$ROOT/python/test_libreac.py"
