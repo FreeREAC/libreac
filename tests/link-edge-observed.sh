@@ -79,5 +79,4 @@ esac
 	exit 1
 }
 
-echo "OK: a real carrier up/down/up on a real interface is reported as exactly three edges, "\
-"in order, from the kernel's own RTM_NEWLINK messages"
+echo "OK: a real carrier up/down/up on a real interface is reported as exactly three edges, in order, from the kernel's own RTM_NEWLINK messages"

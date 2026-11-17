@@ -136,7 +136,9 @@ static int box_on_m_once(struct reac_hunt *h, uint64_t now)
 #define STREAMED(fn, ...) do { int r_ = fn##_once(h, __VA_ARGS__, now); \
 	for (int k_ = 1; k_ < STREAM_COPIES; k_++) { \
 		int c_ = fn##_once(h, __VA_ARGS__, now + (uint64_t)k_ * STREAM_GAP_NS); \
-		if (c_ < 0) return c_; r_ = r_ || c_; } \
+		if (c_ < 0) \
+			return c_; \
+		r_ = r_ || c_; } \
 	return r_; } while (0)
 static int desk_headamp_only(struct reac_hunt *h, const uint8_t src[6], uint64_t now)
 { STREAMED(desk_headamp_only, src); }

@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 #
+# shellcheck shell=bash
+#
 # Sourced by the shell tests: every REAC protocol number as FACT_<NAME>, read from
 # tests/facts/reac_facts.h (held to reac-protocol by `make facts-drift-check`) by
 # tools/facts-env.py. Exported, so an `unshare ... bash -s` body inherits them.

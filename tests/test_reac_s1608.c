@@ -70,14 +70,6 @@ static int check_all_checksums(const struct reac_master *m)
 	return 0;
 }
 
-static const uint8_t *gold_probe(int phase, uint8_t sub)
-{
-	for (int i = 0; i < GOLD_PROBE_VARIANTS; i++)
-		if (GOLD_PROBES[i].phase == phase && GOLD_PROBES[i].sub == sub)
-			return GOLD_PROBES[i].blk;
-	return NULL;
-}
-
 /* SCENE-CHUNK SEQUENCE + FILLER-descriptor tracking — the behaviour that decides
  * whether a real box will talk to us at all. The burst slots carry the body of
  * the scene push, so the "rotation" an earlier RE described is just the body's

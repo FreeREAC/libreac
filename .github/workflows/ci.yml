@@ -16,7 +16,7 @@ jobs:
           git init -q ../reac-protocol
           git -C ../reac-protocol fetch -q --depth 1 https://github.com/FreeREAC/reac-protocol.git 3713dca9969733abbd8032329a7d0eb979a67250
           git -C ../reac-protocol checkout -q FETCH_HEAD
-          python3 -c 'import yaml' || sudo apt-get install -y -q python3-yaml
+          python3 -c 'import yaml' || { sudo apt-get update -q && sudo apt-get install -y -q python3-yaml; }
       - name: Build + unit tests
         run: make test SANITIZE=1 REAC_REQUIRE_FACTS_GATE=1
       # The transport suite. Its namespace/veth test

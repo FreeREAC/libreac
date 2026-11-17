@@ -249,7 +249,6 @@ int main(void)
 		return 1;
 	}
 	printf("test_reac_pacer_knob: REACPW_PACER is per-segment, environment over "
-	       "files, SILENT MEANS ETF, an explicit value always carries a layer, and "
-	       "both knobs are documented\n");
+	       "files, SILENT MEANS ETF, and an explicit value always carries a layer\n");
 	return 0;
 }

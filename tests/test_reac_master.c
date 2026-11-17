@@ -53,14 +53,6 @@
  * [16:50] (type[2] + block[32]) — the master MUST stamp exactly these, with our
  * MAC substituted into the cfea. ONE copy, shared with test_reac_s1608.c. */
 #include "reac_m300_golden.inc"
-/* The header and the final chunk of the scene push, transcribed off a real desk
- * LONG BEFORE the transfer was understood — which is what makes them an oracle
- * here: the chunker must reproduce both from the recovered body alone. */
-static const uint8_t GOLD_SUB01[34] =
- { 0xcd,0xea,0x01,0x01,0x00,0x18,0x00,0x22,0xc8,0x31,0x32,0x33,0x34,0x01,0x00,0x00,0x00,0x04,0x00,0x01,0x80,0x02,0x00,0x01,0x00,0x01,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0xa7 };
-static const uint8_t GOLD_SUB02[34] =
- { 0xcd,0xea,0x01,0x02,0x00,0x0e,0x00,0x03,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x03,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0xe7 };
-
 /* The byte-verified zoneA-48k S-1608 cold-connect block (what a real box sends
  * as its JOIN; the master must echo it verbatim as the grant). */
 static const uint8_t ZONEA_JOIN[32] = {
@@ -446,7 +438,7 @@ int main(void)
 	CHK(m.state == REAC_M_IDLE);
 	uint16_t cnt = 0;
 	int idx;
-	long n_probe = 0, n_sub01 = 0, n_sub02 = 0, n_ann = 0, n_grant = 0, n_cm = 0;
+	long n_probe = 0, n_sub01 = 0, n_sub02 = 0, n_ann = 0, n_grant = 0, n_cm = 0, n_ident = 0;
 	int cm_seen[REAC_CHANMAP_RING_LEN] = { 0 };                    /* which sweep windows were emitted */
 	/* One chanmap window per control cycle (fps*10778/4000 slots ≈ 2.69 s), so
 	 * the 49-window sweep needs 49 cycles ≈ 132 s — soak 140 s (~52 cycles) to
@@ -473,6 +465,8 @@ int main(void)
 		case REAC_M_EMIT_ANNOUNCE: n_ann++;   break;
 		case REAC_M_EMIT_CHANMAP:  n_cm++; CHK(idx >= 0 && idx < 49); cm_seen[idx] = 1; break;
 		case REAC_M_EMIT_GRANT:    n_grant++; break;
+		case REAC_M_EMIT_IDENTITY_POLL:   /* the re-poll for a box that has not answered: a RQ1, not a grant */
+			n_ident++; CHK(idx >= 0 && idx < REAC_GRANT_GROUPB_LEN); break;
 		case REAC_M_EMIT_FILLER:   break;
 		}
 	}
@@ -486,6 +480,7 @@ int main(void)
 	CHK(n_sub02 >= 50 && n_sub02 <= 53);        /* sub02: once per cycle */
 	CHK(n_cm    >= 50 && n_cm    <= 53);        /* chanmap: ONE window per cycle */
 	CHK(n_ann   >= 138 && n_ann  <= 141);       /* cfea free-runs at ~1/s */
+	CHK(n_ident > 0 && n_ident <= (long)REAC_M_IDENTITY_POLLS * REAC_GRANT_GROUPB_LEN * 141);  /* armed once a second, six RQ1s each */
 
 	/* ---- (a2) transfer choreography: the "specials" are the VALIDATED tags -----
 	 * What an earlier RE transcribed as one-off "inventory specials" at in-burst
