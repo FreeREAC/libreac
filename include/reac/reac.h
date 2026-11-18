@@ -280,6 +280,16 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
+ * 1.12.0: THE HARDWARE LAUNCH, AND A SEGMENT IS A PHYSICAL NIC (FreeREAC/libreac#64, #65).
+ *        reac_etf_qdisc_install_offload / reac_etf_qdisc_offloaded install and read back the
+ *        hardware-launch form (mqprio + etf offload), all or nothing; the ETF socket carries
+ *        REAC_ETF_QDISC_PRIO so its frames reach that queue; reac_pacer_launch_stamps_arm /
+ *        reac_pacer_launch_stamps sample the NIC's TX hardware stamps against each frame's
+ *        launch time (struct reac_pacer_launch_stamps is new and the caller's own).
+ *        reac_ifscan admits only a physical NIC or a VLAN on one, read from sysfs
+ *        (reac_ifscan_is_physical); reac_ifscan_set_allow_virtual opts one in. The head-amp
+ *        record is documented role-blind. ADDED symbols only: no struct or symbol moves or
+ *        changes size, LIBREAC_ABI stays 7 and libreac-transport.so stays .7.
  * 1.11.0: AN ABI BREAK (LIBREAC_ABI 6 -> 7, libreac.so.7), AND THE BOUND BOX DECIDES.
  *        struct pcap_source gains skipped_oversized (sizeof 24 -> 32): pcap_source_next
  *        counts the records larger than the buffer it skips, and the capture tools print
@@ -411,7 +421,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * break. `reac_master_tunables_set`, `reac_pacer_tunables_set` and
  * `reac_transport_tunables_set` are ADDED symbols only; LIBREAC_ABI stays 4. */
 #define LIBREAC_VERSION_MAJOR 1
-#define LIBREAC_VERSION_MINOR 11
+#define LIBREAC_VERSION_MINOR 12
 #define LIBREAC_VERSION_PATCH 0
 
 /* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
