@@ -17,7 +17,7 @@ jobs:
         run: make test-transport
 
   # The same two suites in a Fedora container of each release the RPMs are built for (the shared build-rpm
-  # workflow's 44 and 45): the Ubuntu job above proves the sources, this proves the release's own target, its
+  # workflow's Fedora 45): the Ubuntu job above proves the sources, this proves the release's own target, its
   # compiler and its libc. The container is --privileged because the transport suite mints user and net
   # namespaces and veth pairs, which Docker's default seccomp profile refuses; the runner's kernel modules a
   # namespace may not autoload are loaded on the host first, by name.
@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        fedora: [44, 45]
+        fedora: [45]
     steps:
       - uses: actions/checkout@v4
       - name: Prepare the host for namespace tests
@@ -64,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        fedora: [44, 45]
+        fedora: [45]
     container: fedora:${{ matrix.fedora }}
     steps:
       - name: Install the build tools
