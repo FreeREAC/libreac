@@ -36,6 +36,7 @@ static void pacer_hw_take(struct msghdr *m, void *ctx);   /* the drain hands it 
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>     /* htons */
+#include "reac_rx_ppm.h"   /* the one ppm -> int-milli saturation (also update_ppm's) */
 
 /* ---- lock-free SPSC frame ring (whole encoded frames) -------------------- */
 
@@ -52,6 +53,16 @@ int reac_frame_ring_init(struct reac_frame_ring *r, uint32_t slots, uint32_t slo
 {
 	memset(r, 0, sizeof *r);
 	uint32_t n = next_pow2(slots);
+	/* Refuse what the ring cannot hold, before anything is allocated. next_pow2
+	 * wraps to 0 when the power-of-two ceiling exceeds UINT32_MAX: a 0-slot
+	 * calloc (non-NULL under glibc) with mask 0xFFFFFFFF, and the first push
+	 * writes far outside it (reac_ring_init guards the same case). The slot must
+	 * hold one frame, its length rides a u16, and the byte count must fit size_t
+	 * (the SIZE_MAX test can only fire on 32-bit targets: with slot_sz <= UINT16_MAX
+	 * and n <= 2^31 the product is below 2^47). */
+	if (slots == 0 || n == 0 || slot_sz < REAC_FRAME_BYTES || slot_sz > UINT16_MAX ||
+	    (size_t)n > SIZE_MAX / slot_sz)
+		return -1;
 	r->buf = calloc((size_t)n * slot_sz, 1);
 	r->len = calloc(n, sizeof *r->len);
 	if (!r->buf || !r->len) {
@@ -1433,7 +1444,7 @@ void reac_pacer_clock_publish_graph(struct reac_pacer *p, const char *name, int 
 		return;
 	enum reac_clock_quality q = reac_clock_grade_name(name, clock_ref);
 	reac_pacer_clock_publish(p, REAC_CLOCK_SRC_GRAPH, 1,
-	                         (int)(reac_clock_ppm_from_rate_diff(rate_diff) * 1000.0),
+	                         reac_rx_ppm_to_milli(reac_clock_ppm_from_rate_diff(rate_diff)),
 	                         name, q, nsec);
 }
 

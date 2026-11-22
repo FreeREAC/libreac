@@ -313,6 +313,12 @@ static void gen_decode(void)
 		snprintf(name, sizeof name, "downstream-program-custom-%ux12", WIDE[i]);
 		emit("decode", name, &s);
 	}
+	/* a width the decoder takes (even, 42 x 8 x 3 = 1008 bytes inside the region)
+	 * and the braid encoder refuses (past REAC_BOX_MAX_CHANNELS): the refusal
+	 * branch of the round trip, where a legal width must never land */
+	put8(&s, 3); put8(&s, 42); put8(&s, 8);
+	put(&s, g_frame, program_frame(g_frame, 0x1006));
+	emit("decode", "downstream-program-custom-42x8", &s);
 	/* the plain silent downstream and its FCS-residue twin */
 	put8(&s, 1); put8(&s, 0); put8(&s, 0);
 	put(&s, g_frame, (size_t)reac_downstream_build(g_frame, NULL, 0, 0, 7, DESK));
@@ -371,7 +377,9 @@ static void gen_decode(void)
 		}
 		memset(g_frame, 0, sizeof UP8);
 		memcpy(g_frame, UP8, REAC_L2_HEADER_LEN);
-		reac_braid_encode(g_frame + REAC_L2_HEADER_LEN, 8, planar, 8, REAC_SAMPLES_PER_PKT);
+		if (reac_braid_encode(g_frame + REAC_L2_HEADER_LEN, sizeof g_frame - REAC_L2_HEADER_LEN, 8,
+		                      planar, 8, REAC_SAMPLES_PER_PKT) < 0)
+			abort();
 		g_frame[sizeof UP8 - 2] = REAC_END_MARKER_0;
 		g_frame[sizeof UP8 - 1] = REAC_END_MARKER_1;
 		put8(&s, 1); put8(&s, 0); put8(&s, 0);
