@@ -192,7 +192,19 @@ make test
   tun/tap or macvlan unless reac_ifscan_set_allow_virtual names it.
 - The head-amp record is role-blind; libreac-transport's dependency on libreac
   carries a ceiling (#57).
-- Added symbols only: LIBREAC_ABI stays 7, both sonames unchanged.
+- rx (#70): update_ppm saturates ppm_error_milli at INT_MAX/INT_MIN and refuses
+  a non-finite estimate (0), which no longer bumps ppm_seq; the graph clock's
+  ppm_milli (reac_pacer_clock_publish_graph) goes through the same saturation.
+- reac_braid_encode (#71) takes audio_len and returns 0 written or -1 refused (a
+  NULL region, a width not even 2..40, a buffer shorter than n_ch * 36) before
+  its first write; a signature change made with no version or soname change,
+  under the owner decisions of 2026-11-16.
+- reac_frame_ring_init (#72) refuses a request the ring cannot hold: a zero or
+  rounding-overflowing slot count, a slot smaller than one frame or wider than
+  the u16 length field, or a byte count that overflows size_t.
+- Releases publish to the FreeREAC channel (FreeREAC/freereac.github.io), signed
+  by the FreeREAC release key (#79).
+- #64 and #65 add symbols only: LIBREAC_ABI stays 7, both sonames unchanged.
 
 * Thu Nov 05 2026 Pau Aliagas <linuxnow@gmail.com> - 1.11.0-1
 - ABI break: struct pcap_source gains skipped_oversized, so libreac.so.6 becomes
