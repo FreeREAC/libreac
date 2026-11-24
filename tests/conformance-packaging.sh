@@ -33,7 +33,10 @@ check() {
 	spec_abi=$(awk '/^%global abi[ \t]/ { print $3; exit }' "$spec")
 	spec_tabi=$(awk '/^%global tabi[ \t]/ { print $3; exit }' "$spec")
 	deb_ver=$(sed -n '1s/^[^ ]* (\([^)]*\)).*/\1/p' "$t/debian/changelog")
-	deb_ver=${deb_ver%%~*}   # an untagged CI build stamps ~git<sha> on the top entry; the release version is before it
+	# A run not at a release tag stamps the top entry: build-deb.yml's dry run and staged snapshot are
+	# <version>+git<time>.<sha> (above the release), its bootstrap package <version>~git<time>.<sha>
+	# (below it). The release version is before either stamp.
+	deb_ver=${deb_ver%%[+~]git*}
 	deb_abi=$(sed -n 's/^Package: libreac\([0-9][0-9]*\)$/\1/p' "$t/debian/control")
 	deb_tabi=$(sed -n 's/^Package: libreac-transport\([0-9][0-9]*\)$/\1/p' "$t/debian/control")
 	rules_tabi=$(sed -n 's/^TABI *= *//p' "$t/debian/rules")
@@ -72,6 +75,23 @@ sed -i 's/^Version: .*/Version:        0.0.1/; s/^%global abi .*/%global abi 99/
 sed -i 's/\(^Build-Depends:.*\)python3/\1python3-missing/' "$P/bad/debian/control"
 if ! check "$P/good" >/dev/null; then
 	echo "NOT A RESULT: the planted conforming tree was refused"; check "$P/good"; exit 2
+fi
+# The same tree as build-deb.yml stamps it outside a release tag, both ways, must conform too.
+for stamp in '+git1795538786.71135ed' '~git1795538786.71135ed'; do
+	plant stamped
+	sed -i "1s/^\([^ ]* (\)\([^)]*\))/\1\2$stamp)/" "$P/stamped/debian/changelog"
+	if ! check "$P/stamped" >/dev/null; then
+		echo "NOT A RESULT: the planted tree stamped $stamp was refused"; check "$P/stamped"; exit 2
+	fi
+	rm -rf "$P/stamped"
+done
+# ...and a stamp does not hide a drifted version under it.
+plant stamped
+sed -i '1s/^\([^ ]* (\)[^)]*)/\10.0.1+git1795538786.71135ed)/' "$P/stamped/debian/changelog"
+if check "$P/stamped" | grep -q 'debian/changelog says 0.0.1,'; then
+	rm -rf "$P/stamped"
+else
+	echo "NOT A RESULT: a drifted version under a +git stamp was accepted"; exit 2
 fi
 out=$(check "$P/bad")
 if [ $? -eq 0 ]; then
