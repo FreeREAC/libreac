@@ -4,7 +4,7 @@
 /* Read REAC frames from a classic pcap file (off-site dev / test source).
  *
  * Pairs with reac-tools' fixture writer. Classic libpcap only (magic
- * 0xA1B2C3D4 / swapped), link-type 1 (Ethernet). Yields full ethernet frames
+ * 0xA1B2C3D4, little-endian; any other magic is refused), link-type 1 (Ethernet). Yields full ethernet frames
  * so the same reac_decode path runs as for live AF_PACKET capture.
  */
 #ifndef PCAP_SOURCE_H
@@ -16,7 +16,6 @@
 
 struct pcap_source {
 	FILE *f;
-	int swapped;        /* byte-swap per-packet headers                     */
 	uint32_t last_orig_len;  /* origlen of the record pcap_source_next just
 	                          * returned. A CAPTURE TAKEN WITH A SNAPLEN
 	                          * HANDS BACK A SHORT BUFFER THAT IS NOT A SHORT

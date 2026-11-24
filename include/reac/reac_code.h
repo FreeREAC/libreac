@@ -12,9 +12,7 @@
  * Header-only, so linking against this changes no ABI. THIS IS THE ONE LIST: every
  * token reac-pw prints is declared here too, so a consumer's copy becomes a thin
  * `#include <reac/reac_code.h>`, and tests/conformance-declared-once.sh refuses a
- * second REAC_CODE_LIST or a token typed anywhere else. A token is appended, never
- * inserted: the enumerators' values are what a consumer built against an older header
- * compiled in.
+ * second REAC_CODE_LIST or a token typed anywhere else.
  *
  * X-MACRO so the enum, the token table and any enumeration (a conformance test that
  * lists every token) derive from ONE list and cannot drift apart. */
@@ -43,8 +41,7 @@
 	X(RC_E_ETF_REFUSED,     "E_ETF_REFUSED") \
 	X(RC_S_KNOB_IGNORED,    "S_KNOB_IGNORED") \
 	X(RC_S_HEADAMP_SUPPRESSED, "S_HEADAMP_SUPPRESSED") \
-	/* refusals / failures — reac-pw's own, appended so every enumerator above keeps \
-	 * its value */ \
+	/* refusals / failures — reac-pw's own */ \
 	X(RC_E_LINK_BUDGET,     "E_LINK_BUDGET") \
 	/* A listener still held a node pair where it must not have, or an open that \
 	 * failed had already built one: the pair is destroyed at the code, so the ghost \

@@ -202,7 +202,7 @@ struct reac_console_cfg {
 	                         * console width, #130 — that ring is the HEAD-AMP
 	                         * space, not the 40-slot audio fabric, see
 	                         * reac_slots.h.)                                 */
-	uint8_t console_field;  /* THE PACE CODE (reac_pace_code, <reac/reac.h>):
+	uint8_t pace_code;  /* THE PACE CODE (reac_pace_code, <reac/reac.h>):
 	                         * 0 = 48 kHz, 1 = 96 kHz, 2 = 44.1 kHz. The master
 	                         * writes this ONE value into all four of its rate
 	                         * carriers — the cfea announce byte [19], the ENROLL
@@ -214,7 +214,7 @@ struct reac_console_cfg {
 
 /* The IDLE console: what the master announces about itself before any box has
  * declared itself on the wire. out_channels is the cfea width byte's placeholder
- * (0x08, the value every captured desk announces while unlinked); console_field 0
+ * (0x08, the value every captured desk announces while unlinked); pace_code 0
  * is the 48 kHz pace code. reac_master_init(cfg == NULL) uses this.
  *
  * It declares NO BOX. There is deliberately no in_channels here any more: a box
@@ -222,13 +222,13 @@ struct reac_console_cfg {
  * be the origin of the grant allocation and hence of every head-amp slot address
  * (see reac_master_init). */
 #define REAC_CONSOLE_CFG_IDLE \
-	((struct reac_console_cfg){ .out_channels = 8, .console_field = 0 })
+	((struct reac_console_cfg){ .out_channels = 8, .pace_code = 0 })
 
 /* A MIXER PROFILE — which desk reac-pw impersonates, by name and by the
- * console_field value that name's REAC menu would show at its default rate.
+ * pace_code value that name's REAC menu would show at its default rate.
  * The grant burst is box-defined (a box locks to any valid grant), so name,
  * display string and this default are the only per-profile data; the pacer
- * overwrites console_field with reac_pace_code(--rate) on every open and
+ * overwrites pace_code with reac_pace_code(--rate) on every open and
  * re-establishment (transport/reac_pacer.c), so this field never reaches the
  * wire unchanged. The source MAC is NOT a profile field: the master emits
  * from THIS NIC's own address (reac_mac.h; the conformance suite pins
@@ -238,7 +238,7 @@ struct reac_console_cfg {
 struct reac_mixer_profile {
 	const char *name;        /* CLI token: "m200" | "m300" | "m5000"          */
 	const char *display;     /* "M-200" ...                                   */
-	uint8_t     console_field; /* this profile's default pace code; see above */
+	uint8_t     pace_code; /* this profile's default pace code; see above */
 };
 
 /* Look up a profile by CLI token; NULL if unknown. */
@@ -261,11 +261,11 @@ const struct reac_mixer_profile *reac_mixer_profile_at(int i);
  *
  * A DIVERGENCE IS OPEN AGAINST THIS LAW, measured 2026-08-21 and reproducible:
  * with `--rate 96000` our TX paced 8001 fps under both profiles, and the S-0808
- * returned 8006 fps (96 kHz) with console_field 0x01 but 4002 fps (48 kHz)
- * with console_field 0x00 — the box halved its return, and the resulting
+ * returned 8006 fps (96 kHz) with pace_code 0x01 but 4002 fps (48 kHz)
+ * with pace_code 0x00 — the box halved its return, and the resulting
  * two-pace mismatch is audible as granulated, saturated audio. Our side obeys
  * the setting; the box does not follow it. Unexplained, and NOT a licence to
- * re-derive a rule where --mixer or console_field alone selects the rate: it
+ * re-derive a rule where --mixer or pace_code alone selects the rate: it
  * is filed as a divergence, not a design.
  *
  * `requested` is the --rate value (0 = unset/auto). Returns the rate reac-pw
@@ -284,7 +284,7 @@ int reac_mixer_resolve_rate(const struct reac_mixer_profile *mixer, int requeste
  *
  * --mixer selects which desk's OTHER identity reac-pw impersonates (its name,
  * its MAC pattern); it never sets this byte directly. The pacer stamps
- * reac_pace_code(fps) into cfg.console_field on every open and
+ * reac_pace_code(fps) into cfg.pace_code on every open and
  * re-establishment, driven by --rate alone (reac_pacer_open,
  * transport/reac_pacer.c). */
 
@@ -460,7 +460,7 @@ struct reac_master {
 	uint8_t  announce_blk[34];
 
 	/* Per-instance ENROLL (cdea 01 03 000d): the pace-code byte [8] =
-	 * cfg.console_field (0 = 48 kHz, 1 = 96 kHz, 2 = 44.1 kHz). */
+	 * cfg.pace_code (0 = 48 kHz, 1 = 96 kHz, 2 = 44.1 kHz). */
 	uint8_t  enroll_blk[34];
 
 	/* THE IDENTITY RE-POLL (1.7.0). The grant sweep's six identity RQ1s can reach a

@@ -42,7 +42,7 @@ norec=
 funcs() {
 	case $1 in
 	decode) echo src/reac_decode.c src/reac_upstream.c src/reac.c :: \
-		reac_frame_inspect reac_decode reac_decode_plain_le reac_upstream_channels \
+		reac_frame_inspect reac_decode reac_upstream_channels \
 		reac_upstream_decode reac_frame_is_reac reac_frame_counter reac_frame_clean_len ;;
 	ctrl) echo src/reac_ctrlblk.c src/reac_ctrl.c src/reac_ports.c :: \
 		reac_ctrl_parse kind_of_link1 reac_ctrl_kind_name reac_ctrl_checksum_verify \

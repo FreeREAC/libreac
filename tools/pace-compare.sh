@@ -13,8 +13,6 @@
 # thread computed while only having to be EARLY. So there are three arms:
 #
 #   thread   clock_nanosleep + sendto. The egress instant is the thread's wake.
-#            (Named `userspace` before the ETF arm existed; both spellings are
-#            accepted so an older --out directory still prints.)
 #   etf      SO_TXTIME + SCM_TXTIME on an exact CLOCK_TAI grid + the etf qdisc.
 #            Still reac-pw's own thread, still one process -- what moved is who
 #            decides the instant. docs/ETF-PACING.md has its preconditions.
@@ -71,7 +69,7 @@ while [ $# -gt 0 ]; do
 	--unit) UNIT=$2; shift 2 ;;
 	--src) SRC=$2; shift 2 ;;
 	--arms) ARMS=${2//,/ }; shift 2 ;;
-	--prepare-thread|--prepare-userspace) PREPARE[thread]=$2; PREPARE[userspace]=$2; shift 2 ;;
+	--prepare-thread) PREPARE[thread]=$2; shift 2 ;;
 	--prepare-etf) PREPARE[etf]=$2; shift 2 ;;
 	--prepare-kmod) PREPARE[kmod]=$2; shift 2 ;;
 	--table) TABLE_ONLY=$2; shift 2 ;;

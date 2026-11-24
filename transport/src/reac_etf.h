@@ -53,7 +53,7 @@
  * than discovered on the wire.
  *
  * Private to transport/src: nothing here is installed, so all of it is backend
- * state that no public struct grows for (the ABI layout ratchet, tests/abi-layout.inc). */
+ * state that no public struct grows for. */
 #ifndef REAC_ETF_H
 #define REAC_ETF_H
 

@@ -41,11 +41,10 @@ static int builders_that_build(int n)
 	built += reac_ctrl_build_coldconnect_0013(frame, MASTER, SRC, 1, n, NULL, 0) > 0;
 	built += reac_ctrl_build_coldconnect_0016(frame, MASTER, SRC, 1, n, NULL, 0) > 0;
 	built += reac_ctrl_build_coldconnect_001a(frame, MASTER, SRC, 1, n, NULL, 0) > 0;
-	built += reac_ctrl_build_config_announce(frame, MASTER, SRC, 1, n) > 0;
 	built += reac_ctrl_build_config_announce_box_master(frame, MASTER, SRC, 1, n) > 0;
 	return built;
 }
-#define N_BUILDERS 10
+#define N_BUILDERS 9
 
 int main(void)
 {

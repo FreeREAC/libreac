@@ -4,8 +4,7 @@
 /* Unit test: the offline wire sources — pcap_source (the pcap reader every RE
  * workflow replays through) and reac_capture's unprivileged error contract.
  *
- * pcap_source round-trip: write a classic pcap (both native-LE and
- * byte-swapped per-packet headers) of known REAC-shaped frames, read it back
+ * pcap_source round-trip: write a classic little-endian pcap of known REAC-shaped frames, read it back
  * through the real pcap_source and require byte-equal frames, correct
  * lengths, correct timestamps, EOF -> 0. Negatives: a bad magic and a
  * truncated global header refuse to open; a truncated record body errors; an
@@ -156,9 +155,14 @@ int main(void)
 	write_pcap(p1, 0, 0);
 	check_roundtrip(p1, "le");
 
-	/* 2. round-trip, byte-swapped headers (the reader's swap path) */
+	/* 2. a capture written in the opposite byte order is refused, as any file that is not
+	 * a classic little-endian pcap is: there is no swap path to read it through */
 	write_pcap(p2, 1, 0);
-	check_roundtrip(p2, "swapped");
+	{
+		struct pcap_source ps;
+		CHECK(pcap_source_open(&ps, p2) != 0, "swapped: a byte-swapped pcap was opened");
+		CHECK(ps.f == NULL, "swapped: the refused file was left open");
+	}
 
 	/* 3. oversized record between frames: skipped, stream stays aligned */
 	{
@@ -438,7 +442,7 @@ int main(void)
 	rmdir(dir);
 
 	if (fails == 0)
-		printf("OK: pcap_source round-trip (LE + swapped), jumbo skip and count, "
+		printf("OK: pcap_source round-trip (LE; a swapped one is refused), jumbo skip and count, "
 		       "silent, malformed rejects; reac_capture unprivileged error contract\n");
 	else
 		printf("%d capture test(s) failed\n", fails);

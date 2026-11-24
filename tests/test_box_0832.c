@@ -147,7 +147,7 @@ int main(void)
 	/* ---- ARM 4: the grant reaches ESTABLISHED and SUSTAINS ---- */
 	const int fps = 8000;
 	struct reac_console_cfg cfg = { .out_channels = 8,
-	                                .console_field = reac_pace_code(fps) };
+	                                .pace_code = reac_pace_code(fps) };
 	struct reac_master m;
 	reac_master_init(&m, BOX_0832_OUR, &cfg, fps);
 
