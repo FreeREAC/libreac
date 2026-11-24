@@ -1,6 +1,6 @@
 name: release
 
-# Packages through the shared release workflows of Open-Mixer/.github. A tag v<version> builds signed RPMs (Fedora 44, x86_64 and aarch64) and DEBs (Debian bookworm and
+# Packages through the shared release workflows of Open-Mixer/.github. A tag v<version> builds signed RPMs (Fedora 45, x86_64 and aarch64) and DEBs (Debian bookworm and
 # trixie, amd64 and arm64), publishes them to the FreeREAC channel (FreeREAC/freereac.github.io, signed by its one key) and attaches them to the GitHub
 # release. Any other run, a dispatch on a branch, is a dry run: it
 # builds and lints everything and publishes nothing.
