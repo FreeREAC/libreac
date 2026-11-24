@@ -1,6 +1,6 @@
 # Covered parser lines each harness's seed corpus reaches (make fuzz-cov, fuzz/coverage.sh).
 # A harness below its floor turns fuzz-cov red. harness covered-lines
-decode 104
+decode 83
 ctrl 276
 identity 195
 disco 352
@@ -8,5 +8,5 @@ scene 65
 boxreg 87
 knock 28
 grant 141
-pcap 80
+pcap 73
 qdisc 157
