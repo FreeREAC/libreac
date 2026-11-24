@@ -25,6 +25,7 @@
 #include <reac/reac_sample.h>
 #include <reac/reac_code.h>      /* reac_code_emit — the capture-open-failed line */
 #include "reac_transport_tunables_priv.h"  /* the daemon's REAC_DEBUG override */
+#include "reac_rx_ppm.h"                  /* ppm -> published ppm_error_milli */
 
 static uint64_t mono_ns(void)
 {
@@ -228,10 +229,15 @@ static void update_ppm(struct reac_rx *rx, uint16_t counter, uint64_t now_ns)
 		double obs_pps = (double)rx->ppm_win_frames * 1e9 / (double)dt;
 		double nom_pps = (double)rx->sample_rate / REAC_SAMPLES_PER_PKT;
 		double ppm = (obs_pps - nom_pps) / nom_pps * 1e6;
-		atomic_store_explicit(&rx->ppm_error_milli, (int)(ppm * 1000.0), memory_order_relaxed);
-		/* Release, after the value: a consumer that keys off the seq must never see
-		 * a bumped counter vouching for a stale estimate. */
-		atomic_fetch_add_explicit(&rx->ppm_seq, 1, memory_order_release);
+		/* A non-finite estimate (a zero sample rate) is no estimate: publish nothing and
+		 * leave ppm_seq alone, so the counter only ever vouches for a measured value.
+		 * The window below still restarts. */
+		if (isfinite(ppm)) {
+			atomic_store_explicit(&rx->ppm_error_milli, reac_rx_ppm_to_milli(ppm), memory_order_relaxed);
+			/* Release, after the value: a consumer that keys off the seq must never see
+			 * a bumped counter vouching for a stale estimate. */
+			atomic_fetch_add_explicit(&rx->ppm_seq, 1, memory_order_release);
+		}
 		rx->ppm_win_start_ns = now_ns;
 		rx->ppm_win_frames = 0;
 	}
