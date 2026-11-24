@@ -128,9 +128,9 @@ static void check_groupa(const uint8_t row[34], uint8_t ch, uint8_t param,
 	 * value is tx's cell when set, else the default)
 	 * mutant: src/reac_ctrlblk.c:326 `REAC_CTRL_HEADAMP` -> `REAC_CTRL_GRANT`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1468 `base + c` -> `base + c - 1`
+	 * mutant: src/reac_ctrlblk.c:1461 `base + c` -> `base + c - 1`
 	 * input: box-base0-w8
-	 * mutant: src/reac_ctrlblk.c:1462 `base, p, values[p]` -> `base, p ^ (p < 2), values[p]`
+	 * mutant: src/reac_ctrlblk.c:1455 `base, p, values[p]` -> `base, p ^ (p < 2), values[p]`
 	 * input: box-base0-w8
 	 * mutant: src/reac_grant.c:168 `reac_grant_headamp_value(tx, ch, p);` -> `w == REAC_GRANT_MAX_WIDTH ? 0 : reac_grant_headamp_value(tx, ch, p);`
 	 * input: box-base0-w40-rows128
@@ -303,9 +303,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		/* The sweep has SWEEP_LEN(width) rows, and is refused when the buffer is
 		 * smaller.
 		 * contract: include/reac/reac_grant.h:62-65, :96-98
-		 * mutant: src/reac_ctrlblk.c:1433 `max < n` -> `max <= n`
+		 * mutant: src/reac_ctrlblk.c:1426 `max < n` -> `max <= n`
 		 * input: box-base0-w40-rows128
-		 * mutant: src/reac_ctrlblk.c:1474 `return k;` -> `return k + 1;`
+		 * mutant: src/reac_ctrlblk.c:1467 `return k;` -> `return k + 1;`
 		 * input: box-base0-w8 */
 		if (n != (rows >= want ? want : -1))
 			abort();
@@ -314,9 +314,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				check_row(sweep[k]);
 			/* Row 0 is HEAD_ACK and row 4 is HEAD_MARK, byte for byte. Both frames
 			 * pass check_row, so only this check sees them swapped.
-			 * mutant: src/reac_ctrlblk.c:1460 `GRANT_HEAD_ACK` -> `GRANT_HEAD_MARK`
+			 * mutant: src/reac_ctrlblk.c:1453 `GRANT_HEAD_ACK` -> `GRANT_HEAD_MARK`
 			 * input: box-base0-w8
-			 * mutant: src/reac_ctrlblk.c:1464 `GRANT_HEAD_MARK` -> `GRANT_HEAD_ACK`
+			 * mutant: src/reac_ctrlblk.c:1457 `GRANT_HEAD_MARK` -> `GRANT_HEAD_ACK`
 			 * input: box-base0-w8 */
 			if (memcmp(sweep[0], HEAD_ACK, 34) != 0 || memcmp(sweep[4], HEAD_MARK, 34) != 0)
 				abort();
@@ -333,9 +333,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 			for (int i = 0; i < REAC_GRANT_GROUPB_LEN; i++) {
 				uint8_t poll[34];
 				/* Group B is the identity poll, byte for byte.
-				 * mutant: src/reac_ctrlblk.c:1466 `GRANT_GROUPB[i]` -> `GRANT_GROUPB[5 - i]`
+				 * mutant: src/reac_ctrlblk.c:1459 `GRANT_GROUPB[i]` -> `GRANT_GROUPB[5 - i]`
 				 * input: box-base0-w8
-				 * mutant: src/reac_ctrlblk.c:1346 `i >= REAC_GRANT_GROUPB_LEN` -> `i >= REAC_GRANT_GROUPB_LEN - 1`
+				 * mutant: src/reac_ctrlblk.c:1339 `i >= REAC_GRANT_GROUPB_LEN` -> `i >= REAC_GRANT_GROUPB_LEN - 1`
 				 * input: box-base0-w8 */
 				if (reac_ctrl_identity_poll_block(i, poll) != 0 ||
 				    memcmp(poll, sweep[5 + i], 34) != 0)
@@ -348,9 +348,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 				 * contract: include/reac/reac_ctrlblk.h:611-613 (0x0000 (4),
 				 * 0x0600 (8), 0x1000 (17), 0x1011 (9), 0x1100 (17), 0x1111 (9)),
 				 * include/reac/reac_grant.h:17 (marker 12 11, TAG 05 00)
-				 * mutant: src/reac_ctrlblk.c:1336 `0x00, 0x00, 0x04, 0x77` -> `0x04, 0x00, 0x00, 0x77`
+				 * mutant: src/reac_ctrlblk.c:1329 `0x00, 0x00, 0x04, 0x77` -> `0x04, 0x00, 0x00, 0x77`
 				 * input: box-base0-w8
-				 * mutant: src/reac_ctrlblk.c:1338 `0x10, 0x00, 0x11, 0x5a` -> `0x10, 0x01, 0x10, 0x5a`
+				 * mutant: src/reac_ctrlblk.c:1331 `0x10, 0x00, 0x11, 0x5a` -> `0x10, 0x01, 0x10, 0x5a`
 				 * input: box-base0-w8 */
 				if (memcmp(sweep[5 + i] + 16, (const uint8_t[]){ 0x12, 0x11, 0x05, 0x00 }, 4) != 0 ||
 				    memcmp(sweep[5 + i] + 20, POLL[i], 3) != 0)

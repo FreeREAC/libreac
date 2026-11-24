@@ -1,4 +1,4 @@
-Breaks the check of fuzz/fuzz_pcap.c:150 (a record pcap_source_next hands back fits the caller's buffer).
+Breaks the check of fuzz/fuzz_pcap.c:141 (a record pcap_source_next hands back fits the caller's buffer).
 Caught by the seed input "record-one-byte-over-cap" of fuzz_pcap.
 
 diff --git a/src/pcap_source.c b/src/pcap_source.c

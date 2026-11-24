@@ -86,9 +86,9 @@ static void check_braid(const uint8_t *audio, const uint8_t *pcm, int nch, int n
 	/* The decoders follow the documented braid, for every geometry they accept.
 	 * A decoder accepts only nch * ns * 3 <= 1440, so each group lies inside the
 	 * region.
-	 * mutant: include/reac/reac_braid.h:60 `pos[0] = g + 3; pos[1] = g + 0;` -> `pos[0] = g + 0; pos[1] = g + 3;`
+	 * mutant: include/reac/reac_braid.h:59 `pos[0] = g + 3; pos[1] = g + 0;` -> `pos[0] = g + 0; pos[1] = g + 3;`
 	 * input: downstream-program-48k
-	 * mutant: include/reac/reac_braid.h:62 `pos[1] = g + 5; pos[2] = g + 2;` -> `pos[1] = g + 2; pos[2] = g + 5;`
+	 * mutant: include/reac/reac_braid.h:61 `pos[1] = g + 5; pos[2] = g + 2;` -> `pos[1] = g + 2; pos[2] = g + 5;`
 	 * input: upstream-program-8ch
 	 * mutant: src/reac_decode.c:78 `reac_braid_pos(s,` -> `reac_braid_pos(s % 12,`
 	 * input: downstream-program-custom-20x24 */

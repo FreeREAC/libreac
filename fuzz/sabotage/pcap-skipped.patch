@@ -1,4 +1,4 @@
-Breaks the check of fuzz/fuzz_pcap.c:299 (the source counts each record larger than the buffer that the reader meets, FreeREAC/libreac#35).
+Breaks the check of fuzz/fuzz_pcap.c:288 (the source counts each record larger than the buffer that the reader meets, FreeREAC/libreac#35).
 Caught by the seed input "two-oversized" of fuzz_pcap.
 
 diff --git a/src/pcap_source.c b/src/pcap_source.c
