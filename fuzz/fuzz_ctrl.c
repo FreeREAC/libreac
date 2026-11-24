@@ -357,31 +357,31 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 	memcpy(&before, frag, sizeof before);
 	r = reac_ctrl_identity_fragment(frag, frame, len, &addr, &pl, &pll);
 	/* identity_fragment returns -1 only for a NULL argument.
-	 * mutant: src/reac_ctrlblk.c:1363 `return 0;` -> `return -2;`
+	 * mutant: src/reac_ctrlblk.c:1356 `return 0;` -> `return -2;`
 	 * input: fixture-filler */
 	if (r < 0)
 		abort();
 	/* A frame whose block checksum does not close is corrupt: it neither opens
 	 * nor closes a record, so the reassembly state does not change.
-	 * mutant: src/reac_ctrlblk.c:1369 `!= 0` -> `< -1`
+	 * mutant: src/reac_ctrlblk.c:1362 `!= 0` -> `< -1`
 	 * input: breakages */
 	if (!sum_ok && memcmp(&before, frag, sizeof before) != 0)
 		abort();
 	if (r == 1) {
 		/* The payload, record checksum and f7 are inside the buffer.
-		 * mutant: src/reac_ctrlblk.c:1396 `&r[11]` -> `&r[60]`
+		 * mutant: src/reac_ctrlblk.c:1389 `&r[11]` -> `&r[60]`
 		 * input: fixtures-all */
 		if (!inside(pl, pll + 2, frag->buf, sizeof frag->buf))
 			abort();
 		/* The payload starts after f0 41 dev 00 00 12 12 05 00 addr(2).
-		 * mutant: src/reac_ctrlblk.c:1396 `&r[11]` -> `&r[12]`
+		 * mutant: src/reac_ctrlblk.c:1389 `&r[11]` -> `&r[12]`
 		 * input: fixtures-all */
 		if (pl != frag->buf + 11)
 			abort();
 		/* The reassembled record TAG(2) ADDR(2) PAYLOAD CKSUM sums to 0 mod 128.
 		 * mutant: src/reac_ctrlblk.c:73 `((s & 0x7f) == 0) ? 0 : -1` -> `0`
 		 * input: frag-inner-checksum
-		 * mutant: src/reac_ctrlblk.c:1393 `!= 0` -> `< -1`
+		 * mutant: src/reac_ctrlblk.c:1386 `!= 0` -> `< -1`
 		 * input: breakages */
 		if (!record_sum_closes(frag->buf + 7, pll + 5))
 			abort();
@@ -391,9 +391,9 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		 * contract: reac.ksy:1905-1920 (the FIRST and LAST bodies, joined, are one
 		 * SysEx: f0 41 0a 00 00 12 12 05 00, then addr_lo);
 		 * include/reac/reac_ctrlblk.h:620-628 (the joined SysEx is a DT1 on tag 0x0500)
-		 * mutant: src/reac_ctrlblk.c:1395 `| r[10]` -> ``
+		 * mutant: src/reac_ctrlblk.c:1388 `| r[10]` -> ``
 		 * input: frag-addr-1011
-		 * mutant: src/reac_ctrlblk.c:1374 `f->len = (uint8_t)n;` -> `f->len = (uint8_t)(n + 1);`
+		 * mutant: src/reac_ctrlblk.c:1367 `f->len = (uint8_t)n;` -> `f->len = (uint8_t)(n + 1);`
 		 * input: frag-first-10-addr-1011 */
 		if (!first->have || addr != (uint16_t)(joined_byte(first, blk, 9) << 8 |
 		                                       joined_byte(first, blk, 10)))
@@ -458,9 +458,9 @@ static void fuzz_frame(const uint8_t *frame, size_t len, const uint8_t our[6],
 		 * frame[34..40) sum to 0 mod 128.
 		 * mutant: src/reac_ctrlblk.c:73 `((s & 0x7f) == 0) ? 0 : -1` -> `0`
 		 * input: breakages
-		 * mutant: src/reac_ctrlblk.c:1319 `frame[REAC_CTRL_BLOCK_OFF] != REAC_LINK_RECORD` -> `0`
+		 * mutant: src/reac_ctrlblk.c:1312 `frame[REAC_CTRL_BLOCK_OFF] != REAC_LINK_RECORD` -> `0`
 		 * input: fixture-l1-box-hb
-		 * mutant: src/reac_ctrlblk.c:1322 `HEADAMP_REC_OFF` -> `HEADAMP_REC_OFF + 1`
+		 * mutant: src/reac_ctrlblk.c:1315 `HEADAMP_REC_OFF` -> `HEADAMP_REC_OFF + 1`
 		 * input: fixture-l4-headamp */
 		if (reac_ctrl_headamp_record_verify(frame) != want_v)
 			abort();
@@ -541,11 +541,11 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 		 * it: each block when the two widths are box widths, but the two name
 		 * fragments only when the row has an identity record.
 		 * contract: include/reac/reac_ctrlblk.h:513-515, :524-526
-		 * mutant: src/reac_ctrlblk.c:1225 `return CTRL_CONFIG_ANNOUNCE;` -> `return -1;`
+		 * mutant: src/reac_ctrlblk.c:1218 `return CTRL_CONFIG_ANNOUNCE;` -> `return -1;`
 		 * input: round-trip-s1608
-		 * mutant: src/reac_ctrlblk.c:1226 `return CTRL_COLDCONNECT;` -> `return -1;`
+		 * mutant: src/reac_ctrlblk.c:1219 `return CTRL_COLDCONNECT;` -> `return -1;`
 		 * input: round-trip-s1608
-		 * mutant: src/reac_ctrlblk.c:1227 `return CTRL_COLDCONNECT_0013;` -> `return -1;`
+		 * mutant: src/reac_ctrlblk.c:1220 `return CTRL_COLDCONNECT_0013;` -> `return -1;`
 		 * input: round-trip-s1608
 		 * mutant: src/reac_ctrlblk.c:833 `return m->has_identity_record;` -> `return 1;`
 		 * input: round-trip-s1608 */
@@ -618,7 +618,7 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 			/* The FIRST fragment is a fragment, and it is kept, not closed.
 			 * mutant: src/reac_ctrlblk.c:314 `REAC_CTRL_RECORD_FRAGMENT` -> `REAC_CTRL_GRANT`
 			 * input: round-trip-s0808
-			 * mutant: src/reac_ctrlblk.c:1376 `return 0;` -> `return 1;`
+			 * mutant: src/reac_ctrlblk.c:1369 `return 0;` -> `return 1;`
 			 * input: round-trip-s0808 */
 			if (k != REAC_CTRL_RECORD_FRAGMENT ||
 			    reac_ctrl_identity_fragment(&frag, frame, n, &addr, &pl, &pll) != 0)
@@ -628,7 +628,7 @@ static void round_trip(const struct reac_box_model *m, const uint8_t our[6], uin
 			/* The LAST fragment closes the record, and ingest takes it.
 			 * mutant: src/reac_ctrlblk.c:309 `out->seg != REAC_SEG_SINGLE` -> `out->seg == REAC_SEG_FIRST`
 			 * input: round-trip-s0808
-			 * mutant: src/reac_ctrlblk.c:1398 `return 1;` -> `return 0;`
+			 * mutant: src/reac_ctrlblk.c:1391 `return 1;` -> `return 0;`
 			 * input: round-trip-s0808
 			 * mutant: src/reac_identity.c:55 `return 1;` -> `return 0;`
 			 * input: round-trip-s0808 */
@@ -715,7 +715,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 		uint8_t code = 0xee, blk[32] = { 0 };
 		/* mutant: src/reac_ctrlblk.c:349 `return -1;` -> `return 0;`
 		 * input: fixture-filler
-		 * mutant: src/reac_ctrlblk.c:1357 `return -1;` -> `return 0;`
+		 * mutant: src/reac_ctrlblk.c:1350 `return -1;` -> `return 0;`
 		 * input: fixture-filler
 		 * mutant: src/reac_ports.c:12 `return -1;` -> `return 0;`
 		 * input: fixture-filler

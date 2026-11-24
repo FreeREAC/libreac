@@ -1131,28 +1131,19 @@ static void gen_grant(void)
 }
 
 /* ---- pcap files, built from fixture frames ---- */
-static void pcap_header(struct seed *s, int swap)
+static void pcap_header(struct seed *s)
 {
 	uint32_t h[6] = { 0xa1b2c3d4u, 2 | 4u << 16, 0, 0, 65535, 1 };
-	for (int i = 0; i < 6; i++) {
-		uint32_t v = h[i];
-		if (swap)
-			v = __builtin_bswap32(v);
-		put32(s, v);
-	}
-	if (!swap)
-		return;
-	/* the version halves are two u16, swapped as such */
-	s->p[s->n - 20] = 0x00; s->p[s->n - 19] = 0x02;
-	s->p[s->n - 18] = 0x00; s->p[s->n - 17] = 0x04;
+	for (int i = 0; i < 6; i++)
+		put32(s, h[i]);
 }
 
-static void pcap_record(struct seed *s, int swap, uint32_t sec, uint32_t usec,
+static void pcap_record(struct seed *s, uint32_t sec, uint32_t usec,
                         const uint8_t *p, size_t incl, size_t orig)
 {
 	uint32_t h[4] = { sec, usec, (uint32_t)incl, (uint32_t)orig };
 	for (int i = 0; i < 4; i++)
-		put32(s, swap ? __builtin_bswap32(h[i]) : h[i]);
+		put32(s, h[i]);
 	put(s, p, incl);
 }
 
@@ -1160,36 +1151,36 @@ static void gen_pcap(void)
 {
 	struct seed s = { 0 };
 	uint8_t tagged[REAC_FRAME_BYTES + 4];
-	for (int swap = 0; swap < 2; swap++) {
+	{
 		/* cap 1496: every frame fits */
 		put8(&s, 187);
-		pcap_header(&s, swap);
+		pcap_header(&s);
 		for (size_t i = 0; i < N_FIXTURES; i++) {
 			size_t n = fixture_frame(g_frame, &FIXTURES[i], (uint16_t)i);
-			pcap_record(&s, swap, 1700000000u, (uint32_t)i * 250, g_frame, n, n);
+			pcap_record(&s, 1700000000u, (uint32_t)i * 250, g_frame, n, n);
 		}
-		emit("pcap", swap ? "fixtures-swapped" : "fixtures", &s);
+		emit("pcap", "fixtures", &s);
 	}
 	/* the 0832 session as a mirror port on a trunk hands it back: VLAN 13 tagged */
 	put8(&s, 187);
-	pcap_header(&s, 0);
+	pcap_header(&s);
 	for (size_t i = 0; i < BOX_0832_N; i++) {
 		size_t n = frame_0832(g_frame, &BOX_0832_FRAMES[i]);
 		memcpy(tagged, g_frame, 12);
 		tagged[12] = 0x81; tagged[13] = 0x00; tagged[14] = 0x00; tagged[15] = 13;
 		memcpy(tagged + 16, g_frame + 12, n - 12);
-		pcap_record(&s, 0, 1758085200u, (uint32_t)i, tagged, n + 4, n + 4);
+		pcap_record(&s, 1758085200u, (uint32_t)i, tagged, n + 4, n + 4);
 	}
 	emit("pcap", "box-0832-vlan13", &s);
 	/* a snaplen capture, a record bigger than the buffer, then a cut record */
 	put8(&s, 44);   /* cap 352: room for an 8-wide return, not for a downstream */
-	pcap_header(&s, 0);
+	pcap_header(&s);
 	size_t n = program_frame(g_frame, 1);
-	pcap_record(&s, 0, 1, 2, g_frame, 64, n);
-	pcap_record(&s, 0, 1, 3, g_frame, n, n);
+	pcap_record(&s, 1, 2, g_frame, 64, n);
+	pcap_record(&s, 1, 3, g_frame, n, n);
 	n = fixture_frame(g_frame, &FIXTURES[8], 9);
-	pcap_record(&s, 0, 1, 4, g_frame, n, n);
-	pcap_record(&s, 0, 1, 5, g_frame, n, n);
+	pcap_record(&s, 1, 4, g_frame, n, n);
+	pcap_record(&s, 1, 5, g_frame, n, n);
 	s.n -= 100;
 	emit("pcap", "snaplen-oversized-truncated", &s);
 	/* not a pcap at all: a pcapng section header */
@@ -1202,62 +1193,62 @@ static void gen_pcap(void)
 	emit("pcap", "pcapng-refused", &s);
 	/* half a global header */
 	put8(&s, 187);
-	pcap_header(&s, 0);
+	pcap_header(&s);
 	s.n -= 10;
 	emit("pcap", "half-global-header", &s);
 	/* a global header and nothing else, then half a record header */
 	put8(&s, 187);
-	pcap_header(&s, 0);
+	pcap_header(&s);
 	emit("pcap", "header-only", &s);
 	put8(&s, 187);
-	pcap_header(&s, 0);
+	pcap_header(&s);
 	put32(&s, 1); put32(&s, 2);
 	emit("pcap", "half-record-header", &s);
 	/* a record too big for the buffer, cut short inside its own body */
 	put8(&s, 4);
-	pcap_header(&s, 0);
+	pcap_header(&s);
 	n = fixture_frame(g_frame, &FIXTURES[8], 9);
-	pcap_record(&s, 0, 1, 2, g_frame, n, n);
+	pcap_record(&s, 1, 2, g_frame, n, n);
 	s.n -= 10;
 	emit("pcap", "oversized-cut", &s);
 	/* an 8-byte buffer: a 9-byte record one byte over it, alone and then followed by
 	 * a record that fits; and two equal 1-byte records */
 	static const uint8_t NINE[9] = { 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18 };
 	put8(&s, 1);
-	pcap_header(&s, 0);
-	pcap_record(&s, 0, 1, 0, NINE, sizeof NINE, sizeof NINE);
+	pcap_header(&s);
+	pcap_record(&s, 1, 0, NINE, sizeof NINE, sizeof NINE);
 	emit("pcap", "record-one-byte-over-cap", &s);
 	put8(&s, 1);
-	pcap_header(&s, 0);
-	pcap_record(&s, 0, 1, 2, NINE, sizeof NINE, sizeof NINE);
-	pcap_record(&s, 0, 1, 3, (const uint8_t *)"\x42", 1, 1);
+	pcap_header(&s);
+	pcap_record(&s, 1, 2, NINE, sizeof NINE, sizeof NINE);
+	pcap_record(&s, 1, 3, (const uint8_t *)"\x42", 1, 1);
 	emit("pcap", "skipped-then-small", &s);
 	put8(&s, 1);
-	pcap_header(&s, 0);
-	pcap_record(&s, 0, 1, 2, (const uint8_t *)"A", 1, 1);
-	pcap_record(&s, 0, 1, 2, (const uint8_t *)"A", 1, 1);
+	pcap_header(&s);
+	pcap_record(&s, 1, 2, (const uint8_t *)"A", 1, 1);
+	pcap_record(&s, 1, 2, (const uint8_t *)"A", 1, 1);
 	emit("pcap", "two-equal-records", &s);
 	/* a record of 0 bytes, then a 1-byte record: the empty one is skipped, so the
 	 * walk hands back the second and ends at the end of the file */
 	put8(&s, 1);
-	pcap_header(&s, 0);
-	pcap_record(&s, 0, 1, 2, (const uint8_t *)"", 0, 0);
-	pcap_record(&s, 0, 1, 3, (const uint8_t *)"\x42", 1, 1);
+	pcap_header(&s);
+	pcap_record(&s, 1, 2, (const uint8_t *)"", 0, 0);
+	pcap_record(&s, 1, 3, (const uint8_t *)"\x42", 1, 1);
 	emit("pcap", "empty-record-then-frame", &s);
 	/* two records larger than an 8-byte buffer, around one that fits: the reader counts
 	 * the first on the way to the record it hands back and the second on the way to
 	 * the end of the file, so skipped_oversized reads 2 (FreeREAC/libreac#35) */
 	put8(&s, 1);
-	pcap_header(&s, 0);
-	pcap_record(&s, 0, 1, 2, NINE, sizeof NINE, sizeof NINE);
-	pcap_record(&s, 0, 1, 3, (const uint8_t *)"\x42", 1, 1);
-	pcap_record(&s, 0, 1, 4, NINE, sizeof NINE, sizeof NINE);
+	pcap_header(&s);
+	pcap_record(&s, 1, 2, NINE, sizeof NINE, sizeof NINE);
+	pcap_record(&s, 1, 3, (const uint8_t *)"\x42", 1, 1);
+	pcap_record(&s, 1, 4, NINE, sizeof NINE, sizeof NINE);
 	emit("pcap", "two-oversized", &s);
 	/* a buffer of 0 bytes and a 1-byte record: the reader cannot skip it and gives -1,
 	 * and has counted it at its header first */
 	put8(&s, 0);
-	pcap_header(&s, 0);
-	pcap_record(&s, 0, 1, 2, (const uint8_t *)"\x42", 1, 1);
+	pcap_header(&s);
+	pcap_record(&s, 1, 2, (const uint8_t *)"\x42", 1, 1);
 	emit("pcap", "oversized-cap-0", &s);
 	free(s.p);
 }

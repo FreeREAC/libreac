@@ -247,14 +247,6 @@ int main(void)
 		                       MASTER, SRC, 3, NULL, 0) == reac_ctrl_box_frame_len(2));
 		CHK(reac_box_model_block(d, REAC_BOX_BLOCK_CONFIG, want) == 1);
 		CHK(memcmp(frame + 18, want, 32) == 0);
-		/* And a CAPTURED row built through this door is the same bytes the
-		 * width-keyed builder has always emitted — one declaration, two doors. */
-		const struct reac_box_model *s16 = reac_box_catalogue_by_token("s1608");
-		uint8_t legacy[2048];
-		size_t l1 = reac_ctrl_build_as(frame, s16, REAC_BOX_BLOCK_CONFIG,
-		                               MASTER, SRC, 4, NULL, 0);
-		size_t l2 = reac_ctrl_build_config_announce(legacy, MASTER, SRC, 4, 16);
-		CHK(l1 == l2 && l1 > 0 && memcmp(frame, legacy, l1) == 0);
 	}
 
 	/* Bad arguments refuse; they never write a half block. */

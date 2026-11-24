@@ -119,11 +119,6 @@ int main(void)
 	CHECK(!LIBREAC_VERSION_AT_LEAST(LIBREAC_VERSION_MAJOR, LIBREAC_VERSION_MINOR,
 	                                LIBREAC_VERSION_PATCH + 1),
 	      "and one above it does not");
-	/* The soname's major is a number a consumer can read at compile time, so a
-	 * build can refuse a library whose ABI it was not written against. It only
-	 * ever goes up: 0.6.0 removed symbols and left it at 0, and that is what
-	 * let an old reac-pw load the new library and die on `undefined symbol`. */
-	CHECK(LIBREAC_ABI >= 1, "the ABI major is set and has left its pre-break value");
 
 	if (fails == 0) printf("OK: all libreac tests passed\n");
 	else printf("%d libreac test(s) failed\n", fails);

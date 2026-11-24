@@ -81,13 +81,13 @@ static const uint8_t ENROLL_BLK[34] = {
  * and records another, and the box keeps whatever it already had.
  *
  * The value is reac_pace_code(fps), derived once by the pacer and carried in
- * cfg.console_field (the field keeps its old name; reac_master.h says what it
+ * cfg.pace_code (reac_master.h says what it
  * holds). Two of the three stamps used to squash it with `? 0x01 : 0x00`, which
  * is invisible while the byte only ever holds 0 or 1 and turns the 44.1 kHz code
  * 2 into the 96 kHz class — a 44.1 kHz master announcing 44.1 and recording 96. */
 static uint8_t pace_code(const struct reac_console_cfg *cfg)
 {
-	return cfg ? cfg->console_field : 0;
+	return cfg ? cfg->pace_code : 0;
 }
 
 /* Wide-safe default enroll width (operator directive 2026-07-24: "40 is the safe
@@ -141,7 +141,7 @@ static void set_enroll_width(uint8_t blk[34], int in_ch)
 	stamp_block_cksum(blk);
 }
 
-/* The mixer profiles reac-pw can impersonate. console_field here is each
+/* The mixer profiles reac-pw can impersonate. pace_code here is each
  * profile's default pace code — the pacer overwrites it from --rate before
  * anything reaches the wire (see reac_master.h). M-200 and M-300 default to
  * 0 (48 kHz); M-5000 defaults to 1 (96 kHz). */
@@ -272,7 +272,7 @@ static void gen_cfea(uint8_t out[34], const uint8_t src[6],
 	                                 * value. The field keeps its old "console" name. */
 	/* [20:22] = the ENROLLED-BOX COUNT (big-endian). THE blink fix (2026-07-12):
 	 * a real M-200 announces 0x0001 here once a box is enrolled; reac-pw hard-wired
-	 * 0x0000 (the old out[21]=console_field was wrong — [19] and [21] are NOT the
+	 * 0x0000 (the old out[21]=pace_code was wrong — [19] and [21] are NOT the
 	 * same field: [19]=console model, [21]=box-count low). Announcing 0 boxes made
 	 * the box see itself UNACKNOWLEDGED, so it withheld its 01030001 heartbeat and
 	 * kept its light BLINKING despite a clean grant + 1/s cadence + unicast link.
@@ -345,7 +345,7 @@ static int chanmap_start(int f)
  * master mode pacing 96 kHz — which is not a console at all, so the byte cannot be
  * a console identifier.
  *
- * THE OLD CODE SQUASHED THIS BYTE: `console_field ? 1 : 0` turned the 44.1 kHz
+ * THE OLD CODE SQUASHED THIS BYTE: `pace_code ? 1 : 0` turned the 44.1 kHz
  * code (2) into the 96 kHz one, putting a 96 kHz marker on a 44.1 kHz map.
  * Codes 0 and 1 are unchanged by the squash, so the pre-existing golden
  * windows still pin byte for byte (tests/test_reac_s1608.c). §4's recognition

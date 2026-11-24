@@ -60,7 +60,7 @@
 enum reac_tap_stream_kind {
 	REAC_TAP_STREAM_MASTER = 0,  /* the desk's downstream broadcast (proved by its announce) */
 	REAC_TAP_STREAM_BOX,         /* one box's upstream return, at the box's width */
-	/* A BROADCAST stream whose source has not proven what it is yet (APPENDED 1.6.0).
+	/* A BROADCAST stream whose source has not proven what it is yet (1.6.0).
 	 * Operator ruling 2026-09-25, HOLD WITH A DECLARED LIMIT: it becomes MASTER on the
 	 * source's first master-only frame, BOX on a box-only frame or a declared model, and
 	 * BOX once its own counter has advanced one master-only cadence in frames at its pace

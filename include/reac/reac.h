@@ -227,7 +227,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * should have caught it was inert as a result: reac-pw's `>= 0.6.0` floor
  * accepted both libraries, rpm saw the same NEVRA and made `rpm -U` a no-op,
  * and the installed /usr/bin/reac-pw loaded the new libreac.so.0 and died on
- * `undefined symbol`. A removed symbol needs BOTH numbers below to move.
+ * `undefined symbol`. The soname is now the version, so it cannot fail to move.
  *
  * 0.9.0: a SECOND LIBRARY, libreac-transport, lands beside this one
  * (2026-09-11-reac-transport-library) -- reac-pw's
@@ -280,16 +280,25 @@ int reac_detect_rate_fd(int fd, int window_ms);
  * 24312, every field after rx_identity shifted by 8) and libreac-transport.so.3
  * becomes .so.4. Same rule, one library along.
  *
- * 1.12.0: THE HARDWARE LAUNCH, AND A SEGMENT IS A PHYSICAL NIC (FreeREAC/libreac#64, #65).
- *        reac_etf_qdisc_install_offload / reac_etf_qdisc_offloaded install and read back the
- *        hardware-launch form (mqprio + etf offload), all or nothing; the ETF socket carries
- *        REAC_ETF_QDISC_PRIO so its frames reach that queue; reac_pacer_launch_stamps_arm /
- *        reac_pacer_launch_stamps sample the NIC's TX hardware stamps against each frame's
- *        launch time (struct reac_pacer_launch_stamps is new and the caller's own).
- *        reac_ifscan admits only a physical NIC or a VLAN on one, read from sysfs
- *        (reac_ifscan_is_physical); reac_ifscan_set_allow_virtual opts one in. The head-amp
- *        record is documented role-blind. ADDED symbols only: no struct or symbol moves or
- *        changes size, LIBREAC_ABI stays 7 and libreac-transport.so stays .7.
+ * 1.12.0: THE COMPATIBILITY MECHANISMS ARE GONE, AND THE SONAME IS THE VERSION. Removed
+ *        with the owner's ruling: the ABI promise (LIBREAC_ABI, tests/abi-layout.inc with its
+ *        test and generator, and the version ranges that served it; the soname is now
+ *        libreac.so.<version> and libreac-transport.so.<version>, so every release has its own
+ *        and the package dependency ties a program to the libreac it was built against), the
+ *        append-only enum rule, reac_decode_plain_le (the pre-0.5.0 audio decoder),
+ *        reac_ctrl_build_config_announce (a box named by its channel count: reac_ctrl_build_as
+ *        with a catalogue row is the one door), the REAC_ROLE_STATE_APPLIED and
+ *        REAC_ROLE_STATE_REESTABLISH_PENDING aliases (REAC_CFG_ROLE_STATE_APPLIED / _PENDING),
+ *        the console_field member name (now pace_code, in struct reac_console_cfg and struct
+ *        reac_mixer_profile), the byte-swapped pcap reader (struct pcap_source loses `swapped`;
+ *        a big-endian capture is refused by pcap_source_open) and the fallback for kernels
+ *        older than 4.20. Symbols and members move, so a program is rebuilt.
+ *        Also in 1.12.0 (FreeREAC/libreac#64, #65): reac_etf_qdisc_install_offload /
+ *        reac_etf_qdisc_offloaded install and read back the hardware-launch form (mqprio +
+ *        etf offload), all or nothing, and the ETF socket carries REAC_ETF_QDISC_PRIO;
+ *        reac_pacer_launch_stamps_arm / reac_pacer_launch_stamps sample the NIC's TX hardware
+ *        stamps against each frame's launch time; reac_ifscan admits only a physical NIC or a
+ *        VLAN on one (reac_ifscan_is_physical; reac_ifscan_set_allow_virtual opts one in).
  * 1.11.0: AN ABI BREAK (LIBREAC_ABI 6 -> 7, libreac.so.7), AND THE BOUND BOX DECIDES.
  *        struct pcap_source gains skipped_oversized (sizeof 24 -> 32): pcap_source_next
  *        counts the records larger than the buffer it skips, and the capture tools print
@@ -346,7 +355,7 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        consumer pinned to the old header (a mirror of it in another language) must move with it.
  *        Behaviour: reac_detect_rate_fd measures one stream; a new clock reference is
  *        LOCKING until measured; reac_ctrl_identity_reply requires both checksums;
- *        reac_decode_plain_le refuses an oversize geometry; reac_boxreg refuses an
+ *        the plain-LE decode refuses an oversize geometry; reac_boxreg refuses an
  *        overflowing base and the zero MAC. A BOX'S WIDTH IS EVEN PER DIRECTION, 2..40
  *        (operator ruling 2026-09-25): REAC_BOX_MIN/MAX_CHANNELS (read from
  *        reac-protocol's box_width facts, via the new generated
@@ -424,17 +433,15 @@ int reac_detect_rate_fd(int fd, int window_ms);
 #define LIBREAC_VERSION_MINOR 12
 #define LIBREAC_VERSION_PATCH 0
 
-/* THE SONAME'S MAJOR, and the second thing 0.7.0 had to move. The version
- * digits alone only stop a BUILD against the wrong headers; the soname is what
- * stops a RUN against the wrong shared object. While both libraries called
- * themselves libreac.so.0 the dynamic linker was happy to hand an old binary
- * the new library, and the error surfaced as a missing symbol at exec time
- * instead of a refused install. Bumping this makes the two co-installable and
- * the mismatch impossible: a binary linked against .so.1 will not load .so.0.
- *
- * The RPM spec (%%global abi) and the OpenWrt recipe (ABI_VERSION) read this
- * number; tests/conformance-packaging.sh refuses a spec or debian/ copy that disagrees. */
-#define LIBREAC_ABI 7
+/* THE SONAME IS THE RELEASE VERSION: libreac.so.<LIBREAC_VERSION> and
+ * libreac-transport.so.<LIBREAC_VERSION>. There is no separate number to bump and so none to
+ * forget: every release has its own soname, and the dependency rpm and dpkg generate from the
+ * link ties each program to the libreac it was built against. Nothing in libreac promises that
+ * a struct or a symbol survives a release, and nothing records one; a program is rebuilt with
+ * the library. The RPM spec, debian/ (rules, control, the .install file names) and the Python
+ * binding carry the version for tools that cannot read this header, and
+ * tests/conformance-packaging.sh and tests/conformance-python-soname.sh refuse a copy that
+ * disagrees. */
 
 #define LIBREAC__STR(x)  #x
 #define LIBREAC__XSTR(x) LIBREAC__STR(x)

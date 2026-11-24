@@ -1101,13 +1101,6 @@ size_t reac_ctrl_build_flood_filler(uint8_t *out, const uint8_t bcast[6],
 	                 counter, n_ch, NULL, planar, ns);
 }
 
-size_t reac_ctrl_build_config_announce(uint8_t *out, const uint8_t master[6],
-                                       const uint8_t src[6], uint16_t counter, int in_ch)
-{
-	return ctrl_emit(out, &CTRL_FRAMES[CTRL_CONFIG_ANNOUNCE], master, src,
-	                 counter, in_ch, NULL, NULL, 0);
-}
-
 size_t reac_ctrl_build_identity_first(uint8_t *out, const uint8_t master[6],
                                       const uint8_t src[6], uint16_t counter, int in_ch)
 {

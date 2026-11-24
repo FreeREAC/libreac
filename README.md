@@ -57,7 +57,7 @@ socket, so a kernel-module backend can sit under the same headers.
 
 REAC runs at exactly one of three packet rates, all carrying the same 40×12×3-byte frame
 shape: 44.1 kHz, 48 kHz and 96 kHz. A master announces which one it is running in the control
-block's `console_field` byte (`cfea` offset 19 in the wire spec) — 0 for 48 kHz, 1 for 96 kHz,
+block's pace-code byte (`cfea` offset 19 in the wire spec) — 0 for 48 kHz, 1 for 96 kHz,
 2 for 44.1 kHz — and `reac_pace_code()` (`transport/src/reac_pacer.c`) is the one place that
 byte is derived, from the running rate in packets per second (≥ 8000 pps → 96 kHz, ≤ 3700 pps →
 44.1 kHz, otherwise 48 kHz). See `spec/reac.ksy` in the
