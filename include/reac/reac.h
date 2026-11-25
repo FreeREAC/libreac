@@ -293,6 +293,12 @@ int reac_detect_rate_fd(int fd, int window_ms);
  *        reac_mixer_profile), the byte-swapped pcap reader (struct pcap_source loses `swapped`;
  *        a big-endian capture is refused by pcap_source_open) and the fallback for kernels
  *        older than 4.20. Symbols and members move, so a program is rebuilt.
+ *        Also in 1.12.0 (FreeREAC/libreac#64, #65): reac_etf_qdisc_install_offload /
+ *        reac_etf_qdisc_offloaded install and read back the hardware-launch form (mqprio +
+ *        etf offload), all or nothing, and the ETF socket carries REAC_ETF_QDISC_PRIO;
+ *        reac_pacer_launch_stamps_arm / reac_pacer_launch_stamps sample the NIC's TX hardware
+ *        stamps against each frame's launch time; reac_ifscan admits only a physical NIC or a
+ *        VLAN on one (reac_ifscan_is_physical; reac_ifscan_set_allow_virtual opts one in).
  * 1.11.0: AN ABI BREAK (LIBREAC_ABI 6 -> 7, libreac.so.7), AND THE BOUND BOX DECIDES.
  *        struct pcap_source gains skipped_oversized (sizeof 24 -> 32): pcap_source_next
  *        counts the records larger than the buffer it skips, and the capture tools print
