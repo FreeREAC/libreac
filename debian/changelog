@@ -1,3 +1,15 @@
+libreac (1.12.1) unstable; urgency=medium
+
+  * Release 1.12.1: 1.12.0 was tagged but never served (its publish was refused
+    by the channel gate: reac-pw 1.0.44 needs libreac.so.7). This release is
+    the same code with .github/release-same-pass, so the tag run excuses
+    reac-pw and reac-stageboxes, which are rebuilt against it in the same pass
+    (reac-pw 1.1.0). The soname is the release version: libreac.so.1.12.1,
+    libreac-transport.so.1.12.1; the packages are libreac1.12.1 and
+    libreac-transport1.12.1. Everything else is as in 1.12.0, below.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Thu, 26 Nov 2026 10:00:00 +0100
+
 libreac (1.12.0) unstable; urgency=medium
 
   * The soname of both libraries is the release version (libreac.so.1.12.0,

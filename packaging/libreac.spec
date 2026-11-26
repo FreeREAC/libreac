@@ -2,7 +2,7 @@
 # libreac, the Roland REAC protocol library, and libreac-transport, the sockets and threads that
 # carry it, from one source and one version. Two libraries, four binary packages.
 Name:           libreac
-Version:        1.12.0
+Version:        1.12.1
 # THE SONAME IS THE VERSION (libreac.so.%{version}, libreac-transport.so.%{version}). rpm
 # generates this package's `provides` and every consumer's runtime `requires` from it, so each
 # release has its own and a program built against one libreac cannot be installed beside
@@ -171,6 +171,13 @@ make test
 %{_libexecdir}/libreac/tests/fake_box
 
 %changelog
+* Thu Nov 26 2026 Pau Aliagas <linuxnow@gmail.com> - 1.12.1-1
+- Release 1.12.1: 1.12.0 was never served (the channel gate refused it: reac-pw
+  1.0.44 needs libreac.so.7). Same code, plus .github/release-same-pass, so the
+  tag run excuses reac-pw and reac-stageboxes, rebuilt against this release in
+  the same pass (reac-pw 1.1.0). The sonames are libreac.so.1.12.1 and
+  libreac-transport.so.1.12.1; everything else is as in 1.12.0, below.
+
 * Mon Nov 16 2026 Pau Aliagas <linuxnow@gmail.com> - 1.12.0-1
 - The soname of both libraries is the release version (libreac.so.1.12.0,
   libreac-transport.so.1.12.0), so rpm ties each program to the libreac it was
