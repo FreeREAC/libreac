@@ -7,7 +7,7 @@ Standards-Version: 4.6.2
 Homepage: https://github.com/FreeREAC/libreac
 Rules-Requires-Root: no
 
-Package: libreac1.12.0
+Package: libreac1.12.1
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -26,12 +26,12 @@ Package: libreac-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: libreac1.12.0 (= ${binary:Version}), ${misc:Depends}
+Depends: libreac1.12.1 (= ${binary:Version}), ${misc:Depends}
 Description: Roland REAC protocol library, development files
  Headers and the pkg-config file for building programs against libreac, such
  as a REAC endpoint for a sound server.
 
-Package: libreac-transport1.12.0
+Package: libreac-transport1.12.1
 Architecture: any
 Multi-Arch: same
 Depends: ${shlibs:Depends}, ${misc:Depends}
@@ -49,7 +49,7 @@ Package: libreac-transport-dev
 Section: libdevel
 Architecture: any
 Multi-Arch: same
-Depends: libreac-transport1.12.0 (= ${binary:Version}), libreac-dev (= ${binary:Version}), ${misc:Depends}
+Depends: libreac-transport1.12.1 (= ${binary:Version}), libreac-dev (= ${binary:Version}), ${misc:Depends}
 Description: Roland REAC transport layer, development files
  Headers and the pkg-config file for building programs against libreac-
  transport.

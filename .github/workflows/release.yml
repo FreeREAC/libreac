@@ -37,7 +37,33 @@ jobs:
           v=$(awk '/^#define LIBREAC_VERSION_(MAJOR|MINOR|PATCH)/ { v = v (v == "" ? "" : ".") $3 } END { print v }' include/reac/reac.h)
           echo "deb=libreac$v libreac-dev libreac-transport$v libreac-transport-dev" >> "$GITHUB_OUTPUT"
 
+  # The packages other repositories release LATER in this same pass, for the channel-installability gate's same-pass
+  # (a breakage they cause or suffer is reported, not red): a dispatch's same_pass input, else the tracked
+  # .github/release-same-pass at the very commit this run builds (the tag on a push). One package per line or space
+  # separated, # comments allowed. The file is reviewed like code and goes with its release; never a repository variable.
+  samepass:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.read.outputs.list }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/release-same-pass
+          sparse-checkout-cone-mode: false
+      - id: read
+        run: |
+          f=.github/release-same-pass
+          [ -f "$f" ] || { echo "list=" >>"$GITHUB_OUTPUT"; echo "no $f at this commit: nothing released in the same pass"; exit 0; }
+          names=$(sed -e 's/#.*//' "$f" | tr -s ' \t\r\n' '\n' | sed '/^$/d')
+          for n in $names; do
+            [[ "$n" =~ ^[a-z0-9][a-z0-9.+-]*$ ]] || { echo "::error::$f: '$n' is not a package name"; exit 1; }
+          done
+          list=$(echo $names)
+          echo "list=$list" >>"$GITHUB_OUTPUT"
+          echo "same pass from $f: ${list:-none}"
+
   rpm:
+    needs: [samepass]
     uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@openmixer-v1
     with:
       package-name: libreac
@@ -50,7 +76,7 @@ jobs:
       repo-file: packaging/freereac-release/freereac.repo
       binary-names: libreac libreac-devel libreac-transport libreac-transport-devel
       publish: ${{ github.ref_type == 'tag' }}
-      same-pass: ${{ inputs.same_pass || '' }}
+      same-pass: ${{ inputs.same_pass || needs.samepass.outputs.list }}
       needs-mod-host: false
       channel-deps: false
     secrets:
@@ -63,7 +89,7 @@ jobs:
   # after the RPMs: a release is one wave. A red or skipped RPM job skips this one, so no DEB is published after a
   # failed RPM.
   deb:
-    needs: [rpm, names]
+    needs: [rpm, names, samepass]
     uses: Open-Mixer/.github/.github/workflows/build-deb.yml@openmixer-v1
     with:
       package-name: libreac
@@ -76,7 +102,7 @@ jobs:
       label: FreeREAC
       binary-names: ${{ needs.names.outputs.deb }}
       publish: ${{ github.ref_type == 'tag' }}
-      same-pass: ${{ inputs.same_pass || '' }}
+      same-pass: ${{ inputs.same_pass || needs.samepass.outputs.list }}
       dependencies: ''
       requires: ''
       channel-deps: false
