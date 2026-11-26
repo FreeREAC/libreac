@@ -5,6 +5,10 @@ name: release
 # release. Any other run, a dispatch on a branch, is a dry run: it
 # builds and lints everything and publishes nothing.
 #
+# A served version that lacks cells is caught up from a dispatch on main: source-ref=v<version>, publish, catch-up and
+# matrix=full build and publish only the cells the channel lacks (docs/release-operations.md of Open-Mixer/.github,
+# "Catching a served version up"); nothing already served is rewritten.
+#
 # libreac is a build dependency of reac-pw, so publish a libreac release before the reac-pw release
 # that needs it.
 
@@ -13,6 +17,22 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
+      source-ref:
+        description: 'Tag v<version> to release from this workflow; empty is a dry run of the branch'
+        type: string
+        default: ''
+      publish:
+        description: 'With source-ref: sign and publish that tag'
+        type: boolean
+        default: false
+      catch-up:
+        description: 'With source-ref and publish: build and publish only the cells of the matrix that the served version lacks'
+        type: boolean
+        default: false
+      matrix:
+        description: "'quick' or 'full'; empty: the organisation variable OMX_RELEASE_MATRIX"
+        type: string
+        default: ''
       same_pass:
         description: 'Packages other repositories release in the same pass, space separated: the channel-installability gate reports a range they fall outside of, instead of failing on it'
         type: string
@@ -75,7 +95,10 @@ jobs:
       key-file: RPM-GPG-KEY-freereac
       repo-file: packaging/freereac-release/freereac.repo
       binary-names: libreac libreac-devel libreac-transport libreac-transport-devel
-      publish: ${{ github.ref_type == 'tag' }}
+      publish: ${{ github.ref_type == 'tag' || (inputs.publish == true && inputs.source-ref != '') }}
+      source-ref: ${{ inputs.source-ref }}
+      catch-up: ${{ inputs.catch-up == true }}
+      matrix: ${{ inputs.matrix }}
       same-pass: ${{ inputs.same_pass || needs.samepass.outputs.list }}
       needs-mod-host: false
       channel-deps: false
@@ -101,7 +124,10 @@ jobs:
       key-file: freereac.asc
       label: FreeREAC
       binary-names: ${{ needs.names.outputs.deb }}
-      publish: ${{ github.ref_type == 'tag' }}
+      publish: ${{ github.ref_type == 'tag' || (inputs.publish == true && inputs.source-ref != '') }}
+      source-ref: ${{ inputs.source-ref }}
+      catch-up: ${{ inputs.catch-up == true }}
+      matrix: ${{ inputs.matrix }}
       same-pass: ${{ inputs.same_pass || needs.samepass.outputs.list }}
       dependencies: ''
       requires: ''
