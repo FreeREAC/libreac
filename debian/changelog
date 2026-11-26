@@ -1,3 +1,12 @@
+libreac (1.12.2) unstable; urgency=medium
+
+  * Release 1.12.2: 1.12.1 was served in the quick set only (fc45 x86_64 rpm, trixie arm64 deb); this release is the same
+    code published to the full matrix (fc45 aarch64, Debian bookworm and trixie, amd64 and arm64), because a cell is
+    filled by a new version tag, never by a dispatch. The soname is the release version: libreac.so.1.12.2,
+    libreac-transport.so.1.12.2; the packages are libreac1.12.2 and libreac-transport1.12.2.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Fri, 27 Nov 2026 01:00:00 +0100
+
 libreac (1.12.1) unstable; urgency=medium
 
   * Release 1.12.1: 1.12.0 was tagged but never served (its publish was refused

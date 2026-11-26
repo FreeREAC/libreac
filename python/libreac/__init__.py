@@ -22,7 +22,7 @@ import ctypes
 
 # The release this binding belongs to, and so the soname it loads.
 # tests/conformance-python-soname.sh refuses a value that is not LIBREAC_VERSION.
-_SONAME = "libreac.so.1.12.1"
+_SONAME = "libreac.so.1.12.2"
 
 
 def _load():
