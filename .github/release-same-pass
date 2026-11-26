@@ -1,0 +1,3 @@
+# Packages released later in this same pass (reac-pw 1.1.0 is built against this libreac, so the gate excuses their old
+# soname dependency); one pass only: remove this file in the release after reac-pw 1.1.0 is served.
+reac-pw reac-stageboxes

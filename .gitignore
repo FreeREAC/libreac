@@ -6,6 +6,8 @@
 /test_upstream
 /test_decode
 /test_encode
+/test_braid_width
+/test_rx_ppm
 
 libreac-*.tar.gz
 
