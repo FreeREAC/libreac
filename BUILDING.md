@@ -54,8 +54,8 @@ One source builds two libraries, `libreac` and `libreac-transport`, as four bina
 
 | | Fedora | Debian |
 | --- | --- | --- |
-| libreac | `libreac`, `libreac-devel` | `libreac1.12.1`, `libreac-dev` |
-| libreac-transport | `libreac-transport`, `libreac-transport-devel` | `libreac-transport1.12.1`, `libreac-transport-dev` |
+| libreac | `libreac`, `libreac-devel` | `libreac1.12.2`, `libreac-dev` |
+| libreac-transport | `libreac-transport`, `libreac-transport-devel` | `libreac-transport1.12.2`, `libreac-transport-dev` |
 
 `packaging/libreac.spec` and `debian/` describe them; both build the shared objects from every
 `src/*.c` and `transport/src/*.c` and run `make test`. The pkg-config files are the templates
