@@ -21,7 +21,9 @@
 #   ARM 6  the tap's tag rule (`& TP_STATUS_VLAN_VALID`) is applied only in reac_topo.c;
 #   ARM 7  libreac includes no reac-pw header and names no packaging/vendor or REACPW_INCLUDE:
 #          the pure declarations its transport headers use live in reac_cfg.h, so the
-#          build needs nothing from a reac-pw tree.
+#          build needs nothing from a reac-pw tree;
+#   ARM 8  the power-of-two ceiling the two rings size themselves by (next_pow2) is
+#          defined only in transport/src/reac_pow2.h (#63: each ring held a copy).
 # Every arm carries a planted good/bad pair, so it cannot pass (or fail) vacuously.
 #
 #   tests/conformance-declared-once.sh                 libreac's own tree (make test)
@@ -41,6 +43,7 @@ CFG=include/reac/reac_cfg.h
 CODE=include/reac/reac_code.h
 QDISC_HOME=transport/src/reac_etf_qdisc.c
 TAP_HOME=transport/src/reac_topo.c
+POW2_HOME=transport/src/reac_pow2.h
 SCOPE="src transport include tools"
 
 # cfg_check <cfg-header> <scope dirs...>: ARMS 1-3. Prints offences, returns their count > 0.
@@ -131,6 +134,8 @@ no_reacpw_headers() {
 
 QDISC_RE='=[[:space:]]*RTM_GETQDISC\b'
 TAP_RE='&[[:space:]]*TP_STATUS_VLAN_VALID\b'
+# A definition of the ceiling, under its old local name or the shared one.
+POW2_RE='^[[:space:]]*static[[:space:]]+(inline[[:space:]]+)?uint32_t[[:space:]]+(reac_)?next_pow2[[:space:]]*\('
 
 # The new arms, over a tree: prints offences, returns 0 when there are none.
 homes_check() {
@@ -138,6 +143,7 @@ homes_check() {
 	code_once "$CODE" "$@" || ok=1
 	one_home "ARM 5" "the RTM_GETQDISC dump" "$QDISC_RE" "$QDISC_HOME" "$@" || ok=1
 	one_home "ARM 6" "the topology tap read" "$TAP_RE" "$TAP_HOME" "$@" || ok=1
+	one_home "ARM 8" "the power-of-two ceiling" "$POW2_RE" "$POW2_HOME" "$@" || ok=1
 	return $ok
 }
 
@@ -164,6 +170,8 @@ printf '#define REAC_CODE_LIST(X) \\\n\tX(RC_E_A, "E_A") \\\n\tX(RC_S_B, "S_B")\
 	> "$tmp/homes/good/$CODE"
 printf 'void d(void) { r.type = RTM_GETQDISC; }\n' > "$tmp/homes/good/$QDISC_HOME"
 printf 'int t(void) { return a.s & TP_STATUS_VLAN_VALID; }\n' > "$tmp/homes/good/$TAP_HOME"
+printf 'static inline uint32_t reac_next_pow2(uint32_t v) { return v; }\n' > "$tmp/homes/good/$POW2_HOME"
+printf '#include "reac_pow2.h"\n/* sized by reac_next_pow2() */\nuint32_t n = reac_next_pow2(3);\n' > "$tmp/homes/good/transport/src/ring.c"
 printf '#include <reac/reac_code.h>\nint u = RC_E_A;\n' > "$tmp/homes/good/use.c"
 printf '#include <reac/reac_cfg.h>\n' > "$tmp/homes/good/own.c"
 printf '/* the home reads\n * (tp_status & TP_STATUS_VLAN_VALID), see d() = RTM_GETQDISC */\n' \
@@ -174,9 +182,10 @@ printf 'void q(void) { r.type  = RTM_GETQDISC; }\n' > "$tmp/homes/bad/qdisc.c"
 printf 'int v(void) { return aux.tp_status & TP_STATUS_VLAN_VALID; }\n' > "$tmp/homes/bad/main.c"
 printf '#include "reac_rate_cfg.h"\n' > "$tmp/homes/bad/rate.h"
 printf 'CFLAGS += -Ipackaging/vendor/reac-pw-headers\n' > "$tmp/homes/bad/rules.mk"
+printf 'static uint32_t next_pow2(uint32_t v)\n{\n\treturn v;\n}\n' > "$tmp/homes/bad/transport/src/ring2.c"
 (cd "$tmp/homes/good" && homes_check . >/dev/null && no_reacpw_headers . >/dev/null) || broken flagged GOOD homes
 bad_out=$(cd "$tmp/homes/bad" && { homes_check .; no_reacpw_headers .; } 2>&1)
-for arm in "ARM 4: codes.h defines" "ARM 4: token \"E_A\"" "ARM 5: qdisc.c" "ARM 6: main.c" "ARM 7: rate.h" "ARM 7: rules.mk"; do
+for arm in "ARM 4: codes.h defines" "ARM 4: token \"E_A\"" "ARM 5: qdisc.c" "ARM 6: main.c" "ARM 7: rate.h" "ARM 7: rules.mk" "ARM 8: transport/src/ring2.c"; do
 	case "$bad_out" in *"$arm"*) ;; *) broken missed BAD homes "$arm" ;; esac
 done
 
@@ -208,4 +217,4 @@ for c in $CONSUMERS; do
 	fi
 done
 [ "$fails" -eq 0 ] || exit 1
-echo "OK: $CFG, $CODE, the qdisc dump and the tap read each have one home, and no copy${CONSUMERS:+ (consumers:$CONSUMERS)}"
+echo "OK: $CFG, $CODE, the qdisc dump, the tap read and the power-of-two ceiling each have one home, and no copy${CONSUMERS:+ (consumers:$CONSUMERS)}"
