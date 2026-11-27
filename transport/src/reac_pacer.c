@@ -37,22 +37,14 @@ static void pacer_hw_take(struct msghdr *m, void *ctx);   /* the drain hands it 
 #include <net/ethernet.h>
 #include <arpa/inet.h>     /* htons */
 #include "reac_rx_ppm.h"   /* the one ppm -> int-milli saturation (also update_ppm's) */
+#include "reac_pow2.h"     /* the power-of-two ceiling, shared with the audio ring */
 
 /* ---- lock-free SPSC frame ring (whole encoded frames) -------------------- */
-
-static uint32_t next_pow2(uint32_t v)
-{
-	if (v < 2)
-		return 2;
-	v--;
-	v |= v >> 1; v |= v >> 2; v |= v >> 4; v |= v >> 8; v |= v >> 16;
-	return v + 1;
-}
 
 int reac_frame_ring_init(struct reac_frame_ring *r, uint32_t slots, uint32_t slot_sz)
 {
 	memset(r, 0, sizeof *r);
-	uint32_t n = next_pow2(slots);
+	uint32_t n = reac_next_pow2(slots);
 	/* Refuse what the ring cannot hold, before anything is allocated. next_pow2
 	 * wraps to 0 when the power-of-two ceiling exceeds UINT32_MAX: a 0-slot
 	 * calloc (non-NULL under glibc) with mask 0xFFFFFFFF, and the first push

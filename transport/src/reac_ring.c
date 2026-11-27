@@ -4,19 +4,11 @@
 #include <reac/transport/reac_ring.h>
 #include <stdlib.h>
 #include <string.h>
-
-static uint32_t next_pow2(uint32_t v)
-{
-	if (v < 2)
-		return 2;
-	v--;
-	v |= v >> 1; v |= v >> 2; v |= v >> 4; v |= v >> 8; v |= v >> 16;
-	return v + 1;
-}
+#include "reac_pow2.h"   /* the power-of-two ceiling, shared with the frame ring */
 
 int reac_ring_init(struct reac_ring *r, uint32_t channels, uint32_t capacity_frames)
 {
-	uint32_t cap = next_pow2(capacity_frames);
+	uint32_t cap = reac_next_pow2(capacity_frames);
 	/* Defense-in-depth: reject a zero request or a rounding overflow. next_pow2
 	 * wraps to 0 when the power-of-two ceiling exceeds UINT32_MAX; cap 0 would set
 	 * mask = cap-1 = 0xFFFFFFFF over a 0-slot calloc (which glibc returns non-NULL
